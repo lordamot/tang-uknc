@@ -1,0 +1,119 @@
+GowinSynthesis start
+Running parser ...
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/aberrant.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/audio.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ay/ym2149.sv'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/cpu.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/buf_sec/buf_sec.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/rawtr_prom/rawtr_prom.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dbufsec16/dbufsec16.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/memstr/memstr.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/rom208/rom208.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sdbuf_sdpb/sdbuf_sdpb.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sys_rpll/sys_rpll.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/load.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/hid.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/mcu_spi.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_card.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sdcmd_ctrl.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sector_dpram.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sysctrl.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/mkcolorreg.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram2.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v'
+Undeclared symbol 'int_out_n', assumed default net type 'wire'("/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v":389)
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx_path.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx_path.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1-128fdd.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1_120.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/wmrst.v'
+Analyzing Verilog file '/workspace/verilog/tang20/2024/uknc/test003ho/src/xm2-01.v'
+Compiling module 'top'("/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v":54)
+Compiling module 'sys_rpll'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sys_rpll/sys_rpll.v":10)
+Compiling module 'sdram2'("/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram2.v":1)
+Compiling module 'dvi_tx'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v":1074)
+Compiling module '**'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v":1073)
+Compiling module 'mcu_spi'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/mcu_spi.v":7)
+Compiling module 'sysctrl'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sysctrl.v":10)
+Compiling module 'hid'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/hid.v":7)
+Compiling module 'sd_card(CLK_DIV=3'd1)'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_card.v":10)
+Compiling module 'sector_dpram'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sector_dpram.v":10)
+Compiling module 'sd_rw(CLK_DIV=3'b001)'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v":10)
+Extracting RAM for identifier 'data_crc'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v":123)
+Extracting RAM for identifier 'read_crc'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v":124)
+Compiling module 'sdcmd_ctrl'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sdcmd_ctrl.v":10)
+Compiling module 'osd_u8g2'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v":8)
+Extracting RAM for identifier 'buffer'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v":79)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 12("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v":60)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 10("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v":61)
+WARN  (EX3791) : Expression size 12 truncated to fit in target size 8("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v":118)
+WARN  (EX3791) : Expression size 9 truncated to fit in target size 8("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v":119)
+WARN  (EX3791) : Expression size 10 truncated to fit in target size 7("/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v":120)
+Compiling module 'ppu_wb'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v":1)
+Compiling module 'rom208'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/rom208/rom208.v":10)
+Compiling module 'vm_reset'("/workspace/verilog/tang20/2024/uknc/test003ho/src/wmrst.v":1)
+Compiling module 'vm2_wb'("/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v":12)
+Compiling module 'vm2_pld'("/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v":724)
+Compiling module 'vm2_plm'("/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v":115)
+Compiling module 'vm2_pli'("/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v":582)
+Compiling module 'vm2_plb'("/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v":689)
+Compiling module 'mkcolorg'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mkcolorreg.v":1)
+Compiling module 'rd_plan'("/workspace/verilog/tang20/2024/uknc/test003ho/src/mkcolorreg.v":85)
+Compiling module 'xm2_01'("/workspace/verilog/tang20/2024/uknc/test003ho/src/xm2-01.v":1)
+Compiling module 'fdd4'("/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v":1)
+WARN  (EX3780) : Using initial value of 'write_sd' since it is never assigned("/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v":178)
+Compiling module 'rawtr_prom'("/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/rawtr_prom/rawtr_prom.v":10)
+Compiling module 'dbufsec16'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dbufsec16/dbufsec16.v":10)
+Compiling module 'vp1_128fdd'("/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1-128fdd.v":15)
+Compiling module 'aberrant'("/workspace/verilog/tang20/2024/uknc/test003ho/src/aberrant.v":1)
+Compiling module 'YM2149'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ay/ym2149.sv":42)
+Extracting RAM for identifier 'tone_gen_cnt'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ay/ym2149.sv":175)
+Compiling module 'cpu_wb'("/workspace/verilog/tang20/2024/uknc/test003ho/src/cpu.v":1)
+Compiling module 'vp1_120'("/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1_120.v":3)
+Compiling module 'vp065'("/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v":1)
+Compiling module 'uartfifo'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v":131)
+Compiling module '**'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v":130)
+Compiling module 'uart_tx(BAUD_RATE=19200)'("/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx.v":1)
+Compiling module 'uart_rx(BAUD_RATE=19200)'("/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx.v":1)
+Compiling module 'fifo_audio'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v":187)
+Compiling module '**'("/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v":186)
+Compiling module 'audio_drive'("/workspace/verilog/tang20/2024/uknc/test003ho/src/audio.v":2)
+NOTE  (EX0101) : Current top module is "top"
+[5%] Running netlist conversion ...
+WARN  (CV0018) : Input buts[1] is unused("/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v":97)
+Running device independent optimization ...
+[10%] Optimizing Phase 0 completed
+[15%] Optimizing Phase 1 completed
+[25%] Optimizing Phase 2 completed
+Running inference ...
+[30%] Inferring Phase 0 completed
+[40%] Inferring Phase 1 completed
+[50%] Inferring Phase 2 completed
+[55%] Inferring Phase 3 completed
+Running technical mapping ...
+[60%] Tech-Mapping Phase 0 completed
+[65%] Tech-Mapping Phase 1 completed
+[75%] Tech-Mapping Phase 2 completed
+[80%] Tech-Mapping Phase 3 completed
+[90%] Tech-Mapping Phase 4 completed
+WARN  (NL0002) : The module "vm2_plb" instantiated to "plb_matrix" is swept in optimizing("/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v":1072)
+WARN  (NL0002) : The module "mkcolorg" instantiated to "mc1" is swept in optimizing("/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v":456)
+WARN  (NL0002) : The module "rd_plan" instantiated to "mc2" is swept in optimizing("/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v":463)
+WARN  (NL0002) : The module "vm2_plb" instantiated to "plb_matrix" is swept in optimizing("/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v":1072)
+[95%] Generate netlist file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003.vg" completed
+WARN  (CK3000) : The clock "clk27"'s frequency does not match pl1/rpll_inst's param "FCLKIN = "27""
+[100%] Generate report file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003_syn.rpt.html" completed
+GowinSynthesis finish

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module name="fifo_audio" Register="22" Alu="4" Lut="26" Bsram="1" T_Register="22(22)" T_Alu="4(4)" T_Lut="26(26)" T_Bsram="1(1)"/>

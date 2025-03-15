@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module name="top" Register="49" Alu="24" Lut="58" T_Register="3477(49)" T_Alu="414(24)" T_Lut="7534(58)" T_Bsram="21(0)">
+ <SubModule name="pl1"/>
+ <SubModule name="ram1" Register="353" Alu="35" Lut="353" T_Register="353(353)" T_Alu="35(35)" T_Lut="353(353)"/>
+ <SubModule name="hdmi1" Register="73" Alu="69" Lut="226" T_Register="73(73)" T_Alu="69(69)" T_Lut="226(226)"/>
+ <SubModule name="msp1" Register="43" Lut="32" T_Register="43(43)" T_Lut="32(32)"/>
+ <SubModule name="sctl1" Register="37" Lut="45" T_Register="37(37)" T_Lut="45(45)"/>
+ <SubModule name="hd1" Register="23" Lut="24" T_Register="23(23)" T_Lut="24(24)"/>
+ <SubModule name="sd_card" Register="113" Lut="133" T_Register="496(113)" T_Alu="24(0)" T_Lut="705(133)" T_Bsram="1(0)">
+  <SubModule name="buffer" Bsram="1" T_Bsram="1(1)"/>
+  <SubModule name="sd_rw" Register="233" Lut="388" T_Register="383(233)" T_Alu="24(0)" T_Lut="572(388)">
+   <SubModule name="u_sdcmd_ctrl" Register="150" Alu="24" Lut="184" T_Register="150(150)" T_Alu="24(24)" T_Lut="184(184)"/>
+  </SubModule>
+ </SubModule>
+ <SubModule name="osd1" Register="64" Alu="60" Lut="301" Bsram="1" T_Register="64(64)" T_Alu="60(60)" T_Lut="301(301)" T_Bsram="1(1)"/>
+ <SubModule name="ppu1" Register="165" Lut="349" T_Register="760(165)" T_Alu="28(0)" T_Lut="2403(349)" T_Bsram="15(0)">
+  <SubModule name="d1" Register="3" Lut="71" Bsram="15" T_Register="3(3)" T_Lut="71(71)" T_Bsram="15(15)"/>
+  <SubModule name="r1" Register="5" Alu="4" Lut="3" T_Register="5(5)" T_Alu="4(4)" T_Lut="3(3)"/>
+  <SubModule name="ppu" Register="587" Alu="24" Lut="1417" T_Register="587(587)" T_Alu="24(24)" T_Lut="1980(1417)">
+   <SubModule name="pld_matrix" Lut="15" T_Lut="15(15)"/>
+   <SubModule name="plm_matrix" Lut="543" T_Lut="543(543)"/>
+   <SubModule name="pli_matrix" Lut="5" T_Lut="5(5)"/>
+  </SubModule>
+ </SubModule>
+ <SubModule name="dd1" Register="106" Alu="15" Lut="123" T_Register="106(106)" T_Alu="15(15)" T_Lut="123(123)"/>
+ <SubModule name="fdd" Register="50" Alu="38" Lut="78" T_Register="50(50)" T_Alu="38(38)" T_Lut="78(78)" T_Bsram="2(0)">
+  <SubModule name="romtr1" Bsram="1" T_Bsram="1(1)"/>
+  <SubModule name="bffsd" Bsram="1" T_Bsram="1(1)"/>
+ </SubModule>
+ <SubModule name="vp128" Register="43" Lut="72" T_Register="43(43)" T_Lut="72(72)"/>
+ <SubModule name="ay1" Register="15" Alu="43" Lut="7" T_Register="411(15)" T_Alu="81(43)" T_Lut="736(7)">
+  <SubModule name="dd1" Register="198" Alu="19" Lut="356" T_Register="198(198)" T_Alu="19(19)" T_Lut="356(356)"/>
+  <SubModule name="dd2" Register="198" Alu="19" Lut="373" T_Register="198(198)" T_Alu="19(19)" T_Lut="373(373)"/>
+ </SubModule>
+ <SubModule name="cpu1" Register="87" Lut="134" T_Register="677(87)" T_Alu="24(0)" T_Lut="1950(134)">
+  <SubModule name="cpu" Register="590" Alu="24" Lut="1270" T_Register="590(590)" T_Alu="24(24)" T_Lut="1816(1270)">
+   <SubModule name="pld_matrix" Lut="19" T_Lut="19(19)"/>
+   <SubModule name="plm_matrix" Lut="524" T_Lut="524(524)"/>
+   <SubModule name="pli_matrix" Lut="3" T_Lut="3(3)"/>
+  </SubModule>
+ </SubModule>
+ <SubModule name="vp1" Register="133" Lut="221" T_Register="133(133)" T_Lut="221(221)"/>
+ <SubModule name="dd2" Register="25" Lut="36" T_Register="112(25)" T_Alu="8(0)" T_Lut="161(36)" T_Bsram="1(0)">
+  <SubModule name="txff1" Register="14" Alu="2" Lut="15" Bsram="1" T_Register="14(14)" T_Alu="2(2)" T_Lut="15(15)" T_Bsram="1(1)"/>
+  <SubModule name="txuart" Register="32" Alu="3" Lut="51" T_Register="32(32)" T_Alu="3(3)" T_Lut="51(51)"/>
+  <SubModule name="rxuart" Register="41" Alu="3" Lut="59" T_Register="41(41)" T_Alu="3(3)" T_Lut="59(59)"/>
+ </SubModule>
+ <SubModule name="abf1" Register="22" Alu="4" Lut="26" Bsram="1" T_Register="22(22)" T_Alu="4(4)" T_Lut="26(26)" T_Bsram="1(1)"/>
+ <SubModule name="ad1" Register="25" Alu="4" Lut="20" T_Register="25(25)" T_Alu="4(4)" T_Lut="20(20)"/>
+</Module>

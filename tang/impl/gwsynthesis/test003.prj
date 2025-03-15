@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gowin-synthesis-project>
+<Project>
+    <Version>beta</Version>
+    <Device id="GW2AR-18C" package="QFN88" speed="8" partNumber="GW2AR-LV18QN88C8/I7"/>
+    <FileList>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/aberrant.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/audio.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ay/ym2149.sv" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/cpu.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/buf_sec/buf_sec.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/rawtr_prom/rawtr_prom.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dbufsec16/dbufsec16.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/memstr/memstr.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/rom208/rom208.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sdbuf_sdpb/sdbuf_sdpb.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sys_rpll/sys_rpll.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/load.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/hid.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/mcu_spi.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_card.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sdcmd_ctrl.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sector_dpram.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sysctrl.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/mkcolorreg.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram2.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx_path.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx_path.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1-128fdd.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1_120.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/wmrst.v" type="verilog"/>
+        <File path="/workspace/verilog/tang20/2024/uknc/test003ho/src/xm2-01.v" type="verilog"/>
+    </FileList>
+    <OptionList>
+        <Option type="disable_insert_pad" value="0"/>
+        <Option type="global_freq" value="100.000"/>
+        <Option type="looplimit" value="2000"/>
+        <Option type="output_file" value="/workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003.vg"/>
+        <Option type="print_all_synthesis_warning" value="0"/>
+        <Option type="ram_rw_check" value="0"/>
+        <Option type="top_module" value="top"/>
+        <Option type="vcc" value="1.0"/>
+        <Option type="vccx" value="3.3"/>
+        <Option type="verilog_language" value="sysv-2017"/>
+        <Option type="vhdl_language" value="vhdl-1993"/>
+    </OptionList>
+</Project>

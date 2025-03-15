@@ -1,0 +1,472 @@
+[
+ {
+  "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/buf_sec/buf_sec.v",
+  "InstLine" : 10,
+  "InstName" : "buf_sec",
+  "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/buf_sec/buf_sec.v",
+  "ModuleLine" : 10,
+  "ModuleName" : "buf_sec"
+ },
+ {
+  "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/load.v",
+  "InstLine" : 1,
+  "InstName" : "load",
+  "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/load.v",
+  "ModuleLine" : 1,
+  "ModuleName" : "load",
+  "SubInsts" : [
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/load.v",
+    "InstLine" : 143,
+    "InstName" : "bf1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sdbuf_sdpb/sdbuf_sdpb.v",
+    "ModuleLine" : 10,
+    "ModuleName" : "sdbuf_sdpb"
+   }
+  ]
+ },
+ {
+  "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v",
+  "InstLine" : 1,
+  "InstName" : "sdram1",
+  "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v",
+  "ModuleLine" : 1,
+  "ModuleName" : "sdram1",
+  "SubInsts" : [
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v",
+    "InstLine" : 710,
+    "InstName" : "b1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/memstr/memstr.v",
+    "ModuleLine" : 10,
+    "ModuleName" : "memstr"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v",
+    "InstLine" : 726,
+    "InstName" : "r1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/memstr/memstr.v",
+    "ModuleLine" : 10,
+    "ModuleName" : "memstr"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v",
+    "InstLine" : 742,
+    "InstName" : "g1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/memstr/memstr.v",
+    "ModuleLine" : 10,
+    "ModuleName" : "memstr"
+   }
+  ]
+ },
+ {
+  "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+  "InstLine" : 54,
+  "InstName" : "top",
+  "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+  "ModuleLine" : 54,
+  "ModuleName" : "top",
+  "SubInsts" : [
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 207,
+    "InstName" : "pl1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sys_rpll/sys_rpll.v",
+    "ModuleLine" : 10,
+    "ModuleName" : "sys_rpll"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 236,
+    "InstName" : "ram1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram2.v",
+    "ModuleLine" : 1,
+    "ModuleName" : "sdram2"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 316,
+    "InstName" : "hdmi1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v",
+    "ModuleLine" : 1074,
+    "ModuleName" : "dvi_tx",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v",
+      "InstLine" : 1103,
+      "InstName" : "rgb2dvi_inst",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v",
+      "ModuleLine" : 10,
+      "ModuleName" : "~rgb2dvi.dvi_tx"
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 349,
+    "InstName" : "msp1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/mcu_spi.v",
+    "ModuleLine" : 7,
+    "ModuleName" : "mcu_spi"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 379,
+    "InstName" : "sctl1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sysctrl.v",
+    "ModuleLine" : 10,
+    "ModuleName" : "sysctrl"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 410,
+    "InstName" : "hd1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/hid.v",
+    "ModuleLine" : 7,
+    "ModuleName" : "hid"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 447,
+    "InstName" : "sd_card",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_card.v",
+    "ModuleLine" : 10,
+    "ModuleName" : "sd_card",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_card.v",
+      "InstLine" : 120,
+      "InstName" : "buffer",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sector_dpram.v",
+      "ModuleLine" : 10,
+      "ModuleName" : "sector_dpram"
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_card.v",
+      "InstLine" : 302,
+      "InstName" : "sd_rw",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v",
+      "ModuleLine" : 10,
+      "ModuleName" : "sd_rw",
+      "SubInsts" : [
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v",
+        "InstLine" : 142,
+        "InstName" : "u_sdcmd_ctrl",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sdcmd_ctrl.v",
+        "ModuleLine" : 10,
+        "ModuleName" : "sdcmd_ctrl"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 498,
+    "InstName" : "osd1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v",
+    "ModuleLine" : 8,
+    "ModuleName" : "osd_u8g2"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 630,
+    "InstName" : "ppu1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v",
+    "ModuleLine" : 1,
+    "ModuleName" : "ppu_wb",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v",
+      "InstLine" : 169,
+      "InstName" : "d1",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/rom208/rom208.v",
+      "ModuleLine" : 10,
+      "ModuleName" : "rom208"
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v",
+      "InstLine" : 178,
+      "InstName" : "r1",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wmrst.v",
+      "ModuleLine" : 1,
+      "ModuleName" : "vm_reset"
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v",
+      "InstLine" : 188,
+      "InstName" : "ppu",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+      "ModuleLine" : 12,
+      "ModuleName" : "vm2_wb",
+      "SubInsts" : [
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 615,
+        "InstName" : "pld_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 724,
+        "ModuleName" : "vm2_pld"
+       },
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 734,
+        "InstName" : "plm_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 115,
+        "ModuleName" : "vm2_plm"
+       },
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 895,
+        "InstName" : "pli_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 582,
+        "ModuleName" : "vm2_pli"
+       },
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 1072,
+        "InstName" : "plb_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 689,
+        "ModuleName" : "vm2_plb"
+       }
+      ]
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v",
+      "InstLine" : 446,
+      "InstName" : "mc1",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mkcolorreg.v",
+      "ModuleLine" : 1,
+      "ModuleName" : "mkcolorg"
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v",
+      "InstLine" : 458,
+      "InstName" : "mc2",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mkcolorreg.v",
+      "ModuleLine" : 85,
+      "ModuleName" : "rd_plan"
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 669,
+    "InstName" : "dd1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/xm2-01.v",
+    "ModuleLine" : 1,
+    "ModuleName" : "xm2_01"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 718,
+    "InstName" : "fdd",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v",
+    "ModuleLine" : 1,
+    "ModuleName" : "fdd4",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v",
+      "InstLine" : 145,
+      "InstName" : "romtr1",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/rawtr_prom/rawtr_prom.v",
+      "ModuleLine" : 10,
+      "ModuleName" : "rawtr_prom"
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v",
+      "InstLine" : 196,
+      "InstName" : "bffsd",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dbufsec16/dbufsec16.v",
+      "ModuleLine" : 10,
+      "ModuleName" : "dbufsec16"
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 753,
+    "InstName" : "vp128",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1-128fdd.v",
+    "ModuleLine" : 15,
+    "ModuleName" : "vp1_128fdd"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 788,
+    "InstName" : "ay1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/aberrant.v",
+    "ModuleLine" : 1,
+    "ModuleName" : "aberrant",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/aberrant.v",
+      "InstLine" : 80,
+      "InstName" : "dd1",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ay/ym2149.sv",
+      "ModuleLine" : 42,
+      "ModuleName" : "YM2149"
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/aberrant.v",
+      "InstLine" : 108,
+      "InstName" : "dd2",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ay/ym2149.sv",
+      "ModuleLine" : 42,
+      "ModuleName" : "YM2149"
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 807,
+    "InstName" : "cpu1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/cpu.v",
+    "ModuleLine" : 1,
+    "ModuleName" : "cpu_wb",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/cpu.v",
+      "InstLine" : 147,
+      "InstName" : "cpu",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+      "ModuleLine" : 12,
+      "ModuleName" : "vm2_wb",
+      "SubInsts" : [
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 615,
+        "InstName" : "pld_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 724,
+        "ModuleName" : "vm2_pld"
+       },
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 734,
+        "InstName" : "plm_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 115,
+        "ModuleName" : "vm2_plm"
+       },
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 895,
+        "InstName" : "pli_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 582,
+        "ModuleName" : "vm2_pli"
+       },
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+        "InstLine" : 1072,
+        "InstName" : "plb_matrix",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+        "ModuleLine" : 689,
+        "ModuleName" : "vm2_plb"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 845,
+    "InstName" : "vp1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1_120.v",
+    "ModuleLine" : 3,
+    "ModuleName" : "vp1_120"
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 889,
+    "InstName" : "dd2",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v",
+    "ModuleLine" : 1,
+    "ModuleName" : "vp065",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v",
+      "InstLine" : 153,
+      "InstName" : "txff1",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v",
+      "ModuleLine" : 131,
+      "ModuleName" : "uartfifo",
+      "SubInsts" : [
+       {
+        "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v",
+        "InstLine" : 152,
+        "InstName" : "fifo_inst",
+        "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v",
+        "ModuleLine" : 10,
+        "ModuleName" : "~fifo.uartfifo"
+       }
+      ]
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v",
+      "InstLine" : 168,
+      "InstName" : "txuart",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx.v",
+      "ModuleLine" : 1,
+      "ModuleName" : "uart_tx"
+     },
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v",
+      "InstLine" : 179,
+      "InstName" : "rxuart",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx.v",
+      "ModuleLine" : 1,
+      "ModuleName" : "uart_rx"
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 929,
+    "InstName" : "abf1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v",
+    "ModuleLine" : 187,
+    "ModuleName" : "fifo_audio",
+    "SubInsts" : [
+     {
+      "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v",
+      "InstLine" : 208,
+      "InstName" : "fifo_inst",
+      "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v",
+      "ModuleLine" : 10,
+      "ModuleName" : "~fifo.fifo_audio"
+     }
+    ]
+   },
+   {
+    "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+    "InstLine" : 940,
+    "InstName" : "ad1",
+    "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/audio.v",
+    "ModuleLine" : 2,
+    "ModuleName" : "audio_drive"
+   }
+  ]
+ },
+ {
+  "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx_path.v",
+  "InstLine" : 3,
+  "InstName" : "uart_rx_path",
+  "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx_path.v",
+  "ModuleLine" : 3,
+  "ModuleName" : "uart_rx_path"
+ },
+ {
+  "InstFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx_path.v",
+  "InstLine" : 3,
+  "InstName" : "uart_tx_path",
+  "ModuleFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx_path.v",
+  "ModuleLine" : 3,
+  "ModuleName" : "uart_tx_path"
+ }
+]

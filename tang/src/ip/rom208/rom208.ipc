@@ -1,0 +1,15 @@
+[General]
+ipc_version=4
+file=rom208
+module=rom208
+target_device=gw2ar18c-000
+type=ram_prom
+version=1.0
+
+[Config]
+DEPTH=16384
+LANG=0
+MEM_FILE=../../../rom/uknc_rom.mif
+READ=0
+RESET_MODE=true
+WIDTH=16

@@ -1,0 +1,41 @@
+Reading netlist file: "/workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003.vg"
+Parsing netlist file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003.vg" completed
+Processing netlist completed
+Reading constraint file: "/workspace/verilog/tang20/2024/uknc/test003ho/src/test003.cst"
+Physical Constraint parsed completed
+Running placement......
+[10%] Placement Phase 0 completed
+[20%] Placement Phase 1 completed
+[30%] Placement Phase 2 completed
+WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "ram1/curs_set" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "ram1/curs_set"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUTD.default_gen_clk" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUTD.default_gen_clk"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "pl1/rpll_inst/CLKOUTD.default_gen_clk"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUTD.default_gen_clk" and "clk_25"
+[50%] Placement Phase 3 completed
+Running routing......
+[60%] Routing Phase 0 completed
+[70%] Routing Phase 1 completed
+[80%] Routing Phase 2 completed
+WARN  (PR1014) : Generic routing resource will be used to clock signal 'spi_io_clk_d' by the specified constraint. And then it may lead to the excessive delay or skew
+WARN  (PR1014) : Generic routing resource will be used to clock signal 'clk27_d' by the specified constraint. And then it may lead to the excessive delay or skew
+[90%] Routing Phase 3 completed
+Running timing analysis......
+[95%] Timing analysis completed
+Placement and routing completed
+Bitstream generation in progress......
+Bitstream generation completed
+Running power analysis......
+[100%] Power analysis completed
+Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.power.html" completed
+Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.pin.html" completed
+Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.rpt.html" completed
+Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.rpt.txt" completed
+Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.tr.html" completed
+Fri Jan 24 17:27:12 2025
+

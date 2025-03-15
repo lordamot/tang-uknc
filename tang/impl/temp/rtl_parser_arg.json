@@ -1,0 +1,173 @@
+{
+ "Device" : "GW2AR-18C",
+ "Files" : [
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/aberrant.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/audio.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ay/ym2149.sv",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/cpu.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/fdd4.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/buf_sec/buf_sec.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/fdd/ip/rawtr_prom/rawtr_prom.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dbufsec16/dbufsec16.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/dvi_tx/dvi_tx.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/fifo_audio/fifo_audio.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/memstr/memstr.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/rom208/rom208.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sdbuf_sdpb/sdbuf_sdpb.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/sys_rpll/sys_rpll.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ip/uartfifo/uartfifo.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/load.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/hid.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/mcu_spi.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/osd_u8g2.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_card.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sd_rw.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sdcmd_ctrl.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sector_dpram.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mister/sysctrl.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/mkcolorreg.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/ppu.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram1.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/sdram2.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/top.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_rx_path.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/uart/uart_tx_path.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1-128fdd.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp1_120.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/vp65.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_plm.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wm2wb/vm2_wb.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/wmrst.v",
+   "Type" : "verilog"
+  },
+  {
+   "Path" : "/workspace/verilog/tang20/2024/uknc/test003ho/src/xm2-01.v",
+   "Type" : "verilog"
+  }
+ ],
+ "IncludePath" : [
+
+ ],
+ "LoopLimit" : 2000,
+ "ResultFile" : "/workspace/verilog/tang20/2024/uknc/test003ho/impl/temp/rtl_parser.result",
+ "Top" : "top",
+ "VerilogStd" : "sysv",
+ "VhdlStd" : "vhdl_93"
+}

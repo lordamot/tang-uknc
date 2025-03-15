@@ -1,0 +1,10 @@
+[General]
+ipc_version=4
+file=sys_clkdiv2
+module=sys_clkdiv2
+target_device=gw2ar18c-000
+type=clock_clkdiv2
+version=1.0
+
+[Config]
+Language=0

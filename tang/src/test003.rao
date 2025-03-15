@@ -1,0 +1,255 @@
+<?xml version="1" encoding="UTF-8"?>
+<GAO_CONFIG>
+    <Version>3.0</Version>
+    <Mode>Standard</Mode>
+    <AoCore index="0" sample_clock="ldsd1/clk" trig_type="1" storage_depth="1024" window_num="1" capture_amount="1024" implementation="0" trigger_pos="1" module_name="top" force_trigger_by_falling_edge="false" capture_init_data_enabled="false">
+        <SignalList>
+            <Bus capture_enable="true" name="ldsd1/sector_sd[31:0]">
+                <Signal>ldsd1/sector_sd[31]</Signal>
+                <Signal>ldsd1/sector_sd[30]</Signal>
+                <Signal>ldsd1/sector_sd[29]</Signal>
+                <Signal>ldsd1/sector_sd[28]</Signal>
+                <Signal>ldsd1/sector_sd[27]</Signal>
+                <Signal>ldsd1/sector_sd[26]</Signal>
+                <Signal>ldsd1/sector_sd[25]</Signal>
+                <Signal>ldsd1/sector_sd[24]</Signal>
+                <Signal>ldsd1/sector_sd[23]</Signal>
+                <Signal>ldsd1/sector_sd[22]</Signal>
+                <Signal>ldsd1/sector_sd[21]</Signal>
+                <Signal>ldsd1/sector_sd[20]</Signal>
+                <Signal>ldsd1/sector_sd[19]</Signal>
+                <Signal>ldsd1/sector_sd[18]</Signal>
+                <Signal>ldsd1/sector_sd[17]</Signal>
+                <Signal>ldsd1/sector_sd[16]</Signal>
+                <Signal>ldsd1/sector_sd[15]</Signal>
+                <Signal>ldsd1/sector_sd[14]</Signal>
+                <Signal>ldsd1/sector_sd[13]</Signal>
+                <Signal>ldsd1/sector_sd[12]</Signal>
+                <Signal>ldsd1/sector_sd[11]</Signal>
+                <Signal>ldsd1/sector_sd[10]</Signal>
+                <Signal>ldsd1/sector_sd[9]</Signal>
+                <Signal>ldsd1/sector_sd[8]</Signal>
+                <Signal>ldsd1/sector_sd[7]</Signal>
+                <Signal>ldsd1/sector_sd[6]</Signal>
+                <Signal>ldsd1/sector_sd[5]</Signal>
+                <Signal>ldsd1/sector_sd[4]</Signal>
+                <Signal>ldsd1/sector_sd[3]</Signal>
+                <Signal>ldsd1/sector_sd[2]</Signal>
+                <Signal>ldsd1/sector_sd[1]</Signal>
+                <Signal>ldsd1/sector_sd[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/step[2:0]">
+                <Signal>ldsd1/step[2]</Signal>
+                <Signal>ldsd1/step[1]</Signal>
+                <Signal>ldsd1/step[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/is_mount[3:0]">
+                <Signal>ldsd1/is_mount[3]</Signal>
+                <Signal>ldsd1/is_mount[2]</Signal>
+                <Signal>ldsd1/is_mount[1]</Signal>
+                <Signal>ldsd1/is_mount[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/read_sd[3:0]">
+                <Signal>ldsd1/read_sd[3]</Signal>
+                <Signal>ldsd1/read_sd[2]</Signal>
+                <Signal>ldsd1/read_sd[1]</Signal>
+                <Signal>ldsd1/read_sd[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/inbyte[7:0]">
+                <Signal>ldsd1/inbyte[7]</Signal>
+                <Signal>ldsd1/inbyte[6]</Signal>
+                <Signal>ldsd1/inbyte[5]</Signal>
+                <Signal>ldsd1/inbyte[4]</Signal>
+                <Signal>ldsd1/inbyte[3]</Signal>
+                <Signal>ldsd1/inbyte[2]</Signal>
+                <Signal>ldsd1/inbyte[1]</Signal>
+                <Signal>ldsd1/inbyte[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/mounted[3:0]">
+                <Signal>ldsd1/mounted[3]</Signal>
+                <Signal>ldsd1/mounted[2]</Signal>
+                <Signal>ldsd1/mounted[1]</Signal>
+                <Signal>ldsd1/mounted[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/mount[3:0]">
+                <Signal>ldsd1/mount[3]</Signal>
+                <Signal>ldsd1/mount[2]</Signal>
+                <Signal>ldsd1/mount[1]</Signal>
+                <Signal>ldsd1/mount[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/read_blk[10:0]">
+                <Signal>ldsd1/read_blk[10]</Signal>
+                <Signal>ldsd1/read_blk[9]</Signal>
+                <Signal>ldsd1/read_blk[8]</Signal>
+                <Signal>ldsd1/read_blk[7]</Signal>
+                <Signal>ldsd1/read_blk[6]</Signal>
+                <Signal>ldsd1/read_blk[5]</Signal>
+                <Signal>ldsd1/read_blk[4]</Signal>
+                <Signal>ldsd1/read_blk[3]</Signal>
+                <Signal>ldsd1/read_blk[2]</Signal>
+                <Signal>ldsd1/read_blk[1]</Signal>
+                <Signal>ldsd1/read_blk[0]</Signal>
+            </Bus>
+            <Signal capture_enable="true">ldsd1/strobe</Signal>
+            <Signal capture_enable="true">ldsd1/busy_sd</Signal>
+            <Signal capture_enable="true">ldsd1/done_sd</Signal>
+            <Bus capture_enable="true" name="ldsd1/dsk_addr[19:0]">
+                <Signal>ldsd1/dsk_addr[19]</Signal>
+                <Signal>ldsd1/dsk_addr[18]</Signal>
+                <Signal>ldsd1/dsk_addr[17]</Signal>
+                <Signal>ldsd1/dsk_addr[16]</Signal>
+                <Signal>ldsd1/dsk_addr[15]</Signal>
+                <Signal>ldsd1/dsk_addr[14]</Signal>
+                <Signal>ldsd1/dsk_addr[13]</Signal>
+                <Signal>ldsd1/dsk_addr[12]</Signal>
+                <Signal>ldsd1/dsk_addr[11]</Signal>
+                <Signal>ldsd1/dsk_addr[10]</Signal>
+                <Signal>ldsd1/dsk_addr[9]</Signal>
+                <Signal>ldsd1/dsk_addr[8]</Signal>
+                <Signal>ldsd1/dsk_addr[7]</Signal>
+                <Signal>ldsd1/dsk_addr[6]</Signal>
+                <Signal>ldsd1/dsk_addr[5]</Signal>
+                <Signal>ldsd1/dsk_addr[4]</Signal>
+                <Signal>ldsd1/dsk_addr[3]</Signal>
+                <Signal>ldsd1/dsk_addr[2]</Signal>
+                <Signal>ldsd1/dsk_addr[1]</Signal>
+                <Signal>ldsd1/dsk_addr[0]</Signal>
+            </Bus>
+            <Bus capture_enable="true" name="ldsd1/index32[6:0]">
+                <Signal>ldsd1/index32[6]</Signal>
+                <Signal>ldsd1/index32[5]</Signal>
+                <Signal>ldsd1/index32[4]</Signal>
+                <Signal>ldsd1/index32[3]</Signal>
+                <Signal>ldsd1/index32[2]</Signal>
+                <Signal>ldsd1/index32[1]</Signal>
+                <Signal>ldsd1/index32[0]</Signal>
+            </Bus>
+            <Signal capture_enable="true">ldsd1/dsk_wrte</Signal>
+            <Signal capture_enable="true">ldsd1/dsk_busy</Signal>
+            <Signal capture_enable="true">ldsd1/dsk_asck</Signal>
+            <Signal capture_enable="true">ram1/dsk_vl</Signal>
+            <Signal capture_enable="true">is_null</Signal>
+            <Bus capture_enable="true" name="ldsd1/test_step[1:0]">
+                <Signal>ldsd1/test_step[1]</Signal>
+                <Signal>ldsd1/test_step[0]</Signal>
+            </Bus>
+            <Signal capture_enable="true">ldsd1/dsk_read</Signal>
+            <Signal capture_enable="true">ram1/refresh</Signal>
+            <Bus capture_enable="true" name="ldsd1/dsk_din[31:0]">
+                <Signal>ldsd1/dsk_din[31]</Signal>
+                <Signal>ldsd1/dsk_din[30]</Signal>
+                <Signal>ldsd1/dsk_din[29]</Signal>
+                <Signal>ldsd1/dsk_din[28]</Signal>
+                <Signal>ldsd1/dsk_din[27]</Signal>
+                <Signal>ldsd1/dsk_din[26]</Signal>
+                <Signal>ldsd1/dsk_din[25]</Signal>
+                <Signal>ldsd1/dsk_din[24]</Signal>
+                <Signal>ldsd1/dsk_din[23]</Signal>
+                <Signal>ldsd1/dsk_din[22]</Signal>
+                <Signal>ldsd1/dsk_din[21]</Signal>
+                <Signal>ldsd1/dsk_din[20]</Signal>
+                <Signal>ldsd1/dsk_din[19]</Signal>
+                <Signal>ldsd1/dsk_din[18]</Signal>
+                <Signal>ldsd1/dsk_din[17]</Signal>
+                <Signal>ldsd1/dsk_din[16]</Signal>
+                <Signal>ldsd1/dsk_din[15]</Signal>
+                <Signal>ldsd1/dsk_din[14]</Signal>
+                <Signal>ldsd1/dsk_din[13]</Signal>
+                <Signal>ldsd1/dsk_din[12]</Signal>
+                <Signal>ldsd1/dsk_din[11]</Signal>
+                <Signal>ldsd1/dsk_din[10]</Signal>
+                <Signal>ldsd1/dsk_din[9]</Signal>
+                <Signal>ldsd1/dsk_din[8]</Signal>
+                <Signal>ldsd1/dsk_din[7]</Signal>
+                <Signal>ldsd1/dsk_din[6]</Signal>
+                <Signal>ldsd1/dsk_din[5]</Signal>
+                <Signal>ldsd1/dsk_din[4]</Signal>
+                <Signal>ldsd1/dsk_din[3]</Signal>
+                <Signal>ldsd1/dsk_din[2]</Signal>
+                <Signal>ldsd1/dsk_din[1]</Signal>
+                <Signal>ldsd1/dsk_din[0]</Signal>
+            </Bus>
+            <Bus capture_enable="false" name="ldsd1/dsk_dout[31:0]">
+                <Signal>ldsd1/dsk_dout[31]</Signal>
+                <Signal>ldsd1/dsk_dout[30]</Signal>
+                <Signal>ldsd1/dsk_dout[29]</Signal>
+                <Signal>ldsd1/dsk_dout[28]</Signal>
+                <Signal>ldsd1/dsk_dout[27]</Signal>
+                <Signal>ldsd1/dsk_dout[26]</Signal>
+                <Signal>ldsd1/dsk_dout[25]</Signal>
+                <Signal>ldsd1/dsk_dout[24]</Signal>
+                <Signal>ldsd1/dsk_dout[23]</Signal>
+                <Signal>ldsd1/dsk_dout[22]</Signal>
+                <Signal>ldsd1/dsk_dout[21]</Signal>
+                <Signal>ldsd1/dsk_dout[20]</Signal>
+                <Signal>ldsd1/dsk_dout[19]</Signal>
+                <Signal>ldsd1/dsk_dout[18]</Signal>
+                <Signal>ldsd1/dsk_dout[17]</Signal>
+                <Signal>ldsd1/dsk_dout[16]</Signal>
+                <Signal>ldsd1/dsk_dout[15]</Signal>
+                <Signal>ldsd1/dsk_dout[14]</Signal>
+                <Signal>ldsd1/dsk_dout[13]</Signal>
+                <Signal>ldsd1/dsk_dout[12]</Signal>
+                <Signal>ldsd1/dsk_dout[11]</Signal>
+                <Signal>ldsd1/dsk_dout[10]</Signal>
+                <Signal>ldsd1/dsk_dout[9]</Signal>
+                <Signal>ldsd1/dsk_dout[8]</Signal>
+                <Signal>ldsd1/dsk_dout[7]</Signal>
+                <Signal>ldsd1/dsk_dout[6]</Signal>
+                <Signal>ldsd1/dsk_dout[5]</Signal>
+                <Signal>ldsd1/dsk_dout[4]</Signal>
+                <Signal>ldsd1/dsk_dout[3]</Signal>
+                <Signal>ldsd1/dsk_dout[2]</Signal>
+                <Signal>ldsd1/dsk_dout[1]</Signal>
+                <Signal>ldsd1/dsk_dout[0]</Signal>
+            </Bus>
+        </SignalList>
+        <Triggers>
+            <Trigger index="0">
+                <SignalList>
+                    <Bus restorename="ldsd1/test_step[1:0]">
+                        <Signal>ldsd1/test_step[1]</Signal>
+                        <Signal>ldsd1/test_step[0]</Signal>
+                    </Bus>
+                </SignalList>
+            </Trigger>
+            <Trigger index="1"/>
+            <Trigger index="2"/>
+            <Trigger index="3"/>
+            <Trigger index="4"/>
+            <Trigger index="5"/>
+            <Trigger index="6"/>
+            <Trigger index="7"/>
+            <Trigger index="8"/>
+            <Trigger index="9"/>
+            <Trigger index="10"/>
+            <Trigger index="11"/>
+            <Trigger index="12"/>
+            <Trigger index="13"/>
+            <Trigger index="14"/>
+            <Trigger index="15"/>
+        </Triggers>
+        <MatchUnits>
+            <MatchUnit index="0" enabled="1" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="01" value1="00" trigger="0"/>
+            <MatchUnit index="1" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="2" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="3" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="4" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="5" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="6" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="7" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="8" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="9" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="10" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="11" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="12" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="13" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="14" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+            <MatchUnit index="15" enabled="0" match_type="0" counter_enable="0" counter_width="2" counter="2" countinuous="0" func="0" value0="" value1=""/>
+        </MatchUnits>
+        <Expressions type="Static">
+            <Expression>M0</Expression>
+        </Expressions>
+    </AoCore>
+    <GAO_ID>0110111110001111</GAO_ID>
+</GAO_CONFIG>

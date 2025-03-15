@@ -1,0 +1,36 @@
+-series GW2AR
+-device GW2AR-18
+-device_version C
+-package QFN88
+-part_number GW2AR-LV18QN88C8/I7
+
+
+-mod_name sys_rpll
+-file_name sys_rpll
+-path /workspace/verilog/tang20/2024/uknc/test003h/src/ip/sys_rpll/
+-type PLL
+-rPll true
+-file_type vlg
+-dev_type GW2AR-18C
+-dyn_idiv_sel false
+-idiv_sel 7
+-dyn_fbdiv_sel false
+-fbdiv_sel 13
+-dyn_odiv_sel false
+-odiv_sel 16
+-dyn_sdiv_sel 12
+-dyn_da_en false
+-rst_sig false
+-rst_sig_p false
+-fclkin 27
+-clkfb_sel 0
+-en_lock true
+-clkout_bypass false
+-en_clkoutp true
+-clkoutp_bypass false
+-psda_sel 4
+-dutyda_sel 8
+-en_clkoutd true
+-clkoutd_bypass false
+-clkoutd_src CLKOUT
+-en_clkoutd3 false
