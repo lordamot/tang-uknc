@@ -1,0 +1,138 @@
+diff --git a/firmware/misterynano_fw/menu.c b/firmware/misterynano_fw/menu.c
+index 7a1e2f6..e487b18 100644
+--- a/firmware/misterynano_fw/menu.c
++++ b/firmware/misterynano_fw/menu.c
+@@ -234,6 +234,59 @@ menu_variable_t variables_vic20[] = {
+   { '\0',{ 0 }}
+ };
+ 
++// ------------------------------------------------------------------
++// ---------------------  UNEON menu --------------------------------
++// ------------------------------------------------------------------
++
++static const char main_form_uneon[] =
++  "UNEON Nano,;"                        // main form has no parent
++  // --------
++  "F,FDD 0:,0|dsk+img;"                 // fileselector for Disk 1:
++  "F,FDD 1:,1|dsk+img;"                 // fileselector for Disk 2:
++  "S,System,1;"                         // System submenu is form 1
++  "S,Settings,2;"                       // Settings submenu is form 2
++  "B,Reset,R;";                         // system reset
++
++static const char system_form_uneon[] =
++  "System,0|3;"                         // return to form 0, entry 3
++  // --------
++  "L,Chipset:,ST|Mega ST|STE,C;"        // selection stored in variable "C"
++  "L,Memory:,4MB|8MB,M;"                // ...
++  "L,Video:,Color|Mono,V;"
++  "L,Cartridge:,None|Cubase 2&3,Q;"     // Cubase dongle support
++  "L,Mouse:,USB|Atari ST|Amiga,J;"      // Mouse (DB9) mapping
++  "L,TOS Slot:,Primary|Secondary,T;"    // Select TOS
++  "B,Cold Boot,B;";                     // system reset with memory reset
++
++static const char settings_form_uneon[] =
++  "Settings,0|4;"                       // return to form 0, entry 4
++  // --------
++  "L,Screen:,Normal|Wide,W;"
++  "L,Scanlines:,None|25%|50%|75%,S;"
++  "L,Volume:,Mute|33%|66%|100%,A;"
++  "B,Save settings,S;";
++
++static const char *forms_uneon[] = {
++  main_form_uneon,
++  system_form_uneon,
++  settings_form_uneon
++};
++
++// variable ids must match the ones in the menu string
++menu_variable_t variables_uneon[] = {
++  { 'C', { 0 }},    // default chipset = ST
++  { 'M', { 0 }},    // default memory = 4MB
++  { 'V', { 0 }},    // default video = color
++  { 'S', { 0 }},    // default scanlines = none
++  { 'A', { 1 }},    // default volume = 33%
++  { 'W', { 0 }},    // default normal (4:3) screen
++  { 'P', { 0 }},    // default no floppy write protected
++  { 'Q', { 0 }},    // default cubase dongle not enabled
++  { 'J', { 0 }},    // default mouse USB, DB9 connector joystick
++  { 'T', { 0 }},    // default primary TOS slot
++  { '\0',{ 0 }}
++};
++
+ static void menu_goto_form(menu_t *menu, int form, int entry) {
+   menu->form = form;
+   menu->entry = entry;
+@@ -245,7 +298,8 @@ static const char *settings_file[] = {
+   NULL,
+   CARD_MOUNTPOINT "/atarist.ini",  // core id = 1
+   CARD_MOUNTPOINT "/c64.ini",       // core id = 2
+-  CARD_MOUNTPOINT "/vic20.ini"     // core id = 3
++  CARD_MOUNTPOINT "/uneon.ini",     // core id = 3
++  CARD_MOUNTPOINT "/vic20.ini"     // core id = 4
+ };
+ 
+ static int iswhite(char c) {
+@@ -402,6 +456,9 @@ menu_t *menu_init(u8g2_t *u8g2)
+   } else if(core_id == CORE_ID_C64) {
+     menu.vars = variables_c64;
+     menu.forms = forms_c64;
++  } else if(core_id == CORE_ID_UNEON) {
++    menu.vars = variables_uneon;
++    menu.forms = forms_uneon;
+   } else if(core_id == CORE_ID_VIC20) {
+     menu.vars = variables_vic20;
+     menu.forms = forms_vic20;
+diff --git a/firmware/misterynano_fw/sysctrl.c b/firmware/misterynano_fw/sysctrl.c
+index 7a583f9..de4d10a 100644
+--- a/firmware/misterynano_fw/sysctrl.c
++++ b/firmware/misterynano_fw/sysctrl.c
+@@ -10,7 +10,7 @@
+ unsigned char core_id = 0;
+ 
+ static const char *core_names[] = {
+-  "<unset>", "Atari ST", "C64"
++  "<unset>", "Atari ST", "C64", "UNEON"
+ };
+ 
+ static void sys_begin(spi_t *spi, unsigned char cmd) {
+diff --git a/firmware/misterynano_fw/sysctrl.h b/firmware/misterynano_fw/sysctrl.h
+index 17fbfe0..d5c13dd 100644
+--- a/firmware/misterynano_fw/sysctrl.h
++++ b/firmware/misterynano_fw/sysctrl.h
+@@ -14,7 +14,8 @@
+ #define CORE_ID_UNKNOWN  0x00
+ #define CORE_ID_ATARI_ST 0x01
+ #define CORE_ID_C64      0x02
+-#define CORE_ID_VIC20    0x03
++#define CORE_ID_UNEON    0x03
++#define CORE_ID_VIC20    0x04
+ 
+ extern unsigned char core_id;
+ 
+diff --git a/firmware/misterynano_fw/usb_host.c b/firmware/misterynano_fw/usb_host.c
+index fd3efd0..f6ec8a1 100644
+--- a/firmware/misterynano_fw/usb_host.c
++++ b/firmware/misterynano_fw/usb_host.c
+@@ -81,17 +81,20 @@ USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t xbox_buffer[CONFIG_USBHOST_MAX_XB
+ // include the keyboard mappings
+ #include "atari_st.h"
+ #include "cbm.h"
++#include "uneon.h"
+ 
+ const unsigned char *keymap[] = {
+   NULL,             // id 0: unknown core
+   keymap_atarist,   // id 1: atari st
+-  keymap_cbm        // id 2: c64
++  keymap_cbm,       // id 2: c64
++  keymap_uneon      // id 3: UNOEN
+ };
+ 
+ const unsigned char *modifier[] = {
+   NULL,             // id 0: unknown core
+   modifier_atarist, // id 1: atari st
+-  modifier_cbm      // id 2: c64
++  modifier_cbm,     // id 2: c64
++  modifier_uneon    // id 3: UNEON
+ };
+ 
+ void kbd_tx(spi_t *spi, unsigned char byte) {

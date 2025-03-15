@@ -1,0 +1,3 @@
+#!/bin/bash
+make CROSS_COMPILE=/home/alex/toolchain_gcc_t-head_linux/bin/riscv64-unknown-elf- BL_SDK_BASE=/home/alex/bouffalo_sdk/
+
