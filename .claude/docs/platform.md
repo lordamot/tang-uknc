@@ -138,6 +138,17 @@ selecting among 8 kHz / 1 kHz / 500 Hz / 250 Hz / 60 Hz, ANDed together;
 with all five zero and bit 7 set the line is simply held high.  It is
 summed with the AY output in `top.v` and shown on `leds[1]`.
 
+**Real software never uses those five bits.**  Over 234 seconds of a
+running machine - boot screen, keypresses, a game playing beeper music -
+the diagnostic monitor saw `R177716` take four values and no others:
+`100000`, `100020`, `100200`, `100220`.  Bits 15, 4 and 7; never one of
+`[12:8]`.  The music is made by toggling **bit 7** in a timing loop, 177 to
+473 writes per 100 ms window, which is a square wave of 885 to 2365 Hz.  So
+the divider chain is dead code as far as anything that actually runs is
+concerned, and `sound` follows bit 7 directly.  Worth knowing before
+spending time on the tone logic: the interesting path is the write rate,
+not the dividers.
+
 ## Keyboard
 
 There is no PS/2 and no matrix scan in the live build.  `hid.v` receives a
@@ -206,9 +217,40 @@ to free-run at the 3.1339 MHz PPU clock, 1.77 times too fast.
 and produce a tone.  The full-machine testbench cannot: it has no SD card,
 so no game or player ever runs and the boot ROM never touches the AYs.
 
-**The mix is mono, at one level.**  `m_channel` - all nine channels summed
-- shifted up three, plus the beeper at bit 12, is 22456 at most, inside
-the 32767 a signed sample allows.  `system_volume` only divides that down;
-it must never scale up, which is what it did until Aug 2026, when 100%
-multiplied by four and clamped, so the volume setting changed which parts
-of the mix were audible rather than how loud they were.
+**The mix is mono, at one level, and unipolar on purpose.**  `m_channel` -
+all nine channels summed - shifted up three, plus the beeper at bit 13, is
+26552 at most, inside the 32767 a signed sample allows.  `system_volume`
+only divides that down; it must never scale up, which is what it did until
+Aug 2026, when 100% multiplied by four and clamped, so the volume setting
+changed which parts of the mix were audible rather than how loud they were.
+
+The sum stays **unipolar** - 0 upwards, quiescent at exactly zero - because
+that is what plays.  A DC blocker was written for it in Aug 2026, on the
+sound reasoning that nine unipolar channels carry an offset that the volume
+control then scales; the offset is real and was measured at +3000 under one
+chip's music.  But every DC-blocked form of the signal is silent on the
+operator's television, and the raw sum is not.  Four states, each differing
+from the working one in a single property:
+
+| samples | quiescent | result |
+|---|---|---|
+| raw sum, 0..N | 0 | **plays** |
+| raw sum minus a constant 512 | -512, dips negative | silent |
+| DC blocked, bipolar | 0, dips negative | silent |
+| DC blocked plus 8192, never negative | 8192 | silent |
+
+The third and fourth have the same AC content and comparable amplitude as
+the first - the wire carried a clean 8192 +/- 580 that the sink ignored
+while it played 510 +/- 510 from the raw path - so it is not amplitude, and
+the second rules out the sign on its own.  No mechanism for this is known.
+What it does match is the hardware: a real MC0511 drives a unipolar sum
+through a coupling capacitor, and a television has one too, so blocking the
+DC digitally was doing the capacitor's job in front of a sink that will not
+take the result.  The blocker is still in `top.v`, selected by **S2**, in
+case another display disagrees.
+
+The one defect that comes back with that decision is the blocker's original
+motive: the mean steps with the program material, so a loud enough beeper
+mutes the sink.  It is contained by level - the beeper at 16384 trips it at
+full volume, at 8192 it is clean at 66% and 100%.  At 33% the beeper is
+-24 dBFS and inaudible.

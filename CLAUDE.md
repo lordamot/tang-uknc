@@ -37,7 +37,8 @@ four 800 KB floppies served out of `.dsk` files on the SD card; two
 AY-3-8910s and a one-bit beeper, out over both HDMI and I²S.
 
 ```
-Logic 41%   Register 23%   BSRAM 48%   PLL 2/2 (100%)     [Aug 2026 PnR]
+Logic 47%   Register 30%   BSRAM 46%   PLL 2/2 (100%)     [Aug 2026 PnR]
+                             (44% / 25% without the diagnostic monitor)
 ```
 
 Key documentation: `.claude/docs/platform.md` (the machine: both address
@@ -171,10 +172,16 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   delay line because a preamble has to be announced before the thing it
   announces; the data island lives in the **back porch** and assumes
   active-high hsync with ~176 clocks behind it, which is what `sdram2.v`
-  makes; and the HDMI audio is resampled at `clkpix/1024`, NOT taken off
-  the I²S path, because that exact ratio is what makes N and CTS
-  constants.  No General Control Packet is sent - try that first if a
-  display shows the picture and stays silent.
+  makes; and the HDMI audio is resampled there, NOT taken off the I²S
+  path.  It was `clkpix/1024` until Aug 2026, which is 48.968 kHz - 2%
+  off standard while the channel status declared 48 kHz, and that
+  disagreement drains a receiver's audio FIFO in about half a second.  It
+  is now a phase accumulator: add `N` a pixel clock, take a sample at
+  `128*CTS`, with **N = 6144 and CTS = 50140** making the ratio exact by
+  construction whatever `f_TMDS` really is.  A General Control Packet **is**
+  sent now, asserting **neither** mute flag (`SB0 = 8'h00`) - the file
+  used to send `8'h10` on a bit order that contradicts HDMI 1.4b table
+  5-8, and the experiment behind it was confounded.
 - **An audio subpacket is two IEC 60958 subframes, and V/U/C/P belong
   inside each one.**  `as_sub0` in `hdmi_tx.v` had the two samples
   adjacent with all eight flag bits collected above them, so the sink read
@@ -207,13 +214,72 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   link had never been run on hardware, needs assembly 3921 or later, and
   costs the USB-JTAG bridge as well once you actually flash that chip.  So
   `uart_tx` is back on 69, `uart_rx` on 70, and 13/48/55/75/76/86 are
-  free.  `git show 36e8c2b` has the removed form.  **The FPGA design never
+  free.  Since Aug 2026 the pin carries the **diagnostic monitor** rather
+  than the VP-65 - see the `dbgmon` trap below - which does not change any
+  of this, only which module drives it.  `git show 36e8c2b` has the removed form.  **The FPGA design never
   affected USB-C programming either way** - that is an FT2232 the on-board
   BL616 presents, independent of every user pin; only reflashing that
   BL616 takes it, and `howto.md` §5.5 is how to put it back.
 - **The working tree is always dirty with `mode change 100755 => 100644`.**
   That is a checkout artefact across the vendored u8g2 tree, not work.  Use
   `git diff --summary` to see whether anything real is in there.
+- **`sys_rst_n` is active HIGH, and the buttons read 0 released.**  The
+  name is a lie: it is high for the first 335 ms and low after, and every
+  module here takes it as `if (reset)`.  Wire it to something wanting an
+  active-low reset and you get a block that runs for a third of a second
+  after power-on and is then held in reset forever - which is exactly what
+  happened to `dbgmon` and cost a build.  `sys_rst` is the active-low one.
+  The same reasoning settles the buttons: `n_all_rst = init & ~buts[0]`
+  only makes sense if pressing S1 is what forces the reset, so **0 is
+  released and 1 is pressed**, whatever `PULL_MODE=UP` in the `.cst` says.
+- **A sample the encoder latches must be REGISTERED, not combinational.**
+  `volume_data_l/r` were an `always @(*)` and `hdmi_tx` latches them at the
+  audio sample instant, which has no relation to the PPU clock the mixer
+  runs on - so the encoder could send a carry-chain intermediate as a
+  sample.  It looked like a dead audio path rather than noise because the
+  old divider took a sample every 1024 pixel clocks and `ppuclk_p` is
+  `clkram/16`: 1024 = 64*16, so the sample instant sat at ONE fixed phase
+  forever, and if that phase is the settling window then every sample is
+  wrong, every time.  Anything crossing from the mixer to the encoder gets
+  a flop.
+- **The board's diagnostic monitor owns pin 69, and it cannot see
+  everything.**  `src/dbg/dbgmon.v` prints 18 hex words ten times a second
+  down the USB-C serial line; `tools/dbgmon.py` reads them, and this agent
+  can open the port itself, so measuring a running board is a thing that
+  can be done here.  `vp065`'s transmitter - the УКНЦ's own C2 line - goes
+  nowhere as a result; one `assign` in `top.v` puts it back.  But the
+  probes sample `volume_data_l` on `posedge ppuclk_p`, in the mixer's own
+  domain, so a value that is wrong only *between* clock edges reads as
+  perfect: that is the bug above, and the monitor agreed with the design
+  for three build cycles while the board disagreed with both.
+- **Flashing the FPGA is replug, flash, power-cycle - in that order.**
+  `openFPGALoader -f -r` writes the flash and reports success but does
+  **not** reliably reconfigure the chip, so without the power cycle you
+  are testing the previous bitstream; that cost a whole test run.  And
+  once anything has opened `/dev/ttyUSB*`, the next flash dies with
+  `ftdi_usb_reset failed` - the FT2232 is emulated by the on-board BL616
+  and will not take a second USB reset - so only replugging the cable
+  clears it, and `--skip-reset` does not help because the reset is inside
+  the device open.  Do **not** reach for a `USBDEVFS_RESET` ioctl: it
+  drops the device off the bus entirely and needs the replug anyway.
+- **The sound is a unipolar sum on purpose, and the reason is measured,
+  not understood.**  Four states went on the board, each one property
+  apart: the raw sum (quiescent 0) plays; the raw sum minus a constant 512
+  is silent; DC-blocked and bipolar is silent; DC-blocked plus an offset,
+  never negative, same AC amplitude, is silent.  So it is not sign, not
+  amplitude and not offset, and no mechanism is known - but a real MC0511
+  drives a unipolar sum through a coupling capacitor and so does a
+  television, so the digital blocker was doing that capacitor's job in
+  front of a sink that will not take the result.  The blocker stays in
+  `top.v` on **S2** for anyone with another display.  Its motive is still
+  real: the mean steps with the program material, which is why the beeper
+  is 8192 and not 16384 - at 16384 it mutes the sink at full volume.
+- **Real software never sets the beeper tone bits.**  `R177716[12:8]`
+  selects among 8 kHz/1 kHz/500/250/60, and over 234 seconds of a running
+  machine the register took four values - `100000`, `100020`, `100200`,
+  `100220` - and none of them touched `[12:8]`.  The music is bit 7
+  toggled in a timing loop, 177-473 writes per 100 ms.  The divider chain
+  in `xm2-01.v` is dead code for anything that actually runs.
 - **A simulation model that lies is worse than no simulation.**  The
   SDRAM model drove its read data one clock late, so every read came back
   as zero, the PPU found its trap vectors zero and sat in a trap loop -

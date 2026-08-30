@@ -18,6 +18,7 @@ live set, by role:
 | video/memory | `sdram1.v`, `sdram2.v`, `mkcolorreg.v` |
 | peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `audio.v` |
 | serial | `uart/uart_{rx,tx}.v`, `uart/uart_{rx,tx}_path.v` |
+| diagnostics | `dbg/dbgmon.v` |
 | MisterNano | `mister/{mcu_spi,sysctrl,hid,osd_u8g2,sd_card,sd_rw,sdcmd_ctrl,sector_dpram}.v` |
 | HDMI | `hdmi/{hdmi_tx,tmds_channel,hdmi_packet,hdmi_serdes}.v` |
 | vendor IP | `ip/{sys_rpll,fifo_audio,memstr,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v`, `fdd/ip/{buf_sec,rawtr_prom}/*.v` |
@@ -188,43 +189,123 @@ Four things worth knowing before touching it:
   needs 144, which leaves the video preamble and guard band their ten with
   room over.  It runs on blanking lines too, and that is what carries the
   audio across the frame boundary.
-- **The audio is resampled here, not taken from the I²S path.**  A counter
-  divides the pixel clock by 1024, which at 50.143 MHz is 48.968 kHz.
-  That exact ratio is the whole point: HDMI wants Fs = f_TMDS x N / (128 x
-  CTS), so CTS = 8N holds whatever the clock really is, and N = 6144 with
-  CTS = 49152 are constants rather than a measurement.  The sink
-  regenerates the audio clock from them and plays at the true rate; the
-  "48 kHz" in the IEC 60958 channel status is the nearest declarable value
-  and is informational.  The I²S output is untouched and still runs at its
-  own rate off `ppuclk_p`.
-- **Four packet types go out and two deliberately do not.**  Sent: audio
-  clock regeneration, audio sample, audio InfoFrame, AVI InfoFrame, plus
-  null packets in the slots with nothing to fill them.  Not sent: the
-  General Control Packet - AVMUTE defaults to clear and the colour depth
-  is the default 8 bits - and the HDMI Vendor Specific InfoFrame, which
-  only matters for 3D and 4K modes.  **If a display shows the picture but
-  stays silent, the GCP is the first thing to try.**
+- **The audio is resampled here, not taken from the I²S path, and it is
+  resampled to exactly 48 kHz.**  It used to take a sample every 1024
+  pixel clocks, which at 50.143 MHz is 48.968 kHz - 2% fast, not a rate
+  that exists in the standard, with the IEC 60958 channel status declaring
+  a flat 48 kHz beside it.  A sink clocks its converter from one and its
+  buffer from the other, and 960 samples a second of disagreement drains
+  or floods a receiver FIFO of a few hundred samples in about half a
+  second.  On the board that was heard as keypress clicks getting through,
+  music playing for half a second and stopping, and continuous music never
+  playing at all - a stream with no pauses in it never gives the sink a
+  reason to re-arm.
+
+  No integer divider of 50.143 MHz lands on a standard rate (48 kHz would
+  need 1044.58), so the sample instant comes from a phase accumulator
+  instead: add N every pixel clock, take a sample and subtract when it
+  reaches 128 x CTS.  With **N = 6144 and CTS = 50140** the ratio is
+  exactly N/(128 x CTS) by construction, so the rate the sink regenerates
+  and the rate we deliver agree to the bit whatever `f_TMDS` really is -
+  which matters, because it is a PLL output nobody has measured.  The
+  48 kHz in the channel status is now true rather than a 2% lie.  The I²S
+  output is untouched and still runs at its own rate off `ppuclk_p`.
+- **Five packet types go out and one deliberately does not.**  Sent: audio
+  clock regeneration, audio sample, audio InfoFrame, AVI InfoFrame and the
+  General Control Packet, plus null packets in the slots with nothing to
+  fill them.  Not sent: the HDMI Vendor Specific InfoFrame, which only
+  matters for 3D and 4K modes.
+
+  **The GCP asserts neither mute flag - `SB0 = 8'h00`.**  It carried
+  `8'h10` for a while, on the strength of one experiment where `8'h01`
+  blacked the screen and was read as "bit 0 is Set_AVMUTE".  HDMI 1.4b
+  table 5-8 says the reverse - bit 0 Clear, bit 4 Set - which would make
+  `8'h10` a Set_AVMUTE going out fifty times a second.  The experiment
+  cannot settle it, because that build carried other changes and the black
+  screen had more than one candidate.  So the packet now asserts nothing,
+  which is right under either reading and is what a steady-state source
+  sends: a mute flag is a one-shot, not a state to restate every frame,
+  and a sink powers up unmuted.  The GCP still does the job it was added
+  for, which is stating the colour depth.
 
 The AVI InfoFrame carries **VIC 0**, because 1280x600 at 50.7 Hz is not a
-CEA mode and there is no code for it.  Whether a given sink will accept
-audio on a mode it does not recognise is not something that can be settled
-here.
+CEA mode and there is no code for it.  Whether a sink will accept audio on
+a mode it does not recognise used to be an open question; as of Aug 2026 it
+is settled for at least one television, which plays AY music from this
+design at every volume setting.  It is not settled in general.
+
+## Board diagnostics
+
+`src/dbg/dbgmon.v`, Aug 2026, and it is the only way anything on a running
+board can be measured.  Everything before it had to be inferred from a
+picture and a loudspeaker, and the inferences were wrong often enough to
+cost several build-and-flash cycles each.
+
+Pin 69 is `uart_tx` into the Tang's own BL616, which the host sees as
+interface B of an FT2232 - `/dev/serial/by-id/*if01*`, some `/dev/ttyUSBn`
+whose number changes on every re-enumeration.  **The monitor owns that
+pin.**  `vp065`'s transmitter, the УКНЦ's own C2 line, goes to a wire named
+`vp65_uart_tx` and nowhere else; no software here uses it, and putting it
+back is one `assign` in `top.v`.
+
+The module is deliberately dumb: it prints N 16-bit words as lower-case
+hex, space separated, CR LF terminated, once every WIN clocks, and knows
+nothing about what they mean.  The counters and the min/max live in `top.v`
+beside the signals they watch.  Reusing it for the next fault is a matter
+of wiring different words into `probes`.
+
+Currently 18 words at 10 lines a second: the last write to `0177716` and
+the count, edges of the beeper line, range of the summed AY channels, range
+of the sample leaving the mixer, AY writes with the last address and data,
+PPU bus cycles, PPU bus timeouts, keycode changes, volume and button state,
+HDMI samples dropped, HDMI audio packets sent.  `tools/dbgmon.py` reads and
+names them.
+
+Three things about it that are not obvious:
+
+- **The bus events come off the PPU bus, not out of the modules.**  A write
+  `aberrant` acked is an AY write; a write at `0177716` that `xm2-01` acked
+  is the beeper register.  So neither module had to be touched to be
+  watched, and the counters prove the **ack**, which is what a silent
+  peripheral fails at first.
+- **`win_tog` is a level, not a pulse.**  The accumulators are on the
+  3.13 MHz PPU clock and a 20 ns pulse from the 50 MHz domain would be
+  missed nine times in ten.  The cost is that each line carries the window
+  that ended at the previous toggle - one window of latency, constant.
+- **`rst_n` is `sys_rst`, not `sys_rst_n`.**  See the trap below.
+
+**`sys_rst_n` is active HIGH.**  The name is a lie and it has cost a build:
+it is high for the first 335 ms and low afterwards, and every module in this
+design takes it as `if (reset)`.  Wiring it to something that wants an
+active-low reset gives you a block that runs for a third of a second after
+power-on and is then held in reset forever.  `sys_rst` is its complement and
+is the active-low one.  The same reasoning fixes the buttons: `n_all_rst =
+init & ~buts[0]` only makes sense if **the buttons read 0 released and 1
+pressed**, whatever `PULL_MODE=UP` in the `.cst` suggests.
+
+**What the monitor cannot see.**  It samples `volume_data_l` on `posedge
+ppuclk_p`, in the same domain the mixer runs in, so a value that is wrong
+only *between* clock edges reads as perfect.  That is exactly the bug it
+failed to find - see `progress.md` defect 9 - and the general lesson is the
+one the SDRAM model already taught: an instrument that shares the design's
+assumptions agrees with it and both are wrong together.
 
 ## Resource budget
 
 From the August 2026 place and route (`tang/impl/pnr/test003.rpt.txt`):
 
 ```
-Logic      8394/20736   41%
-Register   3611/15915   23%
-BSRAM        22/46      48%
+Logic      9597/20736   47%
+Register   4683/15915   30%
+BSRAM        21/46      46%
 DSP           0/         0%
 PLL           2/2      100%
 IOLOGIC       8/121      7%
 ```
 
-January 2025 was 39% / 22% / 46%; stereo took the BSRAM up and the HDMI
-encoder took the logic up.
+January 2025 was 39% / 22% / 46%; stereo took the BSRAM up, the HDMI
+encoder took the logic up, and the diagnostic monitor added about 600 LUTs
+and 800 registers on top of that - 44% / 25% without it.
 
 **Both PLLs are spoken for** - `sys_rpll` off the crystal and
 `hdmi_ser/pll_hdmi` off the pixel clock - so a new clock has to come out of
@@ -245,6 +326,8 @@ HDMI          O_tmds_clk_p 33,34   data[0] 35,36   data[1] 37,38   data[2] 39,40
 SD card       sdclk 83  sdcmd 82  sddat0 84  sddat1 85  sddat2 80  sddat3 81
 audio         HP_BCK 71  HP_WS 72  HP_DIN 73  PA_EN 74
 serial        uart_tx 69  uart_rx 70      (to the on-board BL616, USB-C)
+                                          uart_tx is the diagnostic monitor,
+                                          NOT vp065 - see below
 MCU           m0s[0] 42  m0s[1] 41  m0s[2] 56  m0s[3] 54  m0s[4] 51
 free          13, 48, 55, 75, 76, 86
 ```

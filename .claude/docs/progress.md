@@ -469,13 +469,83 @@ show up as no picture at all:
   which is what makes the OSER10s analysable at all.  Nothing under
   `src/hdmi/` appears in the ten worst timing paths.
 
-What was **not** checked, and it is the important part: no display has
-ever been asked to play this.  The ECC check in the testbench uses the
-same polynomial constant as the encoder, so it proves the plumbing - bit
-order, timing, reset - and not the polynomial.  No General Control Packet
-is sent, and the AVI InfoFrame carries VIC 0 because 1280x600 at 50.7 Hz
-is not a CEA mode; either could be why a real sink stays silent.  Those
-two are the first things to try.
+That paragraph used to end "no display has ever been asked to play this".
+One has now, and it found two bugs that none of the above could - see
+defects 8 and 9.  The ECC check in the testbench still uses the same
+polynomial constant as the encoder, so it proves the plumbing and not the
+polynomial.  A General Control Packet **is** now sent, asserting neither
+mute flag; the AVI InfoFrame still carries VIC 0, and at least one
+television plays audio on that mode regardless.
+
+### 8. The HDMI audio rate was 2% off standard - FIXED
+
+`hdmi_tx.v` took a sample every 1024 pixel clocks.  At 50.143 MHz that is
+**48.968 kHz**, while the IEC 60958 channel status beside it declared a
+flat **48 kHz**.  A sink clocks its converter from one and its buffer from
+the other, and 960 samples a second of disagreement drains or floods a
+receiver FIFO of a few hundred samples in about half a second.
+
+Heard on the board as: keypress clicks getting through, music playing for
+half a second and stopping, and continuous music never playing at all -
+because a stream with no pauses in it never gives the sink a reason to
+re-arm.  The shape of that symptom is what identified it; nothing in the
+design or the simulation was wrong in a way either could show.
+
+No integer divider of 50.143 MHz lands on a standard rate - 48 kHz needs
+1044.58 - so the sample instant now comes from a phase accumulator: add N
+every pixel clock, take a sample and subtract at 128 x CTS.  **N = 6144,
+CTS = 50140** makes the ratio exactly N/(128 x CTS) by construction, so
+what the sink regenerates and what we deliver agree to the bit whatever
+`f_TMDS` really is - and it is a PLL output nobody has measured.
+
+Checked in simulation (9746 samples over 6363 lines, 203.0 ms = 48,010 Hz,
+0 ECC errors, 0 bad parity) and then on the board: the diagnostic monitor's
+`hdmipkt` counter went from +4883 per 100 ms window to +4787, a ratio of
+0.9803 against the predicted 48000/48960 = 0.9804.
+
+### 9. The mixer's output was combinational and sampled asynchronously - FIXED
+
+`volume_data_l/r` were an `always @(*)`, and `hdmi_tx` latches them at the
+audio sample instant - an instant with no relation to the PPU clock the
+mixer runs on.  So the encoder could take the value while the adders were
+still settling and put a carry-chain intermediate on the wire as a sample.
+
+It was **consistent rather than intermittent**, which is what made it look
+like a dead path rather than noise: the old divider took a sample every
+1024 pixel clocks and `ppuclk_p` is `clkram/16`, and 1024 = 64 x 16, so the
+sample instant sat at one fixed phase of the PPU clock forever.  Land that
+phase in the settling window and every sample is wrong, every time.
+
+Registering the output on `posedge ppuclk_p` makes the sample a settled
+value by construction, at 320 ns of latency and sixteen flip-flops.
+
+**The diagnostic monitor could not see this**, and that is the part worth
+remembering.  Its probes sample `volume_data_l` on `posedge ppuclk_p` too,
+so they reported a clean waveform while the encoder was being fed spikes.
+Third time in this repository that an instrument shared the design's
+assumption and both were wrong together, after the SDRAM model and the
+audio subframe layout.  When the board and the probe disagree, suspect the
+probe earlier than I did - it took three build cycles.
+
+### 10. The DC blocker is out of the signal path - DECIDED, NOT FIXED
+
+The offset it was written for is real: measured on the board, one AY chip's
+music sits on **+3000 of DC** with the blocker bypassed, and a large enough
+one mutes the sink - the beeper at 16384 does it at full volume, at 8192 it
+does not.  But every DC-blocked form of the signal is silent on the
+operator's television and the raw unipolar sum is not.  The table is in
+`.claude/docs/platform.md`; the short version is that bipolar is silent,
+DC-blocked-plus-offset is silent at the same AC amplitude that plays from
+the raw path, and no mechanism for that is known.
+
+So the raw sum is the design, `S2` selects the blocker for anyone who wants
+to try it on another display, and the beeper stays at 8192.  This is a
+decision made on measurement with the cause not understood, which is worth
+flagging as such rather than filing as fixed.
+
+Working as a result: **AY at 33/66/100, beeper at 66/100.**  Not working:
+the beeper at 33% is -24 dBFS and inaudible, and the beeper's mean still
+steps with the program material.
 
 ## Open questions
 
@@ -491,6 +561,15 @@ two are the first things to try.
 - **Why does the PPU end up in a trap loop in simulation?**  See above.
   Find the first divergence, not the symptom; an SD card model is probably
   the prerequisite for going any further.
+- **Why will this television not play a bipolar sample stream?**  Defect 10.
+  The wire carries correct two's complement - the testbench decodes 4664
+  negative samples back exactly as sent - and the sink ignores it, while
+  playing the same AC content unipolar.  Untested on any other display,
+  which is the obvious next move and needs no code.
+- **Why does the player hang with `Зависание при приеме а.в.п`?**  It is a
+  CPU-PPU channel fault and there are no probes on the channel yet.  Cheap
+  to add now the monitor exists: the counters would go beside the ones in
+  `top.v` and the words into `dbg_probes`.
 - **Why is `sdram1.v` in the build?**  `sdram2` is what `top.v`
   instantiates; `sdram1` is compiled and appears to be unreferenced from
   the top-level hierarchy.

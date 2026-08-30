@@ -216,6 +216,56 @@ under `tools/`.
 `CMakeLists.txt` and `proj.conf` are the SDK's build description;
 `flash_prog_cfg.ini` and `misterynano_fw_bl616_cfg.ini` are the flasher's.
 
+## Flashing the FPGA, and two things that will waste an evening
+
+```sh
+make flash-fpga            # SRAM, volatile - gone on the next power cycle
+make flash-fpga-flash      # the SPI flash, survives
+```
+
+**`-f -r` writes the flash and does not reliably reconfigure the FPGA.**
+The `-r` is in the Makefile and openFPGALoader reports success, but the
+chip goes on running whatever configuration it already had.  So a write is
+two steps: flash it, then **power-cycle the board** - and a run tested
+without that second step is testing the previous bitstream.  This cost a
+full test run in Aug 2026 before it was noticed.
+
+**Opening the serial port poisons the next flash.**  Once anything has
+opened `/dev/ttyUSB*`, openFPGALoader fails with
+
+```
+unable to open ftdi device: -6 (ftdi_usb_reset failed)
+```
+
+because the FT2232 is emulated by the on-board BL616 and will not accept
+the USB reset that libftdi does when it opens a device.  `--skip-reset`
+does not help: that flag is about the FPGA, and the reset happens inside
+the device open, before it is consulted.  The only fix is to **replug the
+USB-C cable**, which re-enumerates the device.  So the working order is
+replug, flash, power-cycle, then read - and RTL changes are worth batching,
+because each one costs that cycle.
+
+Do **not** try to force it with a `USBDEVFS_RESET` ioctl on
+`/dev/bus/usb/*`.  That does not recover the device; it drops it off the
+bus entirely and needs a replug anyway.
+
+### Reading the board
+
+`tools/dbgmon.py` reads the diagnostic monitor - see
+`.claude/docs/fpga.md`.  It finds the port through
+`/dev/serial/by-id/*if01*` rather than a `ttyUSBn` name, because that
+number changes on every re-enumeration.
+
+```sh
+tools/dbgmon.py            # changed lines only
+tools/dbgmon.py --all      # every line, ten a second
+tools/dbgmon.py --raw      # undecoded, for when the word list moves
+tools/dbgmon.py -t 300 > run.log
+```
+
+The user needs `plugdev` for the FTDI; that is a udev rule, not `dialout`,
+and it is the same rule openFPGALoader relies on.
+
 ## Flashing the BL616
 
 ```sh

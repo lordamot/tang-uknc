@@ -14,7 +14,7 @@ openFPGALoader), CMake, Ninja, the T-Head RISC-V GCC, the Bouffalo SDK and
 **Gowin EDA Education**, which is the half that builds the bitstream.
 `tools/env.sh` puts the same set on `PATH` for use by hand.
 
-What *is* committed is the five scripts:
+What *is* committed is the six scripts:
 
 | script | what |
 |---|---|
@@ -23,12 +23,19 @@ What *is* committed is the five scripts:
 | `gowin_tcl.py` | emits the `gw_sh` build script, from the same `.gprj` |
 | `mif.py` | converts between flat binaries, `.mif` and `$readmemh` hex |
 | `sim_patch.py` | Icarus-compatible copies of the sources it cannot parse |
+| `dbgmon.py` | reads and names the board's diagnostic serial line |
 
 `srcs.py` is the one that matters most: the Gowin project file is the
 source of truth for what gets built, so lint and simulation read it rather
 than keeping a second file list that would drift out of date.  `--ip`
 lists just the vendor IP (which `sim/stubs/gowin_ip_sim.v` replaces),
 `--all` includes it, `--cst` gives the constraint files.
+
+`dbgmon.py` is the host end of `src/dbg/dbgmon.v`.  It finds the port by
+`/dev/serial/by-id/*if01*`, not by `ttyUSBn` - that number changes every
+time the board re-enumerates, and hardcoding it cost a test run.  It drops
+malformed lines rather than guessing at them, so a magic word mismatch
+shows up as missing lines and never as wrong numbers.
 
 `sim_patch.py` is **not** on any live path.  Verilator parses every source
 in this tree as it stands, so `make sim` reads `tang/src/` directly; the
