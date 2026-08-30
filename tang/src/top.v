@@ -951,7 +951,7 @@ vp065 dd2(
    .pin_ac_o     (                 )
 );
 //------------------------------------------------------------//
-// aberrant.v pans the two AYs the usual ABC way - l_channel is A + B/2 and
+// aberrant.v pans the three AYs the usual ABC way - l_channel is A + B/2 and
 // r_channel is C + B/2 - and until now only m_channel was used, so both
 // I2S slots got the same word and the panning was thrown away.  The two
 // channels are 11 bits against mono's 12, so they are shifted up one place
@@ -961,19 +961,32 @@ wire [15:0] ay_left  = {2'd0, left_channel,  3'd0};
 wire [15:0] ay_right = {2'd0, right_channel, 3'd0};
 wire [15:0] beeper   = {4'd0, sound, 11'd0};
 
+// Headroom.  With the third AY fitted left_channel reaches 3*255 for the
+// A channels plus (3*255)>>1 for the half of B, which is 1147; shifted up
+// three that is 9176, and the beeper adds 2048.  At 100% the volume shift
+// takes that to 44896, which does not fit in sixteen bits - and these
+// samples are read as signed two's complement, both by the HDMI encoder
+// and by an I2S DAC, so anything above 32767 comes back as a large
+// NEGATIVE number.  That wrap is a full-scale click, which is far worse
+// than the loudness it was meant to buy.  Clip instead, which is what the
+// analogue mixer on the real module does.
+wire [17:0] mix_l = {2'd0, ay_left } + {2'd0, beeper};
+wire [17:0] mix_r = {2'd0, ay_right} + {2'd0, beeper};
+
+function [15:0] sat;
+    input [17:0] v;
+    sat = (v[17:15] != 3'd0) ? 16'h7FFF : v[15:0];
+endfunction
+
 reg  [15:0] volume_data_l = 16'd0;
 reg  [15:0] volume_data_r = 16'd0;
 
 always @(*)
     case(system_volume)
-    'b00 : begin volume_data_l =  16'd0;
-                 volume_data_r =  16'd0;                  end
-    'b01 : begin volume_data_l =  (ay_left  + beeper);
-                 volume_data_r =  (ay_right + beeper);    end
-    'b10 : begin volume_data_l = ((ay_left  + beeper)<<1);
-                 volume_data_r = ((ay_right + beeper)<<1);end
-    'b11 : begin volume_data_l = ((ay_left  + beeper)<<2);
-                 volume_data_r = ((ay_right + beeper)<<2);end
+    'b00 : begin volume_data_l = 16'd0;         volume_data_r = 16'd0;        end
+    'b01 : begin volume_data_l = sat(mix_l);    volume_data_r = sat(mix_r);   end
+    'b10 : begin volume_data_l = sat(mix_l<<1); volume_data_r = sat(mix_r<<1);end
+    'b11 : begin volume_data_l = sat(mix_l<<2); volume_data_r = sat(mix_r<<2);end
     endcase
 // The HDMI side takes the same post-volume words, and resamples them at
 // clkpix/1024 - see src/hdmi/hdmi_tx.v.  It does not go through the FIFO
