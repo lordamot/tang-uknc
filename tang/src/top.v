@@ -982,6 +982,17 @@ always @(*)
 assign hdmi_audio_l = volume_data_l;
 assign hdmi_audio_r = volume_data_r;
 
+// A diagnostic 1 kHz tone lived here, gated on buts[1], while the HDMI
+// audio was being chased.  It did its job - it proved the sink played
+// nothing even from a known-good bipolar signal, which is what led to the
+// InfoFrame cadence - and it is gone again because the start screen
+// stopped appearing with an SD card present in the build that carried it.
+// Nothing in it touches the card; what it does is add logic and move the
+// placement, and the SD and floppy paths are clocked by data signals that
+// test003.sdc constrains at a made-up 1 us, so they are not honestly
+// analysed and placement churn can break them silently.  `git show` the
+// tone commit to put it back.
+
 //------------------------------------------------------------//
 // One FIFO per channel.  fifo_audio is 16 bits wide and regenerating it as
 // 32 would mean an IP Core Generator run on the operator's machine, so the

@@ -274,6 +274,8 @@ module tb_top;
                  rx_audio, rx_aud_nonzero, rx_aud_stereo, uut.hdmi_audio_ovf);
         $display("[tb] hdmi audio subframes: %0d with bad parity, %0d flagged not-PCM",
                  rx_aud_badpar, rx_aud_invalid);
+        $display("[tb] hdmi gcp: %0d Clear_AVMUTE, %0d Set_AVMUTE  (Set blanks the screen)",
+                 rx_gcp_clrmute, rx_gcp_setmute);
         $finish;
     end
 
@@ -580,7 +582,7 @@ module tb_top;
     integer rx_frames  = 0;
     integer rx_packets = 0, rx_ecc_errs = 0;
     integer rx_acr = 0, rx_avi = 0, rx_ai = 0, rx_audio = 0, rx_null = 0;
-    integer rx_gcp = 0;
+    integer rx_gcp = 0, rx_gcp_setmute = 0, rx_gcp_clrmute = 0;
     integer rx_aud_nonzero = 0, rx_aud_stereo = 0;
     integer rx_aud_badpar = 0, rx_aud_invalid = 0;
     integer rx_bad_gb = 0, rx_bad_terc4 = 0;
@@ -649,7 +651,14 @@ module tb_top;
             case (ptype)
                 8'h00: rx_null  = rx_null  + 1;
                 8'h01: rx_acr   = rx_acr   + 1;
-                8'h03: rx_gcp   = rx_gcp   + 1;
+                8'h03: begin
+                           // SB0 bit 0 is Set_AVMUTE, bit 4 Clear_AVMUTE.
+                           // Getting these the wrong way round blanks the
+                           // display, so the tb counts them apart.
+                           rx_gcp = rx_gcp + 1;
+                           if(pk_sub[0][0]) rx_gcp_setmute = rx_gcp_setmute + 1;
+                           if(pk_sub[0][4]) rx_gcp_clrmute = rx_gcp_clrmute + 1;
+                       end
                 8'h02: begin
                            // IEC 60958 subframes, 28 bits each: 24 sample
                            // bits then V, U, C, P.  Decoded here the way a

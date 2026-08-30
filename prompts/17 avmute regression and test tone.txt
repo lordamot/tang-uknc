@@ -1,0 +1,95 @@
+now it worse. white noise is in place but video shows only clean black screen now and monitor says "recommended resolution is 1920x1080". its also seems that keyboard is not working at all - so no way to check if beeper doing something
+
+****
+
+That was mine, introduced in the previous build, and the board named it.
+
+In the General Control Packet, SB0 bit 0 is Set_AVMUTE and bit 4 is
+Clear_AVMUTE - not the other way round.  I wrote SB0 = 8'h01 intending
+"clear" and instead told the sink to mute audio and video, eight thousand
+times a second.  A black screen with the monitor falling back to
+advertising its preferred mode is exactly what AVMUTE is defined to do,
+and the keyboard was never broken - there was simply nothing on screen to
+show it working.
+
+It is 8'h10 now.  The testbench decodes the two mute bits apart and prints
+them, so this cannot regress quietly again:
+
+  [tb] hdmi gcp: 320 Clear_AVMUTE, 0 Set_AVMUTE  (Set blanks the screen)
+
+Worth being blunt about the process failure rather than just the bug: I
+asserted the bit positions from memory, in a packet whose entire purpose
+is to control muting, and the testbench counted GCPs without looking
+inside them.  It happily confirmed a packet that blanked the display.
+
+It did produce one real datum.  The noise continued while the sink was
+AV-muted, and AVMUTE mutes the sink's audio - so that independently
+confirms the white noise is not coming from our HDMI audio stream, by a
+second route after the Mute test.
+
+lets flash
+
+****
+
+Flashed and verified by read-back, 907418 bytes matching bin/tang.fs.
+
+check results. picture is back. keyboard working. beeper now doing nothing - white noise not cancelled at all when key press, and i disabled mute and set volume 100 before check. when player program starts playing - white noise replaced by complete silence.
+
+****
+
+Taken together with the Mute test the observations say something the spec
+does not explain:
+
+  samples == 0  (idle, or OSD Mute)  ->  white noise
+  samples != 0  (player running)     ->  silence
+
+That is backwards, and it also explains why the beeper fix appears to do
+nothing.  Under the new code a key press makes sound a real square wave,
+so the samples spend half of every cycle at zero; if zero is what produces
+the noise, a working beeper sounds like chopped noise rather than a tone.
+The fix may well be correct and simply inaudible through this sink.
+
+So rather than reason further about the encoder, bisect the chain with a
+known signal.  buts[1] on pin 87 is read by nothing else, so holding it
+now replaces the machine's mix on the HDMI audio with a 1 kHz square wave
+at +/-8192 - a quarter of full scale, and deliberately BIPOLAR where the
+machine's own audio is unipolar 0..32672 with a large DC component, so the
+tone tests that difference too.  The I2S path is left alone.
+
+Verified in simulation before flashing: sub0 reads 82000008200000, which
+unpacks as sample 0x200000 in both subframes - +8192 placed MSB-aligned in
+24 bits - with V clear and P even, and 1984 of 2003 samples carrying
+sound.
+
+white noise when button not pressed, silence when button pressed
+
+****
+
+So a bipolar, spec-correct, quarter-scale 1 kHz square produces silence,
+and digital zero produces white noise.  Held for ten to fifteen seconds it
+stays silent, so it is not the re-lock muting that televisions do when the
+audio stream changes.
+
+That kills the DC-offset hypothesis and moves the problem firmly to the
+sink.  What is established:
+
+- The sink decodes our data island packets correctly.  The AVMUTE mistake
+  proves it - a General Control Packet got through and was acted upon, so
+  TERC4, the guard bands, packet framing and the BCH ECC all work on real
+  hardware, not just in the model.
+- The audio sample packets are well formed: 0 ecc errors, correct IEC
+  60958 subframe layout, even parity, V clear, nothing flagged non-PCM,
+  and the payload verified against an independent decoder.
+- The samples are provably zero when the OSD says Mute, and the noise is
+  unchanged and does not scale with volume.
+
+The leading explanation left is that the video timing is not a CEA mode.
+sdram2.v makes 1280x600 at 50.7 Hz, so the AVI InfoFrame honestly carries
+VIC 0, and a television that treats a non-CEA timing as a PC source may
+never enable its HDMI audio path at all.  The monitor volunteering
+"recommended resolution is 1920x1080" is a hint it is not entirely happy
+with the mode either.
+
+Two cheap tests come before any more building: a second sink, which costs
+no flash cycle at all, and the television's own HDMI audio format setting,
+since one set to Bitstream or Auto can emit noise for PCM it misreads.

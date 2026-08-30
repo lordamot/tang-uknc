@@ -216,7 +216,7 @@ wire [23:0] as_header = {{3'b000, (aud_frame == 8'd0), 4'b0000},
 // the checksum folds away at synthesis.
 //------------------------------------------------------------------------
 localparam [23:0] AVI_HDR = {8'h0D, 8'h02, 8'h82};   // length 13, ver 2
-wire [7:0] avi_pb1 = 8'h00;   // RGB, no active-format info, no bar data
+wire [7:0] avi_pb1 = 8'h10;   // RGB, no bar data, A0 set so R below counts
 wire [7:0] avi_pb2 = 8'h08;   // no colorimetry/aspect, AFAR = same as picture
 wire [7:0] avi_pb3 = 8'h00;   // default quantisation, no scaling
 wire [7:0] avi_pb4 = 8'h00;   // VIC 0: this mode is not a CEA one
@@ -245,12 +245,20 @@ wire [223:0] AI_SUB = {56'd0, 56'd0,
 // General Control Packet.  HDMI 1.4b 5.3.6 says it SHALL go out at least
 // once per two video fields; this design sent none at all, which left the
 // sink with no statement of the colour depth and no Clear_AVMUTE it could
-// ever have acted on.  SB0 bit 0 is Clear_AVMUTE and bit 4 Set_AVMUTE -
-// never both in one packet.  SB1 is {PP[3:0], CD[3:0]}: colour depth 0 is
-// "not indicated", which is what a 24-bit source sends, and the packing
-// phase is 0 with it.  SB2's top bit is Default_Phase, also 0.
+// ever have acted on.
+//
+// SB0 carries the mute flags and THE ORDER IS NOT THE OBVIOUS ONE:
+// **bit 0 is Set_AVMUTE and bit 4 is Clear_AVMUTE**, never both in one
+// packet.  Sending 8'h01 here on the guess that bit 0 meant "clear" muted
+// the sink instead - a black screen with the monitor falling back to
+// advertising its preferred mode, which is what AVMUTE is defined to do.
+// It is 8'h10.
+//
+// SB1 is {PP[3:0], CD[3:0]}: colour depth 0 is "not indicated", which is
+// what a 24-bit source sends, and the packing phase is 0 with it.  SB2
+// bit 2 is Default_Phase, also 0.
 localparam [23:0] GCP_HDR = {8'd0, 8'd0, 8'd3};
-localparam [55:0] GCP_SUB = {40'd0, 8'h00, 8'h01};
+localparam [55:0] GCP_SUB = {40'd0, 8'h00, 8'h10};
 
 localparam [23:0] ACR_HDR = {8'd0, 8'd0, 8'd1};
 localparam [55:0] ACR_SUB = {ACR_N[7:0], ACR_N[15:8], {4'd0, ACR_N[19:16]},
@@ -271,28 +279,50 @@ wire pick = (di_cnt == DI_DATA - 1) || (di_cnt == DI_DATA + 31) ||
             (di_cnt == DI_DATA + 63) || (di_cnt == DI_DATA + 95);
 wire pick_first = (di_cnt == DI_DATA - 1);
 
-reg  [1:0] info_sel = 2'd0;
+// Which line of the frame this is.  The standing packets are placed by
+// line number rather than round-robined every line, because one line in
+// four put each InfoFrame on the wire 7800 times a second.  Real sources
+// send them once per frame, the spec asks only for once per two fields,
+// and a sink that re-arms its audio path whenever an Audio InfoFrame
+// arrives would never get started at that rate.  Two televisions play no
+// audio at all from this design while both display the picture and both
+// act on control packets, which is the shape of exactly that.
+reg  [9:0] line_cnt = 10'd0;
+reg        vs_out_d = 1'b0;
+
+always @(posedge I_rgb_clk) begin
+    vs_out_d <= vs_out;
+    if (vs_out && !vs_out_d)      line_cnt <= 10'd0;          // frame start
+    else if (!hs_out && hs_out_d) line_cnt <= line_cnt + 10'd1;
+end
+
+// AVI, audio InfoFrame and GCP once a frame - 50.7 Hz, twice the minimum.
+// ACR every 32 lines is 979 Hz, the rate a real source uses.  Every other
+// line the first slot carries audio like the rest, so there are now four
+// audio slots a line instead of three.
+wire want_avi = (line_cnt == 10'd1);
+wire want_ai  = (line_cnt == 10'd2);
+wire want_gcp = (line_cnt == 10'd3);
+wire want_acr = (line_cnt[4:0] == 5'd16);
+wire want_std = want_avi || want_ai || want_gcp || want_acr;
+
 reg [23:0] hdr_r    = 24'd0;
 reg [223:0] sub_r   = 224'd0;
 
 always @(posedge I_rgb_clk) begin
     if (!I_rst_n) begin
-        info_sel  <= 2'd0;
         aud_rd    <= 3'd0;
         aud_frame <= 8'd0;
         hdr_r     <= 24'd0;
         sub_r     <= 224'd0;
     end else if (di_room && pick) begin
-        if (pick_first) begin
-            case (info_sel)
-            2'd0: begin hdr_r <= ACR_HDR;
-                        sub_r <= {ACR_SUB, ACR_SUB, ACR_SUB, ACR_SUB}; end
-            2'd1: begin hdr_r <= AVI_HDR; sub_r <= AVI_SUB; end
-            2'd2: begin hdr_r <= AI_HDR;  sub_r <= AI_SUB;  end
-            default: begin hdr_r <= GCP_HDR;
-                           sub_r <= {56'd0, 56'd0, 56'd0, GCP_SUB}; end
-            endcase
-            info_sel <= info_sel + 2'd1;   // two bits, wraps 0..3
+        if (pick_first && want_std) begin
+            if (want_avi) begin hdr_r <= AVI_HDR; sub_r <= AVI_SUB; end
+            else if (want_ai)  begin hdr_r <= AI_HDR;  sub_r <= AI_SUB;  end
+            else if (want_gcp) begin hdr_r <= GCP_HDR;
+                                     sub_r <= {56'd0, 56'd0, 56'd0, GCP_SUB}; end
+            else               begin hdr_r <= ACR_HDR;
+                                     sub_r <= {ACR_SUB, ACR_SUB, ACR_SUB, ACR_SUB}; end
         end else if (aud_avail) begin
             hdr_r     <= as_header;
             sub_r     <= {56'd0, 56'd0, 56'd0, as_sub0};
