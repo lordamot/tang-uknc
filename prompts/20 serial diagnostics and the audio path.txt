@@ -1,0 +1,348 @@
+try find and open our last session
+
+****
+
+Sessions live in ~/.claude/projects/-var-www-own-tang-uknc/.  The one before
+this is ea8e0d0c-5a71-4109-867e-5533179a09ef.jsonl, 10:38 to 17:11 UTC, 1423
+lines.  Resume it with claude --resume ea8e0d0c-5a71-4109-867e-5533179a09ef.
+
+The whole of it was sound.  HDMI audio was white noise, fixed by correcting
+the IEC 60958 subframe layout; the dock stopped the machine booting; the
+beeper came back; then the AY.  Last commit 006d54d, sound fix attempt 4.
+
+The final report in it was: beeper clean only at 100%, player starts but
+silent, game fine at 33%, heavily overloaded at 66%, dead at 100%.  The
+diagnosis reached was DC offset - every AY channel is unipolar 0..255 and
+the beeper is 0 or 4096, so the sum carries a steady offset that the volume
+control was scaling, and a television amplifier distorts on that and mutes
+at full.
+
+Uncommitted in the tree: a one-pole DC blocker in tang/src/top.v, 15.2 Hz
+corner, tau measured 10.3 ms against 10.46 ms theory; +AUDIOTEST changed
+from a constant to a square wave, because a constant is DC and the blocker
+correctly kills it; bin/tang.fs and tang/impl/pnr/ rebuilt with it.
+
+Two loose ends: the flash result is unknown, the transcript ends mid-flight
+on make bitstream && make flash-fpga-flash; and prompts/ is one exchange
+behind.
+
+****
+
+I reflashed it and tested. Results are not good. Now there is no vol level at which beeper can work fine. There is no beeper or AY music in game also - beeper version starts trying play something and silences. One more affect I noted - when not mute so beeper hangs - keyboard input for uknc become working unstable. So generally seems we are at correct place for problem solve so lets refine it further. About researches one more thing - we have hardware connected, we have serial console there - why not use it to debug real device so diagnose problems this way?
+
+****
+
+Yes to the serial console, and it is better than expected: /dev/ttyUSB1 is
+interface B of the FT2232 the on-board BL616 presents, and this shell can
+open it directly.  So the flashing, the reading and the reasoning all happen
+here with no relaying.  Listened for 3 s first: the line is silent, so
+vp065's port - the UKNC's own C2 line at 19200 - is unused and free to take.
+
+Built tang/src/dbg/dbgmon.v, added to the .gprj.  It prints N 16-bit words
+as hex, space separated, CR LF, once a window, and knows nothing about what
+they mean; the counters live in top.v next to the signals they watch.  The
+window tick is a toggling LEVEL, not a pulse, because the accumulators are
+on the 3.13 MHz PPU clock and a 20 ns pulse from the 50 MHz domain would be
+missed nine times in ten.  tools/dbgmon.py reads and names the fields.
+
+Probed: last write to 0177716 and the count, edges of the beeper line, range
+of the nine summed AY channels, range of the sample leaving the mixer, AY
+writes with the last address and data, PPU bus cycles, PPU bus timeouts,
+keycode changes, volume, blocker state, HDMI overflow.  The bus events are
+taken off the PPU bus rather than out of the modules, so neither xm2-01 nor
+aberrant had to change to be watched - and the counters come off the ACK,
+which is the thing a silent peripheral fails at first.
+
+Two traps found while wiring it.  sys_rst_n is active HIGH despite the name:
+it is high for the first 335 ms and low afterwards, and every module here
+takes it as if (reset).  Feeding it to dbgmon as an active-low reset killed
+the monitor 335 ms after power-on.  Same trap sets the button sense - the
+buttons read 0 released, since pressing S1 has to be what forces a reset.
+
+Also: the DC blocker introduced a clock-domain crossing that was not there
+before.  PnR now emits "Can't calculate clocks' relationship between
+dd1/clk8kHz and clk_3_12", new in that build, because dc_acc samples sound -
+an 8 kHz domain signal - on the PPU clock with no synchroniser.
+
+I also broke the USB link: issued a USBDEVFS_RESET to force openFPGALoader
+past a failed ftdi_usb_reset, and the device dropped off the bus entirely.
+That needed a replug.
+
+****
+
+all done
+
+****
+
+Empty capture, and the reason was on the USB bus, not in the design: the
+board re-enumerated (device 011 to 016), so it was power-cycled, which wipes
+an SRAM configuration and reloads the old bitstream from flash.  Using the
+volatile load for a session with resets in it was the wrong call.
+
+Rebuilt writing to flash instead, and added the probe that was next on the
+list: hdmidrop, a free-running count of HDMI audio samples the encoder threw
+away.  The existing sticky OVF bit can only say "at least once, ever", which
+cannot tell a single drop at reset release from a steady loss every frame.
+
+****
+
+i replugged it
+
+****
+
+The flash write landed but openFPGALoader -f only writes flash - it does not
+reconfigure the running FPGA, and the Makefile's target passed no -r.  So
+the chip kept running what the earlier replug had loaded, which was the old
+bitstream, and your whole test run went into a monitor that was not there.
+
+****
+
+it is replugged
+
+****
+
+Board came up on the diagnostic bitstream and I still could not read it, for
+two reasons, both mine.
+
+The port had moved: interface B came back as /dev/ttyUSB2 and the reader had
+ttyUSB1 hardcoded.  It now resolves /dev/serial/by-id/*if01*, which does not
+shift when the board re-enumerates.
+
+And a real bug in the RTL.  The board was transmitting "db01" and nothing
+else, ten times a second.  LASTP was declared four bits wide; raising NPROBE
+from 16 to 17 for the drop counter truncated NPROBE[3:0] to 1, so LASTP
+became 0 and the printer emitted word 0 and jumped straight to end of line.
+Five bits now, good to 32 words.  There was a unit test for exactly this and
+I did not re-run it after changing the parameter, which is the only reason
+it reached the board.
+
+Also added -r to flash-fpga-flash, and the watcher now prints two live
+decoded lines as proof of life before starting a capture.
+
+****
+
+replugged
+
+****
+
+Alive.  hdmipkt climbs 4883 per 100 ms window - 48.8 kHz of audio sample
+packets on the wire, continuously, matching the design's 48.96 kHz.  So the
+encoder emits audio properly even at idle.
+
+****
+
+all done
+
+****
+
+360 seconds captured.  From t=80.0 to t=103.7, the 23 seconds of game music:
+177 to 473 writes to 0177716 per window, sndedg identical to the write count
+in every window, giving a square wave of 885 to 2365 Hz - actual musical
+tones - with the mixer output swinging symmetrically, outmax +663 outmin
+-662.  So the PPU asks for sound, our logic turns every write into an edge,
+and a clean bipolar square wave reaches the sample.  Across the whole 360 s
+pputo=0, not one bus cycle unanswered, and hdmidrop never moved off 4.
+
+Peak sample during the music: 1024 of 32767, 3.1% of full scale, -30 dBFS.
+That is exactly right for the design, which is the problem: beeper is
+sound << 12 = 4096 and the volume divides from there.  The mixer budgets its
+headroom for three AY chips at full blast, which never happens.
+
+And the volume test never happened.  Of 259 windows where the beeper line
+moved, 257 were at 33% and 2 at mute; the setting passed through 66% and
+100% in 0.8 s total and settled on mute for the last three minutes.
+
+One thing about the machine: in 234 seconds the tone-select bits
+R177716[12:8] were never set, not once.  Every value was 100000, 100020,
+100200, 100220 - bits 15, 4 and 7.  The software makes its music by toggling
+bit 7 in a timing loop, so the 8 kHz / 1 kHz / 500 / 250 / 60 Hz divider
+chain in xm2-01.v is dead code as far as real software is concerned.
+
+****
+
+not all cycle done - only keypresses and beeper for 20 seconds. because player can not start anymore - with same error
+
+****
+
+Asked what was heard, since that is the one datum no probe can obtain.
+
+****
+
+beeper music in game was started but go silence in less than a second. AY music test is not done because player can not start again with that error. I can start that game and switch it to play AY music - it uses only first AY chip but at least something
+
+****
+
+That changes the picture: the mixer produced a clean square wave for the
+full 23 seconds and under a second of it was heard, so the fault is
+downstream of the mixer and the gain work is beside the point.
+
+Read the encoder's packet scheduler.  The General Control Packet carries
+SB0 = 0x10 every frame.  HDMI 1.4b table 5-8 puts Clear_AVMUTE at bit 0 and
+Set_AVMUTE at bit 4, so that is a Set_AVMUTE fifty times a second.  The
+comment in the file claims the reverse, concluded from one experiment where
+0x01 blacked the screen - but that build carried other changes, so the test
+could not isolate it.  Rather than pick a side, sent 0x00: a mute flag is a
+one-shot, not a state to restate every frame, asserting nothing is legal and
+is what a steady-state source does, and the GCP still states the colour
+depth.  Correct under either reading of the bit order.
+
+Added hdmipkt, audio sample packets actually placed on the wire, so "the
+encoder stopped" and "the sink muted" stop being indistinguishable.  And
+raised the beeper to sound << 14, 16384 instead of 4096, -6 dBFS at full
+volume instead of -18.
+
+****
+
+replugged
+
+****
+
+hdmipkt +4883 per window at idle.  Capture started.
+
+****
+
+done even more tests. so, results: vol 100% - keypresses beeper exist but not each keypress so silenced from time to time. game beeper silenced after same 0.5s or so. AY - fully silenced at 100% no matter on S2 pressed or not. BUT! plays fine with S2 pressed if vol set 33% or 66%
+
+****
+
+The encoder is exonerated by measurement.  Across 1475 windows and 127
+seconds including all the music: audio packets per 100 ms min 4882, median
+4883, max 4883, zero windows below 4000, hdmidrop static.
+
+The AY works, first time seen: aywr=90 per window - 900 register writes a
+second, a player updating at 50 Hz - ayadr=177360, aymax=765 which is
+exactly 3 x 255, three channels at full amplitude, reaching the output at
++/-3300.
+
+The S2 press settled the DC question completely.  Blocker on: outmax +3300,
+outmin -3300.  S2 held, bypassed: outmax +6120, outmin 0.  The bypassed
+signal never goes below zero - a constant +3000 of DC under the music, which
+is precisely what the blocker was written to remove.  So the DC diagnosis
+was right and the blocker does what it should.
+
+Asked what was actually heard, for the beeper music and the AY separately.
+
+****
+
+so. keypress beeper at the start screen - still works from time to time but seems broken as silenced from time to time. game - plays sounds only while S2 pressed. Beeper works with S2 pressed for 33, 66 and quickly hangs to silence if 100 vol set; AY plays with S2 pressed for 33, 66, 100
+
+****
+
+Transients get through, sustained sound does not.  That is a receiver's
+audio buffer drifting.
+
+f_TMDS is 50.14 MHz and AUDIO_DIV was 1024, giving Fs = 48.96 kHz, 2% fast
+and not a rate that exists in the standard, while the channel status block
+declared a flat 48 kHz.  A sink clocks its converter from one and its buffer
+from the other; 960 samples a second of disagreement empties or floods a few
+hundred samples of FIFO in about half a second, and a stream that never
+pauses never gives it a reason to re-arm - which is why clicks survive and
+continuous AY music never plays a note.
+
+No integer divider of 50.14 MHz lands on a standard rate - 48 kHz would need
+1044.58 - so the sample instant now comes from a phase accumulator: add N
+every pixel clock, take a sample and subtract when it reaches 128*CTS.  With
+N = 6144 and CTS = 50140 the ratio is exactly N/(128*CTS) by construction,
+so the rate the sink regenerates and the rate we deliver agree to the bit,
+whatever f_TMDS really is - which matters, because f_TMDS is a PLL output
+nobody has measured.  Verified in simulation: 9746 samples over 6363 lines,
+203.0 ms, is 48,010 Hz, with 0 ECC errors and 0 bad parity.
+
+Confirmed on hardware afterwards: hdmipkt went from +4883 to +4787 per
+window, a ratio of 0.9803 against the expected 48000/48960 = 0.9804.
+
+Then, with that build tested and the symptom persisting, the second fault.
+volume_data_l/r were combinational, always @(*), and hdmi_tx latches them at
+the audio sample instant - an instant with no relation to the PPU clock the
+mixer runs on.  So the encoder could take the value while the adders were
+still settling and send a carry-chain intermediate as a sample.  Nothing in
+the diagnostics could see it: the probes sample the same wires on posedge
+ppuclk_p, when everything has settled.  It was consistent rather than
+intermittent because the old divider took a sample every 1024 pixel clocks
+and ppuclk_p is clkram/16, and 1024 = 64*16 - so the sample instant sat at
+ONE fixed phase of the PPU clock forever.  Registering it makes the sample a
+settled value by construction, at 320 ns of latency.
+
+****
+
+33vol - beeper does not play with s2 released and pressed, ay plays if s2 pressed; 66vol - beeper plays and ay plays only if s2 pressed; 100vol - beeper plays and ay plays only if s2 pressed
+
+****
+
+Registering fixed the 100% bypass case, which had never worked.  Everything
+with the blocker in the path was still silent.
+
+Checked sign handling in the testbench first, where it is free.  Added a
+value check: the wire carried min -422 max 1334 with 4664 negative samples,
+against the mixer's min -422 max 1336 - the two-LSB gap is the checker
+sampling the mixer at 3.13 MHz and the wire at 48 kHz.  So negatives are
+packed correctly as two's complement and decoded back exactly as sent.
+
+The old S2 test compared dc_out against dc_x, and those differ in two ways
+at once - the blocker filters, and its output goes negative.  Rebuilt it so
+S2 released was the blocker plus a constant offset added AFTER the volume
+divide: same AC content, same amplitude, no sample negative.  Added after
+the divide on purpose - added before, the offset would scale with volume,
+which is the fault the blocker was written to cure.  Also halved the beeper
+to 8192, since 16384 was the one unipolar case that failed.
+
+****
+
+s2 pressed - no sound beeper and AY at all vol levels; s2 released - no beeper music in 33 vol, and all the rest plays
+
+****
+
+The offset changed nothing, so sign was not the variable either.  The board
+emitted, at 33% with S2 released: outmax 8780 outmin 7620, a clean 8192 +/-
+580 entirely positive, and it was silent - while 510 +/- 510 from the raw
+path played.  Comparable AC, both unipolar, one audible and one not.
+
+So the next build stopped guessing and did two things.  The default became
+the raw unipolar sum, the state that works, so the machine was usable with
+no button held.  And S2 held subtracted a constant 512 after the volume
+divide: same signal, same filtering, same amplitude, the only difference
+being that samples dip below zero.  That isolates the sign on its own, which
+no test until then had done.
+
+Result: S2 held, no sound at all, both sources, every volume.  S2 released,
+everything plays except beeper music at 33%.
+
+So the working envelope, measured rather than argued:
+
+  raw sum 0..N, quiescent exactly 0          plays
+  raw sum minus a constant 512               silent, dips below zero
+  DC blocked, bipolar, quiescent 0           silent, dips below zero
+  DC blocked plus 8192, never negative       silent, permanent offset
+
+Every silent case either goes negative or holds a permanent non-zero level.
+The one that plays is the raw unipolar sum returning to exact zero - which
+is what the real MC0511 puts out, with the television's own coupling
+capacitor doing the DC blocking we were trying to do digitally.
+
+Final state: the raw sum is the design, the DC blocker stays in the source
+on S2 in case it suits another sink, and the beeper stays at 8192 because
+16384 trips the mute at full volume.  Working: AY at 33/66/100, beeper at
+66/100, no button held.  Remaining: beeper at 33% is inaudible at -24 dBFS,
+and the beeper's mean still steps with the program material, which is the
+defect the blocker existed to fix and is now lived with deliberately.
+
+Two real bugs fixed on the way - the sample rate, 48.96 to 48.00 kHz with
+the channel status no longer lying, and the unregistered mixer output.  Both
+were found by the board and neither could have been found by reading the
+source.  Nine things were cleared by measurement rather than argument: no
+PPU bus timeout in any window of any capture, no dropped or stuttered HDMI
+audio packet, the AY written and acknowledging and producing three channels
+at full amplitude, and negative samples packed correctly per spec.
+
+The lesson to keep: the probes sample the mixer synchronously and the
+encoder samples it asynchronously, so the instrument agreed with the design
+and both were wrong together.  That is the third time in this repository -
+after the SDRAM model and the subframe layout - and it took three rounds of
+the board disagreeing with the probe before I suspected the probe.
+
+Operational notes: openFPGALoader -f -r writes the flash but does not
+reliably reconfigure the FPGA, so a power cycle is genuinely required after
+a write; and opening the serial port poisons the next flash, because the
+BL616-emulated FT2232 will not accept the reset openFPGALoader does on open,
+and --skip-reset does not help since the reset is inside the device open.
+So replugs between cycles are unavoidable and RTL changes should be batched.

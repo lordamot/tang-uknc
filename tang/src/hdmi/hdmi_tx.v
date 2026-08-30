@@ -46,18 +46,41 @@ module hdmi_tx (
     output      [9:0] O_tmds_ch0   ,   // to hdmi_serdes
     output      [9:0] O_tmds_ch1   ,
     output      [9:0] O_tmds_ch2   ,
-    output reg        O_audio_ovf      // a sample was dropped - see below
+    output reg        O_audio_ovf  ,   // a sample was dropped - see below
+    output reg [15:0] O_audio_dropc,   // how many, free-running, never cleared
+    output reg [15:0] O_audio_pktc     // audio sample packets actually sent
 );
 
 //------------------------------------------------------------------------
-// Audio clock regeneration constants.  Fs = f_TMDS * N / (128 * CTS), and
-// with Fs = f_TMDS/1024 that is CTS = 8*N for any N.  N = 6144 is the
-// standard value for the 48 kHz family.
+// Audio clock regeneration.  Fs = f_TMDS * N / (128 * CTS).
+//
+// This used to take a sample every 1024 pixel clocks, which at 50.14 MHz
+// is 48.96 kHz - 2% fast and not a rate that exists in the standard,
+// while the channel status block below declared a flat 48 kHz.  A sink
+// believes the channel status for its converter and the ACR for its
+// clock, and 960 samples a second of disagreement drains or floods a
+// receiver FIFO of a few hundred samples in about half a second.  Which
+// is what the board did: a keypress transient got through, music played
+// for half a second and stopped, and a continuous stream that never
+// paused never gave the sink a reason to re-arm and so was silent
+// throughout.
+//
+// There is no integer divider of 50.14 MHz that lands on a standard rate
+// - 48 kHz would need 1044.58 - so the sample instant comes from a phase
+// accumulator instead: add N every pixel clock, take a sample and
+// subtract when it reaches 128*CTS.  That makes the ratio EXACTLY
+// N/(128*CTS) by construction, so the rate the sink regenerates and the
+// rate we deliver agree to the bit, whatever f_TMDS really is - which
+// matters, because f_TMDS here is a PLL output nobody has measured.
+//
+// N = 6144 is the standard value for the 48 kHz family; CTS = 50140 puts
+// Fs at 50.14e6 * 6144 / (128 * 50140) = 48.000 kHz, and the 48 kHz in
+// the channel status is now true.
 //------------------------------------------------------------------------
 localparam [19:0] ACR_N   = 20'd6144 ;
-localparam [19:0] ACR_CTS = 20'd49152;
+localparam [19:0] ACR_CTS = 20'd50140;
 
-localparam integer AUDIO_DIV = 1024;   // pixel clocks per audio frame
+localparam integer AUD_PERIOD = 128 * 50140;   // 6417920 accumulator wrap
 
 //------------------------------------------------------------------------
 // Delay line.  DLY has to be at least 10 for the video preamble and guard
@@ -135,7 +158,7 @@ wire di_period   = di_room && (di_cnt >= DI_DATA ) && (di_cnt < DI_END  );
 // domain, which is a bit of the same counter that makes this pixel clock,
 // so there is no crossing here and no synchroniser is needed.
 //------------------------------------------------------------------------
-reg [9:0]  aud_div = 10'd0;
+reg [23:0] aud_acc = 24'd0;
 reg [31:0] aud_fifo [0:3];
 reg [2:0]  aud_wr = 3'd0, aud_rd = 3'd0;
 
@@ -146,18 +169,29 @@ wire       aud_full  = (aud_cnt == 3'd4);
 initial begin
     aud_fifo[0] = 0; aud_fifo[1] = 0; aud_fifo[2] = 0; aud_fifo[3] = 0;
     O_audio_ovf = 1'b0;
+    O_audio_dropc = 16'd0;
+    O_audio_pktc = 16'd0;
 end
 
-wire aud_take = (aud_div == AUDIO_DIV - 1);
+wire [24:0] aud_nxt  = {1'b0, aud_acc} + ACR_N;
+wire        aud_take = (aud_nxt >= AUD_PERIOD);
 
 always @(posedge I_rgb_clk) begin
     if (!I_rst_n) begin
-        aud_div <= 10'd0;
+        aud_acc <= 24'd0;
         aud_wr  <= 3'd0;
     end else begin
-        aud_div <= aud_take ? 10'd0 : aud_div + 10'd1;
+        aud_acc <= aud_take ? (aud_nxt - AUD_PERIOD) : aud_nxt[23:0];
         if (aud_take) begin
-            if (aud_full) O_audio_ovf <= 1'b1;   // sticky; the tb reads it
+            // O_audio_ovf is sticky and says only that it happened once,
+            // which cannot tell a single drop at reset release from a
+            // steady loss every frame.  The counter is what distinguishes
+            // them: it free-runs, and the difference between two readings
+            // a window apart is the rate.
+            if (aud_full) begin
+                O_audio_ovf   <= 1'b1;               // sticky; the tb reads it
+                O_audio_dropc <= O_audio_dropc + 16'd1;
+            end
             else begin
                 aud_fifo[aud_wr[1:0]] <= {I_audio_r, I_audio_l};
                 aud_wr <= aud_wr + 3'd1;
@@ -247,18 +281,26 @@ wire [223:0] AI_SUB = {56'd0, 56'd0,
 // sink with no statement of the colour depth and no Clear_AVMUTE it could
 // ever have acted on.
 //
-// SB0 carries the mute flags and THE ORDER IS NOT THE OBVIOUS ONE:
-// **bit 0 is Set_AVMUTE and bit 4 is Clear_AVMUTE**, never both in one
-// packet.  Sending 8'h01 here on the guess that bit 0 meant "clear" muted
-// the sink instead - a black screen with the monitor falling back to
-// advertising its preferred mode, which is what AVMUTE is defined to do.
-// It is 8'h10.
+// SB0 carries the mute flags, and we now assert NEITHER of them - 8'h00.
+//
+// The bit order was worked out here from one experiment: 8'h01 blacked the
+// screen, so bit 0 was called Set_AVMUTE and bit 4 Clear_AVMUTE, and the
+// packet has carried 8'h10 since.  HDMI 1.4b table 5-8 says the reverse -
+// bit 0 Clear, bit 4 Set - which makes 8'h10 a Set_AVMUTE sent to the sink
+// fifty times a second.  The experiment cannot settle it: that build
+// carried other changes and the black screen had more than one candidate.
+//
+// A mute flag is a one-shot, not a state to be restated every frame, and
+// asserting nothing is legal and is what a steady-state source does.  So
+// whichever reading is right, this packet no longer mutes anything, and
+// the GCP still does the job it was added for - stating the colour depth.
+// A sink powers up unmuted, so no Clear is needed to start.
 //
 // SB1 is {PP[3:0], CD[3:0]}: colour depth 0 is "not indicated", which is
 // what a 24-bit source sends, and the packing phase is 0 with it.  SB2
 // bit 2 is Default_Phase, also 0.
 localparam [23:0] GCP_HDR = {8'd0, 8'd0, 8'd3};
-localparam [55:0] GCP_SUB = {40'd0, 8'h00, 8'h10};
+localparam [55:0] GCP_SUB = {40'd0, 8'h00, 8'h00};
 
 localparam [23:0] ACR_HDR = {8'd0, 8'd0, 8'd1};
 localparam [55:0] ACR_SUB = {ACR_N[7:0], ACR_N[15:8], {4'd0, ACR_N[19:16]},
@@ -324,6 +366,7 @@ always @(posedge I_rgb_clk) begin
             else               begin hdr_r <= ACR_HDR;
                                      sub_r <= {ACR_SUB, ACR_SUB, ACR_SUB, ACR_SUB}; end
         end else if (aud_avail) begin
+            O_audio_pktc <= O_audio_pktc + 16'd1;
             hdr_r     <= as_header;
             sub_r     <= {56'd0, 56'd0, 56'd0, as_sub0};
             aud_rd    <= aud_rd + 3'd1;

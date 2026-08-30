@@ -37,6 +37,7 @@
         <File path="/var/www/own/tang-uknc/tang/src/sdram1.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/sdram2.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/top.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/dbg/dbgmon.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/uart/uart_rx.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/uart/uart_rx_path.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/uart/uart_tx.v" type="verilog"/>

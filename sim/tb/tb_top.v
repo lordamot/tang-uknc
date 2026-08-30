@@ -55,6 +55,7 @@ module tb_top;
     // whole MisterNano side in power-on reset for ever.  Low is the
     // running state, whatever the silkscreen says about the buttons.
     reg  [1:0] buts = 2'b00;
+    reg        audiotest = 1'b0;   // +AUDIOTEST, driven by the block below
     wire [5:0] leds;
 
     wire uart_tx;
@@ -252,10 +253,15 @@ module tb_top;
         // sum aberrant.v produces and both slots should carry it equally.
         // "with L != R" is therefore expected to be zero now; it was a
         // stereo check back when the AYs were panned ABC.
+        //
+        // It has to be a SQUARE WAVE, not a constant.  top.v now blocks DC
+        // the way the real module's coupling capacitor does, so a held
+        // value decays to nothing within about 50 ms - correctly, since a
+        // steady level is not a sound.  Forcing one would test silence.
         if ($test$plusargs("AUDIOTEST")) begin
-            force uut.mono_channel = 12'o1234;
-            $display("[tb] %0t audio test: m_channel=%o forced onto the mix",
-                     $time, 12'o1234);
+            audiotest = 1'b1;
+            $display("[tb] %0t audio test: m_channel squared between %o and %o",
+                     $time, 12'o1234, 12'o0400);
         end
 
         #(run_ms * 1000000);
@@ -276,6 +282,17 @@ module tb_top;
                  rx_audio, rx_null);
         $display("[tb] hdmi audio: %0d samples, %0d with sound, %0d with L != R, overflow=%b",
                  rx_audio, rx_aud_nonzero, rx_aud_stereo, uut.hdmi_audio_ovf);
+        $display("[tb] hdmi audio values: wire min %0d max %0d (%0d negative) | mixer min %0d max %0d",
+                 rx_aud_min, rx_aud_max, rx_aud_neg, dut_aud_min, dut_aud_max);
+        // The wire is sampled at 48 kHz and the mixer at 3.13 MHz, so the
+        // wire legitimately misses the odd peak - a few LSB of difference
+        // is the sampling, not a fault.  What would be a fault is the sign
+        // not surviving, or the magnitude being wrong by a wide margin.
+        if (dut_aud_min < 0 && rx_aud_neg == 0)
+            $display("[tb] *** AUDIO SIGN LOST: the mixer went negative and the wire never did");
+        else if (rx_aud_max * 20 < dut_aud_max * 19 ||
+                 rx_aud_min * 20 > dut_aud_min * 19)
+            $display("[tb] *** AUDIO VALUE MISMATCH: wire range is well short of the mixer's");
         $display("[tb] hdmi audio subframes: %0d with bad parity, %0d flagged not-PCM",
                  rx_aud_badpar, rx_aud_invalid);
         $display("[tb] hdmi gcp: %0d Clear_AVMUTE, %0d Set_AVMUTE  (Set blanks the screen)",
@@ -350,6 +367,15 @@ module tb_top;
                      $time, uut.mcu_dout, uut.mcu_start,
                      uut.sctl1.state, uut.sctl1.command, uut.sctl1.id);
 
+    // The mixer's own range, sampled in its own clock domain, to compare
+    // against what came off the wire above.
+    always @(posedge uut.ppuclk_p) begin
+        if ($signed(uut.volume_data_l) > dut_aud_max)
+            dut_aud_max = $signed(uut.volume_data_l);
+        if ($signed(uut.volume_data_l) < dut_aud_min)
+            dut_aud_min = $signed(uut.volume_data_l);
+    end
+
     // +AUDIODBG: the audio path, from the volume mix through the two
     // FIFOs, sampled every 50 us once the machine is configured.
     initial if ($test$plusargs("AUDIODBG")) begin
@@ -374,6 +400,13 @@ module tb_top;
                 i2s_nonzero = i2s_nonzero + 1;
             if (i2s_l !== i2s_sr) i2s_stereo = i2s_stereo + 1;
         end
+    end
+
+    // The +AUDIOTEST square wave: 1 kHz onto the AY mix, which survives
+    // the DC blocker where a constant would not.
+    always begin
+        #500000; if (audiotest) force uut.mono_channel = 12'o1234;
+        #500000; if (audiotest) force uut.mono_channel = 12'o0400;
     end
 
     //--------------------------------------------------------------------
@@ -598,6 +631,14 @@ module tb_top;
     integer rx_frames  = 0;
     integer rx_packets = 0, rx_ecc_errs = 0;
     integer rx_acr = 0, rx_avi = 0, rx_ai = 0, rx_audio = 0, rx_null = 0;
+
+    // What the wire carries, in the same units the mixer produced, so the
+    // two can be compared.  Counting samples and checking parity says the
+    // packet is well formed; it does not say the NUMBER survived, and a
+    // sign that does not survive is a sound that does not play.
+    integer rx_aud_min = 0, rx_aud_max = 0, rx_aud_neg = 0;
+    reg signed [15:0] sl16;
+    integer dut_aud_min = 0, dut_aud_max = 0;
     integer rx_gcp = 0, rx_gcp_setmute = 0, rx_gcp_clrmute = 0;
     integer rx_aud_nonzero = 0, rx_aud_stereo = 0;
     integer rx_aud_badpar = 0, rx_aud_invalid = 0;
@@ -696,6 +737,13 @@ module tb_top;
                                rx_aud_badpar = rx_aud_badpar + 1;
                            if (sf_l[24] !== 1'b0 || sf_r[24] !== 1'b0)
                                rx_aud_invalid = rx_aud_invalid + 1;
+                           // The 16 bits the design packs into the top of
+                           // the 24-bit field, read back as a sink reads
+                           // them: two's complement.
+                           sl16 = $signed(l[23:8]);
+                           if (sl16 > rx_aud_max) rx_aud_max = sl16;
+                           if (sl16 < rx_aud_min) rx_aud_min = sl16;
+                           if (sl16 < 0)          rx_aud_neg = rx_aud_neg + 1;
                        end
                 8'h82: rx_avi   = rx_avi   + 1;
                 8'h84: rx_ai    = rx_ai    + 1;

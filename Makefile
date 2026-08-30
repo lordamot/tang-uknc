@@ -225,7 +225,7 @@ flash-fpga:
 	$(OFL) -b tangnano20k bin/tang.fs
 
 flash-fpga-flash:
-	$(OFL) -b tangnano20k -f bin/tang.fs
+	$(OFL) -b tangnano20k -f -r bin/tang.fs
 
 # The BL616 flashes over its own UART bootloader.  Two things it needs
 # that this Makefile cannot supply: the board has to be in boot mode
