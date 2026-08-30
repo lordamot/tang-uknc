@@ -52,10 +52,37 @@ Three sizes worth knowing before you type one of these:
   deliberately.
 - **`make frames` needs `RUN_MS` of 45 or more.**  A frame is written on
   the vsync that ends it, and the first one ends at 39 ms.  They are
-  binary P6, 1280x600, 2.3 MB each; `PPM_MAX ?= 4` caps how many.
+  binary P6, 1280x600, 2.3 MB each; `PPM_MAX ?= 4` caps how many.  Since
+  August 2026 those frames are **decoded back out of the TMDS stream**
+  rather than tapped off the RGB signals, so a frame that comes out right
+  is a statement about `src/hdmi/` and not just about `sdram2.v`.
 - **`make sim` runs at about 10 ms of simulated time per wall second**, so
   the default 300 ms is half a minute and a second of machine time is two
   and a half minutes.
+
+### What the simulation covers, and what it stubs
+
+`tools/srcs.py` reads the file list out of the `.gprj` and splits it in
+two: everything under an `ip/` directory is vendor IP and is replaced
+wholesale by `sim/stubs/gowin_ip_sim.v`, and so is anything named in that
+script's `STUBBED` list.  There is one entry in it,
+`src/hdmi/hdmi_serdes.v`, and the reason is the same as for the IP - it is
+nothing but `rPLL`, `OSER10` and `ELVDS_OBUF`, which Verilator has no
+models for.
+
+Everything above it is simulated for real, and the testbench decodes what
+comes out: `sim/tb/tb_top.v` follows the preambles and guard bands the way
+a sink does, rebuilds the picture from the video periods and pulls the
+data island packets apart, checking their ECC.  The end-of-run line reads
+
+```
+[tb] hdmi: 177876 packets, 0 ecc errors  (acr 14823, avi 14823, ai 14823, audio 69482, null 63925)
+[tb] hdmi audio: 69482 samples, 0 with sound, 0 with L != R, overflow=0
+```
+
+and `+HDMIDBG` prints every packet.  "0 with sound" is normal on a run
+where nothing plays; `+AUDIOTEST` forces two constants onto the AY mix and
+turns it into a real answer.
 
 ## The FPGA half
 
@@ -135,7 +162,9 @@ protocol.  It boots.  See `.claude/docs/progress.md` for what it showed.
 There is **no `synth` target**.  Yosys is in the toolchain and was worth a
 try as a second front end, but it segfaults on these sources at
 `read_verilog`; it could never have produced a bitstream anyway, since
-`dvi_tx`, `fifo_audio` and `uartfifo` are encrypted.
+`dvi_tx`, `fifo_audio` and `uartfifo` are encrypted.  (`dvi_tx` is no
+longer instantiated - `src/hdmi/` replaced it - but it is still in the
+project as the fallback.)
 
 None of this replaces a board.  Lint and simulation catch missing modules,
 port and width mismatches, inferred latches and gross protocol errors -

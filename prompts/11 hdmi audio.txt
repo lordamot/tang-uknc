@@ -1,0 +1,81 @@
+lets add hdmi audio also
+
+****
+
+Done, and it was bigger than it sounds, because Gowin's DVI_TX IP is what
+its name says.
+
+The finding first.  DVI_TX is DVI: video only, no data islands, so no
+audio.  Its own documentation offers exactly two options - external clock
+and OBUF type - and there is no Gowin HDMI IP with audio anywhere in the
+Education install.  So HDMI audio was not a setting to turn on; it meant
+replacing the IP.
+
+src/hdmi/, four files:
+
+  hdmi_tx.v       timing, packet scheduling, audio capture, packet picker
+  tmds_channel.v  8b/10b, control words, TERC4, both guard bands
+  hdmi_packet.v   the 32-clock packet and its BCH ECC
+  hdmi_serdes.v   rPLL x5, four OSER10, four ELVDS_OBUF
+
+The two coding files are transcriptions of HDMI 1.4a sections 5.4 and
+5.2.3.4, derived from Sameer Puri's hdl-util/hdmi (MIT) and rewritten in
+Verilog-2001.  The rest is ours: upstream's top level generates its own
+video timing, and sdram2.v already does that here.
+
+Three decisions worth knowing.  The scheduler takes its timing entirely
+from de/hs/vs and knows no mode - a data island has to be announced eight
+clocks ahead and a video period ten, which means knowing the future, so
+the video goes through a 12-deep delay line and the scheduler reads the
+undelayed signals.  The island sits in the back porch, four packets a
+line, on blanking lines as well as active ones, which is what carries the
+audio across the frame boundary.  And the HDMI audio is resampled at
+clkpix/1024 rather than taken off the I2S path: at 50.143 MHz that is
+48.968 kHz, and the exactness is the point - HDMI wants Fs = f_TMDS x N /
+(128 x CTS), so CTS = 8N holds whatever the clock really is, and N = 6144
+with CTS = 49152 are constants rather than a measurement.  The sink
+regenerates the audio clock from them and plays at the true rate.
+
+The I2S output is untouched.
+
+Checked, and more than usual, because a bad encoder shows up as no picture
+rather than no sound:
+
+- make lint clean.
+- The testbench now decodes the TMDS stream the way a sink does - follow
+  the preambles and guard bands into a video or data island period and
+  decode what is inside.  So make frames no longer taps the RGB signals;
+  it rebuilds the picture out of the encoder's own output, and it still
+  reads СТАРТОВЫЙ ТЕСТ / - ошибка ОЗУ ЦП at 1280x600.  That is a round
+  trip through the 8b/10b, not an inspection of its input.
+- Over a 1.4 s run: 177876 packets, 0 ECC errors, 69482 audio samples, no
+  overflow.  With +AUDIOTEST forcing two different constants onto the AY
+  mix, 2976 of 2995 audio samples came back non-zero with L != R - the
+  same answer the I2S monitor gives, from the other output.
+- make bitstream places it.  0 setup violations; Logic 39% -> 41%,
+  Register 23%, BSRAM 48% unchanged, PLL still 2 of 2 - the second one
+  used to be inside dvi_tx doing the same job.  The tool derives the
+  serial clock on its own as a generated 250.715 MHz off the pixel clock,
+  which is what makes the OSER10s analysable at all, and nothing under
+  src/hdmi/ appears in the ten worst timing paths.  The tightest path is
+  still sdram2's horz counter through the OSD into I_rgb_*, at 1.82 ns;
+  it got slower because the die got fuller, not because anything was
+  added to it.
+
+Not checked: no display has ever been asked to play this.  Two things I
+left out deliberately and either could be why a real sink stays silent -
+there is no General Control Packet, and the AVI InfoFrame carries VIC 0
+because 1280x600 at 50.7 Hz is not a CEA mode.  Those are the first two
+things to try.  The ECC check in the testbench uses the same polynomial
+constant as the encoder, so it proves the plumbing - bit order, timing,
+reset - and not the polynomial.
+
+ip/dvi_tx is still in the .gprj and instantiated nowhere, deliberately: it
+is the fallback, and putting it back is one instance in top.v.
+
+Also changed: tools/srcs.py grew a STUBBED list so hdmi_serdes.v joins the
+vendor IP in being replaced by a simulation model - it is nothing but
+Gowin primitives, and a 250 MHz serial clock would have cost the whole run
+to watch bits the encoder has already chosen.  Docs updated in CLAUDE.md,
+.claude/docs/{fpga,video,build,progress}.md, tang/src/test003.sdc's header
+and both howto files.

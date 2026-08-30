@@ -3,7 +3,7 @@
 Last bitstream: **30 August 2026** (`bin/tang.fs`, 7262008 bytes), built
 here with `make bitstream` and carrying every RTL change in this file - the
 four VM2 core fixes, the AY chipselect, the stereo audio, the first timing
-constraints, and the return to stock MiSTeryNano wiring.  Last MCU
+constraints, the return to stock MiSTeryNano wiring, and HDMI audio.  Last MCU
 firmware: **30 August 2026** (`bin/bl616.bin`, 430512 bytes), also built
 here, carrying the settings-file fix; the wiring change needed nothing
 from it.  **Neither has been on hardware, and the pinout changed - a board
@@ -29,11 +29,12 @@ installed on the host and none of it committed.  On top of that:
   tarball, needs no licence for the GW2AR-18C, and only needed its own
   stale bundled libraries moved out of the way.  See
   `.claude/docs/build.md` for the three things that had to be settled.
-  Current resource use: Logic 39%, Register 23%, BSRAM 48% (up from 46%,
-  which is the second audio FIFO for stereo), PLL 2/2.  Timing: 13858
-  paths, 8631 endpoints, **0 setup violations**, 529 hold - the hold
-  number being the artefact `tang/src/test003.sdc` describes at length,
-  not a finding.
+  Current resource use: Logic 41%, Register 23%, BSRAM 48%, PLL 2/2,
+  IOLOGIC 7%.  BSRAM went from 46% with the second audio FIFO for stereo;
+  logic from 39% with the HDMI encoder; the IOLOGIC row is the four
+  OSER10s and is new.  Timing: 14651 paths, 8997 endpoints, **0 setup
+  violations**, 583 hold - the hold number being the artefact
+  `tang/src/test003.sdc` describes at length, not a finding.
 
 - **`make lint` is clean.**  Verilator reads every source in
   `tang/test003.gprj` - `tools/srcs.py` gets the list out of the project
@@ -413,6 +414,63 @@ comes out of.  The internal-BL616 half has never been exercised at all.
 
 `src/test003_lcd.cst` still carries the old five-pin MCU block.  It is
 disabled in the `.gprj` and now names ports that do not exist.
+
+### 7. HDMI carried no sound - ADDED
+
+Gowin's `DVI_TX` IP is what its name says.  It is DVI: video only, no data
+islands, and therefore no audio - its own documentation offers exactly two
+options, external clock and OBUF type.  There is no Gowin HDMI IP with
+audio in the Education install either.  So the machine's sound only ever
+left by the I²S pins, and getting it down the HDMI cable meant replacing
+the IP.
+
+`src/hdmi/` is that replacement, four files:
+
+```
+hdmi_tx.v       timing, packet scheduling, audio capture, packet picker
+tmds_channel.v  8b/10b, control words, TERC4, both guard bands
+hdmi_packet.v   the 32-clock packet and its BCH ECC
+hdmi_serdes.v   rPLL x5, four OSER10, four ELVDS_OBUF
+```
+
+The two coding files are transcriptions of HDMI 1.4a 5.4 and 5.2.3.4,
+derived from hdl-util/hdmi (MIT) and rewritten in Verilog-2001; the rest
+is ours, because upstream's top level makes its own video timing and
+`sdram2.v` already does that here.  Four packet types go out - audio clock
+regeneration, audio sample, audio InfoFrame, AVI InfoFrame - four packets
+a line, in the back porch, on blanking lines as well as active ones.
+`.claude/docs/fpga.md` has the design; the three things to know are the
+delay line, the back-porch assumption and the `clkpix/1024` resampling.
+
+The I²S output is untouched and still runs at its own rate.
+
+What was checked, and it is more than usual, because a bad encoder would
+show up as no picture at all:
+
+- `make lint` clean.
+- **The testbench now decodes the TMDS stream**, the way a sink does:
+  follow the preambles and guard bands into a video or data island period
+  and decode what is inside.  So `make frames` no longer taps the RGB
+  signals - it reconstructs the picture out of the encoder's own output,
+  and it still reads `СТАРТОВЫЙ ТЕСТ / - ошибка ОЗУ ЦП` at 1280x600.  That
+  is a round trip through the 8b/10b, not an inspection of its input.
+- Over a 1.4 s run: 177876 packets, **0 ECC errors**, 69482 audio samples,
+  no overflow of the sample buffer.  With `+AUDIOTEST` forcing two
+  different constants onto the AY mix, 2976 of 2995 audio samples came
+  back non-zero with L != R - the same answer the I²S monitor gives, from
+  the other output.
+- `make bitstream` places it: 0 setup violations, and the tool derives the
+  serial clock on its own as a generated 250.715 MHz off the pixel clock,
+  which is what makes the OSER10s analysable at all.  Nothing under
+  `src/hdmi/` appears in the ten worst timing paths.
+
+What was **not** checked, and it is the important part: no display has
+ever been asked to play this.  The ECC check in the testbench uses the
+same polynomial constant as the encoder, so it proves the plumbing - bit
+order, timing, reset - and not the polynomial.  No General Control Packet
+is sent, and the AVI InfoFrame carries VIC 0 because 1280x600 at 50.7 Hz
+is not a CEA mode; either could be why a real sink stays silent.  Those
+two are the first things to try.
 
 ## Open questions
 

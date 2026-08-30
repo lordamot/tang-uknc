@@ -21,6 +21,10 @@
         <File path="src/ip/sys_rpll/sys_rpll.v" type="file.verilog" enable="1"/>
         <File path="src/ip/uartfifo/uartfifo.v" type="file.verilog" enable="1"/>
         <File path="src/load.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/hdmi_packet.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/hdmi_serdes.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/hdmi_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/tmds_channel.v" type="file.verilog" enable="1"/>
         <File path="src/mister/hid.v" type="file.verilog" enable="1"/>
         <File path="src/mister/mcu_spi.v" type="file.verilog" enable="1"/>
         <File path="src/mister/osd_u8g2.v" type="file.verilog" enable="1"/>

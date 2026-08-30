@@ -31,12 +31,13 @@ you are making.
 The machine, as implemented: two К1801ВМ2 cores from one Verilog
 (`wm2wb/`), the peripheral one owning every device and booting the central
 one; a planar display generated inside the SDRAM controller and sent out
-over HDMI; the keyboard translated from USB on the MCU; four 800 KB
-floppies served out of `.dsk` files on the SD card; two AY-3-8910s and a
-one-bit beeper.
+over HDMI by an encoder of this repository's own (`src/hdmi/`, which
+carries the sound as well); the keyboard translated from USB on the MCU;
+four 800 KB floppies served out of `.dsk` files on the SD card; two
+AY-3-8910s and a one-bit beeper, out over both HDMI and I²S.
 
 ```
-Logic 39%   Register 22%   BSRAM 46%   PLL 2/2 (100%)     [Jan 2025 PnR]
+Logic 41%   Register 23%   BSRAM 48%   PLL 2/2 (100%)     [Aug 2026 PnR]
 ```
 
 Key documentation: `.claude/docs/platform.md` (the machine: both address
@@ -156,7 +157,36 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   BL616, not the FPGA.
 - **The vendor IP under `tang/src/ip/` is generated.**  `.ipc` in, `.v`
   out.  Never hand-edit the `.v`; say which `.ipc` field to change and let
-  the operator regenerate it in the IP Core Generator.
+  the operator regenerate it in the IP Core Generator.  The one exception
+  is `src/hdmi/hdmi_serdes.v`, which instantiates `rPLL`, `OSER10` and
+  `ELVDS_OBUF` by hand - those are device primitives, not generator
+  output, and that file is ordinary RTL.
+- **HDMI video no longer goes through Gowin's `dvi_tx`.**  That IP is DVI:
+  video only, no data islands, so no sound - its own documentation lists
+  two options and audio is not one of them.  `src/hdmi/` replaced it in
+  Aug 2026 with a real HDMI encoder that sends audio.  `ip/dvi_tx` is
+  still in the `.gprj` and instantiated nowhere, deliberately: it is the
+  fallback, and putting it back is one instance in `top.v`.  Three traps
+  in the new code: the scheduler reads `de`/`hs`/`vs` through a 12-deep
+  delay line because a preamble has to be announced before the thing it
+  announces; the data island lives in the **back porch** and assumes
+  active-high hsync with ~176 clocks behind it, which is what `sdram2.v`
+  makes; and the HDMI audio is resampled at `clkpix/1024`, NOT taken off
+  the I²S path, because that exact ratio is what makes N and CTS
+  constants.  No General Control Packet is sent - try that first if a
+  display shows the picture and stays silent.
+- **An audio subpacket is two IEC 60958 subframes, and V/U/C/P belong
+  inside each one.**  `as_sub0` in `hdmi_tx.v` had the two samples
+  adjacent with all eight flag bits collected above them, so the sink read
+  the right channel four bits high with the left channel's parity as its
+  sign bit - parity flips every sample, so the right channel was
+  full-scale white noise while the left one, which happens to sit at bits
+  23:0 either way, was correct.  Fixed Aug 2026.  `sim/tb/tb_top.v`
+  decoded with the same wrong layout and so reported "stereo, 0 ecc
+  errors" throughout; it now decodes the way a sink does and checks the
+  parity and validity bits, which is the only reason that check is worth
+  anything.  **A testbench that shares the encoder's assumption tests
+  nothing** - the same lesson as the SDRAM model further down.
 - **The README's pinout IS the stock MiSTeryNano wiring, as of Aug 2026.**
   It was not before - Alexey had it on FPGA 71→io12, 72→io13, 73→io10,
   74→io11, 75→io14 - so anything written earlier says the opposite.  Now

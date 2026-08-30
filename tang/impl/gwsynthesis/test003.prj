@@ -20,6 +20,10 @@
         <File path="/var/www/own/tang-uknc/tang/src/ip/sys_rpll/sys_rpll.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfifo.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/load.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/hdmi/hdmi_packet.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/hdmi/hdmi_serdes.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/hdmi/tmds_channel.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/mister/hid.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/mister/mcu_spi.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/mister/osd_u8g2.v" type="verilog"/>

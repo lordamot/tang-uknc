@@ -107,104 +107,34 @@ module sys_rpll (
 endmodule
 
 //------------------------------------------------------------------------
-// dvi_tx - ip/dvi_tx/dvi_tx.v (ENCRYPTED).
-// An output-only HDMI encoder; nothing in the design reads it back, so
-// the model is a sink.  It counts frames and, when +VIDEO_PPM is passed,
-// writes each frame to sim/out/frame_NNNN.ppm - which is the only way to
-// see the screen without a board.
+// hdmi_serdes - src/hdmi/hdmi_serdes.v (Gowin primitives).
+// The real module is four OSER10s, four ELVDS_OBUFs and an rPLL, none of
+// which Verilator has a model for.  It is also where the 250 MHz serial
+// clock lives, and running that for the length of a real boot would cost
+// a great deal to watch bits the encoder above it has already chosen.
+//
+// So the pads are tied off here and the checking happens one level up,
+// on the ten-bit TMDS words: sim/tb/tb_top.v decodes them back into
+// pixels and data island packets, which is a stronger statement about
+// hdmi_tx.v than watching a serialiser shift would have been.
+//
+// dvi_tx is gone from this file with the module it stubbed.  It is still
+// in the project - src/ip/dvi_tx - and still uninstantiated.
 //------------------------------------------------------------------------
-module dvi_tx (
-    input        I_rst_n,
-    input        I_rgb_clk,
-    input        I_rgb_vs,
-    input        I_rgb_hs,
-    input        I_rgb_de,
-    input  [7:0] I_rgb_r,
-    input  [7:0] I_rgb_g,
-    input  [7:0] I_rgb_b,
+module hdmi_serdes (
+    input        clk_pixel,
+    input  [9:0] tmds_ch0,
+    input  [9:0] tmds_ch1,
+    input  [9:0] tmds_ch2,
     output       O_tmds_clk_p,
     output       O_tmds_clk_n,
     output [2:0] O_tmds_data_p,
     output [2:0] O_tmds_data_n
 );
-    // Big enough for what sdram2.v actually generates - the active area
-    // measures 1280x600 - with room to spare.  A frame is stored one
-    // 24-bit word per pixel, so this is a few megabytes of simulator
-    // memory and nothing more.
-    parameter MAXW = 1440;
-    parameter MAXH = 800;
-
     assign O_tmds_clk_p  = 1'b0;
     assign O_tmds_clk_n  = 1'b1;
     assign O_tmds_data_p = 3'b000;
     assign O_tmds_data_n = 3'b111;
-
-`ifndef YOSYS
-    integer frames = 0;
-    integer x = 0, y = 0, w = 0;
-    integer fh, i, j, h;
-    integer written = 0, ppm_max;
-    reg [23:0] fb [0:MAXW*MAXH-1];
-    reg vs_d = 1'b0;
-    reg want_ppm = 0;
-    reg [255:0] name;
-
-    // A frame is written on the vsync that ENDS it, so the first one out
-    // is frame 1 - and that needs the run to reach the second vsync, a
-    // little over 39 ms at 51 Hz.  A shorter run produces no file and
-    // that is not a fault.  +PPM_MAX caps how many get written: these are
-    // 1024x800, so even as binary P6 they are 2.4 MB each.
-    integer ppm_from;
-    reg     ppm_armed = 1'b0;
-    initial begin
-        want_ppm = $test$plusargs("VIDEO_PPM");
-        if (!$value$plusargs("PPM_MAX=%d", ppm_max)) ppm_max = 4;
-        // +PPM_FROM=<ms> skips the frames before n ms.  The machine does
-        // not release the CPU until about 45 ms, so the interesting
-        // frames are never the first ones.  This has to be a delay and
-        // not a comparison against $time: ppm_from * 1000000000 overflows
-        // a 32-bit integer at three seconds and silently disables itself.
-        if (!$value$plusargs("PPM_FROM=%d", ppm_from)) ppm_from = 0;
-        if (ppm_from > 0) #(ppm_from * 1000000);
-        ppm_armed = 1'b1;
-    end
-
-    always @(posedge I_rgb_clk) begin
-        vs_d <= I_rgb_vs;
-        if (I_rgb_vs && !vs_d) begin           // start of a new frame
-            if (frames > 0 && want_ppm && written < ppm_max && ppm_armed) begin
-                written = written + 1;
-                h = (y > MAXH) ? MAXH : y;
-                $sformat(name, "sim/out/frame_%04d.ppm", frames);
-                fh = $fopen(name, "wb");
-                if (fh) begin
-                    // Binary P6, not ASCII P3: the same frame is eight
-                    // times smaller and writes in a second rather than a
-                    // minute.  Every viewer reads both.
-                    $fwrite(fh, "P6\n%0d %0d\n255\n", w, h);
-                    for (j = 0; j < h; j = j + 1)
-                        for (i = 0; i < w; i = i + 1)
-                            $fwrite(fh, "%c%c%c",
-                                    fb[j*MAXW+i][23:16],
-                                    fb[j*MAXW+i][15:8],
-                                    fb[j*MAXW+i][7:0]);
-                    $fclose(fh);
-                    $display("[dvi] %0t wrote %0s (%0dx%0d)", $time, name, w, h);
-                end
-            end
-            frames = frames + 1;
-            y = 0;
-            x = 0;
-        end else if (I_rgb_de) begin
-            if (x < MAXW && y < MAXH) fb[y*MAXW+x] = {I_rgb_r, I_rgb_g, I_rgb_b};
-            x = x + 1;
-        end else if (x != 0) begin             // end of an active line
-            if (x > w) w = x;                  // the real active width
-            x = 0;
-            y = y + 1;
-        end
-    end
-`endif
 endmodule
 
 //------------------------------------------------------------------------

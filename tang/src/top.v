@@ -320,19 +320,44 @@ always @(posedge clkpix)begin
         I_rgb_b  <= {b_out,2'd0};
     end
 
-dvi_tx hdmi1(
-    .I_rst_n      (         1'b1), //input I_rst_n
-    .I_rgb_clk    (       clkpix), //input I_rgb_clk
-    .I_rgb_vs     (     I_rgb_vs), //input I_rgb_vs
-    .I_rgb_hs     (     I_rgb_hs), //input I_rgb_hs
-    .I_rgb_de     (     I_rgb_de), //input I_rgb_de
-    .I_rgb_r      (     I_rgb_r ), //input [7:0] I_rgb_r
-    .I_rgb_g      (     I_rgb_g ), //input [7:0] I_rgb_g
-    .I_rgb_b      (     I_rgb_b ), //input [7:0] I_rgb_b
-    .O_tmds_clk_p ( O_tmds_clk_p), //output O_tmds_clk_p
-    .O_tmds_clk_n ( O_tmds_clk_n), //output O_tmds_clk_n
-    .O_tmds_data_p(O_tmds_data_p), //output [2:0] O_tmds_data_p
-    .O_tmds_data_n(O_tmds_data_n)  //output [2:0] O_tmds_data_n
+// Gowin's dvi_tx is DVI, so it has no data islands and can carry no
+// sound.  hdmi_tx is the same job with them, and hdmi_serdes is the part
+// that touches Gowin primitives.  src/ip/dvi_tx is still in the project
+// and uninstantiated; putting it back is this instance and nothing else.
+wire [9:0] tmds_ch0, tmds_ch1, tmds_ch2;
+wire       hdmi_audio_ovf;
+// The samples come from the volume stage further down; they are picked up
+// through these two wires so that block can stay where the author put it.
+wire [15:0] hdmi_audio_l;
+wire [15:0] hdmi_audio_r;
+
+hdmi_tx hdmi1(
+    .I_rst_n      (         1'b1),
+    .I_rgb_clk    (       clkpix),
+    .I_rgb_vs     (     I_rgb_vs),
+    .I_rgb_hs     (     I_rgb_hs),
+    .I_rgb_de     (     I_rgb_de),
+    .I_rgb_r      (     I_rgb_r ),
+    .I_rgb_g      (     I_rgb_g ),
+    .I_rgb_b      (     I_rgb_b ),
+  // the same words the I2S gets, sampled here at clkpix/1024
+    .I_audio_l    ( hdmi_audio_l),
+    .I_audio_r    ( hdmi_audio_r),
+    .O_tmds_ch0   (     tmds_ch0),
+    .O_tmds_ch1   (     tmds_ch1),
+    .O_tmds_ch2   (     tmds_ch2),
+    .O_audio_ovf  (hdmi_audio_ovf)
+);
+
+hdmi_serdes hdmi_ser(
+    .clk_pixel    (       clkpix),
+    .tmds_ch0     (     tmds_ch0),
+    .tmds_ch1     (     tmds_ch1),
+    .tmds_ch2     (     tmds_ch2),
+    .O_tmds_clk_p ( O_tmds_clk_p),
+    .O_tmds_clk_n ( O_tmds_clk_n),
+    .O_tmds_data_p(O_tmds_data_p),
+    .O_tmds_data_n(O_tmds_data_n)
 );
 //------------------------------------------------------------//
 //  Mister zone
@@ -971,6 +996,13 @@ always @(*)
     'b11 : begin volume_data_l = ((ay_left  + beeper)<<2);
                  volume_data_r = ((ay_right + beeper)<<2);end
     endcase
+// The HDMI side takes the same post-volume words, and resamples them at
+// clkpix/1024 - see src/hdmi/hdmi_tx.v.  It does not go through the FIFO
+// below: that one is clocked by the I2S bit rate and is a different rate
+// entirely.
+assign hdmi_audio_l = volume_data_l;
+assign hdmi_audio_r = volume_data_r;
+
 //------------------------------------------------------------//
 // One FIFO per channel.  fifo_audio is 16 bits wide and regenerating it as
 // 32 would mean an IP Core Generator run on the operator's machine, so the

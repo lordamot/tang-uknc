@@ -18,7 +18,7 @@ VSYNC  3   VBP 14   VACTV 600   VFP  1   VSTR 618
 **50.7 Hz**.  The comment block above it is a leftover modeline and does
 not describe what the code does - trust the defines and the counter.
 
-`visible` = `visible_x && visible_y` and goes to `dvi_tx` as data-enable.
+`visible` = `visible_x && visible_y` and goes to `hdmi_tx` as data-enable.
 `visiblez` = `visible_x && visible_z`, where `visible_z` is `vert > 19 &&
 vert < 594`, is what actually gates the pixel colour - so about twenty
 lines at the top and six at the bottom of the 600 are deliberately blanked.
@@ -58,7 +58,7 @@ override), then `cvt[3]`, then base:
 ```
 
 Three bits per channel out of `sdram2`; `top.v` widens them to eight for
-`dvi_tx` by appending two zeros to the six bits that come back from the
+`hdmi_tx` by appending two zeros to the six bits that come back from the
 OSD blender.
 
 ## Cursor
@@ -108,8 +108,27 @@ wait, which is exactly how the real machine's video steals cycles.
 
 ## The OSD
 
-`mister/osd_u8g2.v` sits between `sdram2`'s RGB output and `dvi_tx`.  It
+`mister/osd_u8g2.v` sits between `sdram2`'s RGB output and `hdmi_tx`.  It
 takes 8-bit R/G/B in and gives 6-bit out, overlaying the menu the BL616
 renders into it a byte at a time over SPI.  `system_video` from the OSD
 swaps red and green on the way in (`red_m`/`green_m` in `top.v`) - that is
 the "Video: RGB|BGR" menu entry.
+
+## What happens to the pixels after that
+
+`top.v` widens the six bits to eight, registers them on `clkpix` along
+with `hsync`, `vsync` and `visible`, and hands them to `hdmi_tx` - not to
+Gowin's `dvi_tx` any more.  The encoder is described in
+`.claude/docs/fpga.md`, and the part of it that matters here is that it
+takes the video timing entirely from those three signals and imposes
+nothing of its own, so this file is still the only place the display mode
+is decided.
+
+One thing it does need from the mode, and does not check: the data island
+goes in the **back porch**, which is where the blanking is in this design -
+`hsync` is active high and 176 clocks of blanking follow it before the
+active period. Moving the sync or shortening the back porch below about
+160 clocks would run the island into the video preamble. The encoder gives
+the video priority if that ever happens, so the picture survives and the
+sound stops rather than the other way round, but it is worth knowing the
+coupling is there.

@@ -425,10 +425,25 @@ the MCU sends its defaults, and the default for this core is 33%.
 
 The machine has two AY-3-8910s and a one-bit beeper.  The AYs are panned
 the usual ABC way - channel A left, C right, B in the middle - and the
-beeper sits in the centre.  Output is I²S, on **Tang Nano 20K pins 71
-(BCK), 72 (WS), 73 (DIN) and 74 (amplifier enable)** - they moved there in
-August 2026 when the MCU link took back the pins upstream uses.  See
-section 2.1.
+beeper sits in the centre.
+
+There are two outputs, and they carry the same thing:
+
+- **Over the HDMI cable**, since August 2026.  Nothing to wire and nothing
+  to set: if your display or receiver plays HDMI audio it should just come
+  out.  Two channels, 16-bit, at 48.97 kHz.
+- **I²S**, on **Tang Nano 20K pins 71 (BCK), 72 (WS), 73 (DIN) and 74
+  (amplifier enable)** - they moved there in August 2026 when the MCU link
+  took back the pins upstream uses.  See section 2.1.
+
+The Volume setting works on both.
+
+> **The HDMI audio has never been played on a real display.**  It is built
+> and it decodes correctly in simulation - the packets come out, their
+> error-correction checks, and the samples in them are the right ones -
+> but no television has been asked what it thinks.  If the picture is
+> there and the sound is not, that is the most likely thing in this
+> release to be wrong, and the I²S output is unaffected either way.
 
 ### 7.4 Video
 

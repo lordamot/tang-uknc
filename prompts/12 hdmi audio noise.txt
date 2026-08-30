@@ -1,0 +1,75 @@
+ok, we have several problems it seems. first of all - hdmi sound works but pure white noise instead of real uknc sound - check why so. plan is to have uknc tang output its sound from beeper and AY chips into hdmi stream mixed together
+
+****
+
+Found it, and it is one line.
+
+The audio sample subpacket in src/hdmi/hdmi_tx.v had the wrong bit
+layout.  A subpacket is 56 bits and carries two IEC 60958 subframes end
+to end, 28 bits each: 24 sample bits, then V, U, C and P.  The flags
+belong to the sample they follow.  What was there instead collected all
+eight flag bits above both samples:
+
+    {par_r, cs_r, 0, 0, par_l, cs_l, 0, 0, samp_r, samp_l}
+
+so a sink taking bits 23:0 as the left sample and bits 51:28 as the right
+one read this:
+
+  left   bits 23:0   = samp_l                    - correct, by luck
+  left   V,U,C,P     = samp_r[3:0] = 0,0,0,0     - parity always wrong,
+                                                   channel status always 0
+  right  bits 51:28  = {par_l, cs_l, 0, 0, samp_r[23:4]}
+
+The right channel therefore came out shifted four bits high with its two
+top bits taken from the left channel's parity and channel status bit.
+Parity flips with the data, once per sample, so the sign bit of the right
+channel toggled at random at the sample rate.  That is full-scale white
+noise, and it is why the mix sounded like noise rather than like the
+machine: the left channel was the real thing all along, the right one was
+noise on top of it.
+
+The fix is the interleaved order the standard asks for:
+
+    {par_r, cs_r, 0, 0, samp_r, par_l, cs_l, 0, 0, samp_l}
+
+The second half of the problem is why nothing caught it.  The HDMI
+decoder in sim/tb/tb_top.v took l from bits 23:0 and r from bits 47:24 -
+the encoder's own layout, not the standard's - so encoder and testbench
+agreed with each other and disagreed with every television.  It reported
+"2995 audio samples, 2976 with L != R, 0 ecc errors" while the hardware
+was emitting noise.  The testbench now decodes the two subframes the way
+a sink does, and additionally checks the parity bit and the validity bit,
+which is what makes the check mean anything.
+
+Measured after the change, 50 ms with the AY outputs forced to L=1234,
+R=765 octal at 33% volume:
+
+  hdmi: 7668 packets, 0 ecc errors (acr 639, avi 639, ai 639,
+        audio 2995, null 2756)
+  hdmi audio: 2995 samples, 2976 with sound, 2976 with L != R, overflow=0
+  hdmi audio subframes: 0 with bad parity, 0 flagged not-PCM
+
+and one subpacket dumped raw reads 80fa800814e000, which unpacks as left
+0x14E000 - that is 1234 octal shifted left three by the mixer and then
+eight into the 24-bit slot - and right 0x0FA800, from 765 octal by the
+same route.  Both P bits make their subframe even, both V bits clear.
+
+What is checked and what is not.  make lint is clean.  make sim carries
+the numbers above.  make bitstream builds.  None of that is a television:
+the claim is that the bits leaving the encoder are now the bits the
+standard describes, not that a particular sink plays them.
+
+The mixing you asked for was already in place and did not need changing.
+top.v sums the two AYs panned ABC - left is A + B/2, right is C + B/2,
+from aberrant.v - adds the one-bit beeper into both channels at bit 11,
+applies the menu volume, and hands the same post-volume words to both the
+I2S FIFOs and hdmi_tx.  The beeper and the AYs were already going into
+the HDMI stream together; only the packing was wrong.
+
+One thing left alone, worth knowing.  The samples are unipolar: silence
+is 0 and sound swings only positive, up to 32672 at 100% volume, which is
+sized so it just fits the positive half of a 16-bit word.  As PCM that is
+legal - digital zero is still silence - but it has a DC component and
+gives away 6 dB of range.  Centring it would mean changing the same words
+the I2S path uses, so it is not something to do without knowing what the
+DAC on the other end expects.

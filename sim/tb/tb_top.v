@@ -4,7 +4,7 @@
 //========================================================================
 // Plusargs:
 //   +VCD          dump sim/out/tb_top.vcd (large - a frame is ~1 Mcycle)
-//   +VIDEO_PPM    have the dvi_tx model write each frame as a .ppm
+//   +VIDEO_PPM    write each decoded frame as a .ppm
 //   +RUN_MS=<n>   how long to run, in simulated milliseconds (default 40)
 //   +NOFASTBOOT   do not shortcut the 0.34 s power-on reset counter
 //   +PPUTRACE     every acked PPU wishbone cycle - the I/O window
@@ -18,6 +18,7 @@
 //   +PPM_MAX=<n>  cap how many .ppm frames are written (default 4)
 //   +PPM_FROM=<n> skip the frames before n ms
 //   +NOMEMCHECK   turn off the read-after-write check on both SDRAM ports
+//   +HDMIDBG      print every data island packet the decoder sees
 //
 // Both processors fetch code over their SDRAM port and use the wishbone
 // only for I/O, so +PPUTRACE shows what the PPU touches and +RAMTRACE
@@ -265,7 +266,7 @@ module tb_top;
 
         #(run_ms * 1000000);
         $display("[tb] %0t done: %0d video frames, leds=%b",
-                 $time, uut.hdmi1.frames, leds);
+                 $time, rx_frames, leds);
         // Both processors fetch code over their SDRAM port, not the
         // wishbone - the wishbone is the I/O window only - so these two
         // counts, not the bus trace, are what says whether a core is
@@ -276,6 +277,13 @@ module tb_top;
                      mem_checks, mem_errs);
         $display("[tb] i2s: %0d frames, %0d with sound, %0d with L != R",
                  i2s_frames, i2s_nonzero, i2s_stereo);
+        $display("[tb] hdmi: %0d packets, %0d ecc errors  (acr %0d, avi %0d, ai %0d, audio %0d, null %0d)",
+                 rx_packets, rx_ecc_errs, rx_acr, rx_avi, rx_ai, rx_audio,
+                 rx_null);
+        $display("[tb] hdmi audio: %0d samples, %0d with sound, %0d with L != R, overflow=%b",
+                 rx_audio, rx_aud_nonzero, rx_aud_stereo, uut.hdmi_audio_ovf);
+        $display("[tb] hdmi audio subframes: %0d with bad parity, %0d flagged not-PCM",
+                 rx_aud_badpar, rx_aud_invalid);
         $finish;
     end
 
@@ -502,5 +510,295 @@ module tb_top;
                      uut.ppu_wbm_wre_o ? "wr" : "rd",
                      uut.ppu_wbm_wre_o ? uut.ppu_wbm_dat_o
                                       : uut.ppu_wbm_dat_i);
+
+    //--------------------------------------------------------------------
+    // The HDMI receiver.
+    //
+    // hdmi_serdes is stubbed, so what leaves the design in simulation is
+    // three ten-bit TMDS words a pixel clock.  This decodes them the way
+    // a sink does - follow the preambles and guard bands into a video or
+    // data island period, and decode what is inside - which is the only
+    // check available on hdmi_tx.v short of a television.
+    //
+    // It does two jobs: it rebuilds the picture, so `make frames` still
+    // works and now proves the encoder round-trips; and it pulls the data
+    // island packets apart, checks their ECC and counts them by type, so
+    // "the audio packets are going out" is a measurement.
+    //--------------------------------------------------------------------
+    wire        px_clk = uut.clkpix;
+    wire [9:0]  t0 = uut.tmds_ch0;
+    wire [9:0]  t1 = uut.tmds_ch1;
+    wire [9:0]  t2 = uut.tmds_ch2;
+
+    localparam [9:0] CTL00 = 10'b1101010100, CTL01 = 10'b0010101011,
+                     CTL10 = 10'b0101010100, CTL11 = 10'b1010101011;
+    localparam [9:0] VGB_02 = 10'b1011001100, VGB_1 = 10'b0100110011;
+
+    function is_ctl(input [9:0] w);
+        is_ctl = (w == CTL00) || (w == CTL01) || (w == CTL10) || (w == CTL11);
+    endfunction
+
+    function [1:0] ctl_of(input [9:0] w);
+        ctl_of = (w == CTL00) ? 2'b00 : (w == CTL01) ? 2'b01 :
+                 (w == CTL10) ? 2'b10 : 2'b11;
+    endfunction
+
+    // The inverse of the encoder in src/hdmi/tmds_channel.v.
+    function [7:0] tmds_dec(input [9:0] w);
+        reg [7:0] qm, d;
+        integer   i;
+        begin
+            qm = w[9] ? ~w[7:0] : w[7:0];
+            d[0] = qm[0];
+            for (i = 1; i < 8; i = i + 1)
+                d[i] = w[8] ? (qm[i] ^ qm[i-1]) : (qm[i] ~^ qm[i-1]);
+            tmds_dec = d;
+        end
+    endfunction
+
+    function [4:0] terc4_dec(input [9:0] w);   // bit 4 set = not a TERC4 word
+        case (w)
+            10'b1010011100: terc4_dec = 5'h00;
+            10'b1001100011: terc4_dec = 5'h01;
+            10'b1011100100: terc4_dec = 5'h02;
+            10'b1011100010: terc4_dec = 5'h03;
+            10'b0101110001: terc4_dec = 5'h04;
+            10'b0100011110: terc4_dec = 5'h05;
+            10'b0110001110: terc4_dec = 5'h06;
+            10'b0100111100: terc4_dec = 5'h07;
+            10'b1011001100: terc4_dec = 5'h08;
+            10'b0100111001: terc4_dec = 5'h09;
+            10'b0110011100: terc4_dec = 5'h0a;
+            10'b1011000110: terc4_dec = 5'h0b;
+            10'b1010001110: terc4_dec = 5'h0c;
+            10'b1001110001: terc4_dec = 5'h0d;
+            10'b0101100011: terc4_dec = 5'h0e;
+            10'b1011000011: terc4_dec = 5'h0f;
+            default:        terc4_dec = 5'h10;
+        endcase
+    endfunction
+
+    function [7:0] ecc_step(input [7:0] ecc, input b);
+        ecc_step = (ecc >> 1) ^ ((ecc[0] ^ b) ? 8'b10000011 : 8'd0);
+    endfunction
+
+    localparam RX_CTL = 0, RX_VGB = 1, RX_VID = 2,
+               RX_DGB = 3, RX_DI  = 4, RX_DGBT = 5;
+
+    integer rx_state   = RX_CTL;
+    integer rx_gb      = 0;      // guard band clocks seen
+    integer rx_frames  = 0;
+    integer rx_packets = 0, rx_ecc_errs = 0;
+    integer rx_acr = 0, rx_avi = 0, rx_ai = 0, rx_audio = 0, rx_null = 0;
+    integer rx_aud_nonzero = 0, rx_aud_stereo = 0;
+    integer rx_aud_badpar = 0, rx_aud_invalid = 0;
+    integer rx_bad_gb = 0, rx_bad_terc4 = 0;
+
+    reg        rx_vs = 1'b0, rx_vs_d = 1'b0;
+    integer    rx_x = 0, rx_y = 0, rx_w = 0;
+
+    parameter MAXW = 1440;
+    parameter MAXH = 800;
+    reg [23:0] fb [0:MAXW*MAXH-1];
+
+    // Packet under construction
+    reg [4:0]  pk_cnt = 5'd0;
+    reg [23:0] pk_hdr;
+    reg [55:0] pk_sub [0:3];
+    reg [7:0]  pk_par [0:4];
+    reg [7:0]  pk_ecc [0:4];
+
+    integer    gi;
+
+    // .ppm writing, kept from the old dvi_tx model.
+    integer fh, fi, fj, fh_h;
+    integer written = 0, ppm_max;
+    reg     want_ppm = 0;
+    reg [255:0] fname;
+    integer ppm_from;
+    reg     ppm_armed = 1'b0;
+    initial begin
+        want_ppm = $test$plusargs("VIDEO_PPM");
+        if (!$value$plusargs("PPM_MAX=%d", ppm_max)) ppm_max = 4;
+        if (!$value$plusargs("PPM_FROM=%d", ppm_from)) ppm_from = 0;
+        if (ppm_from > 0) #(ppm_from * 1000000);
+        ppm_armed = 1'b1;
+    end
+
+    task write_ppm;
+        begin
+            written = written + 1;
+            fh_h = (rx_y > MAXH) ? MAXH : rx_y;
+            $sformat(fname, "sim/out/frame_%04d.ppm", rx_frames);
+            fh = $fopen(fname, "wb");
+            if (fh) begin
+                $fwrite(fh, "P6\n%0d %0d\n255\n", rx_w, fh_h);
+                for (fj = 0; fj < fh_h; fj = fj + 1)
+                    for (fi = 0; fi < rx_w; fi = fi + 1)
+                        $fwrite(fh, "%c%c%c",
+                                fb[fj*MAXW+fi][23:16],
+                                fb[fj*MAXW+fi][15:8],
+                                fb[fj*MAXW+fi][7:0]);
+                $fclose(fh);
+                $display("[hdmi] %0t wrote %0s (%0dx%0d)",
+                         $time, fname, rx_w, fh_h);
+            end
+        end
+    endtask
+
+    task finish_packet;
+        reg [7:0] ptype;
+        reg [23:0] l, r;
+        reg [27:0] sf_l, sf_r;
+        begin
+            rx_packets = rx_packets + 1;
+            for (gi = 0; gi < 5; gi = gi + 1)
+                if (pk_par[gi] !== pk_ecc[gi]) rx_ecc_errs = rx_ecc_errs + 1;
+            ptype = pk_hdr[7:0];
+            case (ptype)
+                8'h00: rx_null  = rx_null  + 1;
+                8'h01: rx_acr   = rx_acr   + 1;
+                8'h02: begin
+                           // IEC 60958 subframes, 28 bits each: 24 sample
+                           // bits then V, U, C, P.  Decoded here the way a
+                           // sink decodes it and NOT the way hdmi_tx.v
+                           // packs it - the two agreeing on a layout of
+                           // their own is exactly how the right channel
+                           // went out as noise while this said stereo.
+                           rx_audio = rx_audio + 1;
+                           sf_l = pk_sub[0][27: 0];
+                           sf_r = pk_sub[0][55:28];
+                           l = sf_l[23:0];
+                           r = sf_r[23:0];
+                           if (l !== 24'd0 || r !== 24'd0)
+                               rx_aud_nonzero = rx_aud_nonzero + 1;
+                           if (l !== r) rx_aud_stereo = rx_aud_stereo + 1;
+                           // P makes each subframe even; V set means the
+                           // sink is told the sample is not linear PCM.
+                           if ((^sf_l) !== 1'b0 || (^sf_r) !== 1'b0)
+                               rx_aud_badpar = rx_aud_badpar + 1;
+                           if (sf_l[24] !== 1'b0 || sf_r[24] !== 1'b0)
+                               rx_aud_invalid = rx_aud_invalid + 1;
+                       end
+                8'h82: rx_avi   = rx_avi   + 1;
+                8'h84: rx_ai    = rx_ai    + 1;
+                default: ;
+            endcase
+            if ($test$plusargs("HDMIDBG"))
+                $display("[hdmi] %0t packet type %02x hdr %06x sub0 %014x",
+                         $time, ptype, pk_hdr, pk_sub[0]);
+        end
+    endtask
+
+    always @(posedge px_clk) begin : rx
+        reg [1:0] c0, c1, c2;
+        reg [4:0] n0, n1, n2;
+        reg [7:0] dr, dg, db;
+        c0 = ctl_of(t0); c1 = ctl_of(t1); c2 = ctl_of(t2);
+
+        case (rx_state)
+        RX_CTL: begin
+            if (is_ctl(t0)) begin
+                rx_vs_d = rx_vs;
+                rx_vs   = c0[1];
+                if (rx_vs && !rx_vs_d) begin      // a frame just ended
+                    if (rx_frames > 0 && want_ppm && ppm_armed &&
+                        written < ppm_max) write_ppm;
+                    rx_frames = rx_frames + 1;
+                    rx_x = 0; rx_y = 0;
+                end
+            end
+            // A preamble is CTL0 on channel 1; channel 2 says which kind.
+            if (is_ctl(t1) && c1 == 2'b01) begin
+                if (is_ctl(t2) && c2 == 2'b01) rx_state = RX_DGB;
+                else                           rx_state = RX_VGB;
+                rx_gb = 0;
+            end
+        end
+
+        // Two guard-band words, then the period itself.
+        RX_VGB: begin
+            if (is_ctl(t1) && ctl_of(t1) == 2'b01) begin
+                // still in the preamble
+            end else begin
+                if (t0 !== VGB_02 || t1 !== VGB_1 || t2 !== VGB_02)
+                    rx_bad_gb = rx_bad_gb + 1;
+                rx_gb = rx_gb + 1;
+                if (rx_gb == 2) begin rx_state = RX_VID; rx_x = 0; end
+            end
+        end
+
+        RX_VID: begin
+            if (is_ctl(t0)) begin                 // line over
+                if (rx_x > rx_w) rx_w = rx_x;
+                rx_x = 0;
+                rx_y = rx_y + 1;
+                rx_state = RX_CTL;
+            end else begin
+                db = tmds_dec(t0); dg = tmds_dec(t1); dr = tmds_dec(t2);
+                if (rx_x < MAXW && rx_y < MAXH)
+                    fb[rx_y*MAXW+rx_x] = {dr, dg, db};
+                rx_x = rx_x + 1;
+            end
+        end
+
+        RX_DGB: begin
+            if (is_ctl(t1) && ctl_of(t1) == 2'b01 &&
+                is_ctl(t2) && ctl_of(t2) == 2'b01) begin
+                // still in the preamble
+            end else begin
+                if (t1 !== VGB_1 || t2 !== VGB_1) rx_bad_gb = rx_bad_gb + 1;
+                rx_gb = rx_gb + 1;
+                if (rx_gb == 2) begin
+                    rx_state = RX_DI;
+                    pk_cnt = 5'd0;
+                    for (gi = 0; gi < 5; gi = gi + 1) pk_par[gi] = 8'd0;
+                end
+            end
+        end
+
+        RX_DI: begin
+            n0 = terc4_dec(t0); n1 = terc4_dec(t1); n2 = terc4_dec(t2);
+            if (n0[4] || n1[4] || n2[4]) begin
+                // Not TERC4 any more: this is the trailing guard band.
+                rx_gb = 0;
+                rx_state = RX_DGBT;
+            end else begin
+                if (pk_cnt < 5'd24) pk_hdr[pk_cnt] = n0[2];
+                for (gi = 0; gi < 4; gi = gi + 1) begin
+                    pk_sub[gi][{pk_cnt, 1'b0}] = n1[gi];
+                    pk_sub[gi][{pk_cnt, 1'b1}] = n2[gi];
+                end
+                // The parity bytes arrive in the last four clocks of each
+                // block; everything before them feeds the check.
+                if (pk_cnt >= 5'd28) begin
+                    for (gi = 0; gi < 4; gi = gi + 1) begin
+                        pk_ecc[gi][{pk_cnt[1:0], 1'b0}] = n1[gi];
+                        pk_ecc[gi][{pk_cnt[1:0], 1'b1}] = n2[gi];
+                    end
+                end
+                if (pk_cnt >= 5'd24) pk_ecc[4][pk_cnt[2:0]] = n0[2];
+                if (pk_cnt < 5'd28) begin
+                    for (gi = 0; gi < 4; gi = gi + 1) begin
+                        pk_par[gi] = ecc_step(pk_par[gi], n1[gi]);
+                        pk_par[gi] = ecc_step(pk_par[gi], n2[gi]);
+                    end
+                    if (pk_cnt < 5'd24)
+                        pk_par[4] = ecc_step(pk_par[4], n0[2]);
+                end
+                if (pk_cnt == 5'd31) begin
+                    finish_packet;
+                    for (gi = 0; gi < 5; gi = gi + 1) pk_par[gi] = 8'd0;
+                end
+                pk_cnt = pk_cnt + 5'd1;
+            end
+        end
+
+        RX_DGBT: begin
+            rx_gb = rx_gb + 1;
+            if (rx_gb == 2) rx_state = RX_CTL;
+        end
+        endcase
+    end
 
 endmodule

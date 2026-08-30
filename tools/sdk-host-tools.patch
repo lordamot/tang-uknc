@@ -1,0 +1,19 @@
+--- a/cmake/bflb_flash.cmake
++++ b/cmake/bflb_flash.cmake
+@@ -1,10 +1,14 @@
+ # POST_PROC combine
+-if("${CMAKE_SYSTEM_NAME}" STREQUAL "Generic")
++# CMAKE_SYSTEM_NAME is the TARGET system, and for a bare-metal RISC-V
++# cross build that is always "Generic" - so the stock test picks the
++# Windows .exe of every host tool on every host.  The suffix has to come
++# from CMAKE_HOST_SYSTEM_NAME instead.
++if("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
+     set(TOOL_SUFFIX ".exe")
+     set(CMAKE ${BL_SDK_BASE}/tools/cmake/bin/cmake.exe)
+-elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
++elseif("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Linux")
+     set(TOOL_SUFFIX "-ubuntu")
+     set(CMAKE cmake)
+-elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
++elseif("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Darwin")
+     set(TOOL_SUFFIX "-macos")

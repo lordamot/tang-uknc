@@ -11,20 +11,34 @@
 // analysis.
 //
 // It HAS been run - `make bitstream` builds the whole thing headless with
-// gw_sh - and where it stands as of 30 August 2026:
+// gw_sh - and where it stands as of 30 August 2026, with the HDMI encoder
+// in place of Gowin's dvi_tx:
 //
-//   Paths analysed                 13809
-//   Endpoints analysed              8629
+//   Paths analysed                 14651
+//   Endpoints analysed              8997
 //   Setup-violated endpoints            0     (729 before these clocks
 //                                              were declared)
-//   Hold-violated endpoints           559
+//   Hold-violated endpoints           583
 //
-//   clk_25    needs  25.071 MHz,  makes 106.612 MHz
-//   clk_3_12  needs   3.134 MHz,  makes  40.105 MHz
-//   PLL CLKOUT       50.143 MHz,  makes  67.225 MHz
-//   PLL CLKOUTD       4.179 MHz,  makes  41.239 MHz
+//   clk_25    needs  25.071 MHz,  makes 111.510 MHz
+//   clk_3_12  needs   3.134 MHz,  makes  36.814 MHz
+//   PLL CLKOUT       50.143 MHz,  makes  55.182 MHz
+//   PLL CLKOUTD       4.179 MHz,  makes  42.330 MHz
 //
-// So setup is clean with real margin everywhere.  The 559 hold violations
+// The 50.143 MHz domain is the tight one, at 1.82 ns of slack, and it was
+// tighter after the encoder went in - 67.2 MHz before - but the critical
+// path is NOT in the encoder.  It runs from sdram2's horz counter through
+// the pixel lookup and the OSD into top.v's I_rgb_* registers, and it got
+// slower because the die got fuller, not because anything was added to
+// it.  Nothing under src/hdmi/ appears in the ten worst paths.
+//
+// The HDMI serial clock needs no line here.  src/hdmi/hdmi_serdes.v takes
+// the pixel clock as its PLL reference, so the tool derives it on its own
+// and says so: hdmi_ser/pll_hdmi/CLKOUT, generated, 250.715 MHz, master
+// pl1/rpll_inst/CLKOUT.  That it is derived rather than declared is the
+// whole reason the OSER10s can be trusted - the two clocks are related.
+//
+// So setup is clean with real margin everywhere.  The 583 hold violations
 // are NOT a separate discovery - they are the direct cost of the
 // compromise described further down, where clk_25 and clk_3_12 have to be
 // declared as independent clocks because this parser will not accept them
@@ -46,7 +60,10 @@
 //         |- clkram        50.143 MHz   clkout   - SDRAM, and clkpix
 //         |- O_sdram_clk   50.143 MHz   clkoutp  - phase-shifted, to the pad
 //         `- clk4           4.179 MHz   clkoutd  (/12) - the CPU
-//     `- (inside dvi_tx: hdmi_rpll and its clkdiv, both internal to the IP)
+//     `- hdmi_ser/pll_hdmi (x5, referenced to clkram, not to clk27)
+//         `- clk_serial   250.715 MHz - the four OSER10s
+//            (this used to be a PLL inside Gowin's dvi_tx doing the
+//             same thing; the budget is unchanged at two of two)
 //
 // Everything else is a BIT OF A COUNTER, not a PLL output.  sdram2's
 // `horz` counter runs on clkram, and:

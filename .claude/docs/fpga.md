@@ -19,8 +19,9 @@ live set, by role:
 | peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `audio.v` |
 | serial | `uart/uart_{rx,tx}.v`, `uart/uart_{rx,tx}_path.v` |
 | MisterNano | `mister/{mcu_spi,sysctrl,hid,osd_u8g2,sd_card,sd_rw,sdcmd_ctrl,sector_dpram}.v` |
-| vendor IP | `ip/{sys_rpll,dvi_tx,fifo_audio,memstr,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v`, `fdd/ip/{buf_sec,rawtr_prom}/*.v` |
-| in the project but never instantiated | `load.v` |
+| HDMI | `hdmi/{hdmi_tx,tmds_channel,hdmi_packet,hdmi_serdes}.v` |
+| vendor IP | `ip/{sys_rpll,fifo_audio,memstr,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v`, `fdd/ip/{buf_sec,rawtr_prom}/*.v` |
+| in the project but never instantiated | `load.v`, `ip/dvi_tx/*.v` |
 
 ### Dead files - present but not built
 
@@ -46,6 +47,11 @@ ip/{bufsec16,secrom16,secstat16,osdfont,filename,fifo_hs8,videofifo,
                                 generated IP for paths that were dropped
 ```
 
+`ip/dvi_tx` joined `load.v` on the uninstantiated list in August 2026 when
+`hdmi/` replaced it - see **HDMI** below.  It is still in the project on
+purpose: it is the fallback, and putting it back is one instance in
+`top.v`.
+
 `src/test003_lcd.cst` is in the project but disabled - it is the pinout for
 driving an RGB LCD panel instead of HDMI.  `src/test003.rao` is a disabled
 Gowin Analyzer Oscilloscope setup.
@@ -56,7 +62,7 @@ One `sys_rpll` (`ip/sys_rpll/`), 27 MHz in:
 
 ```
 FCLKIN 27, IDIV_SEL 6, FBDIV_SEL 12   ->  27 * 13 / 7 = 50.14 MHz
-  CLKOUT   clkram        50.14 MHz    SDRAM + pixel clock for dvi_tx
+  CLKOUT   clkram        50.14 MHz    SDRAM + pixel clock for hdmi_tx
   CLKOUTP  O_sdram_clk   phase-shifted copy, straight out to the chip
   CLKOUTD  clk4          SDIV_SEL 12  ->  4.18 MHz, the CPU clock
 ```
@@ -126,8 +132,7 @@ Vendor IP in the live build:
 
 | IP | used by | what for |
 |---|---|---|
-| `sys_rpll` | `top.v` | the one PLL |
-| `dvi_tx` | `top.v` | HDMI/TMDS encoder and serialiser |
+| `sys_rpll` | `top.v` | the board PLL |
 | `fifo_audio` | `top.v` | crossing from `ppuclk_p` to the I²S clock |
 | `rom208` | `ppu.v` | the PPU's ROM |
 | `memstr` | `sdram1.v` | line store |
@@ -141,23 +146,94 @@ The `.ipc` file is the generator's input and the `.v` its output.  To
 change a depth, a width or a `.mif`, edit the `.ipc` in the Gowin IP Core
 Generator and regenerate; never hand-edit the `.v`.
 
+**`hdmi/hdmi_serdes.v` is not in that table and is not IP.**  It
+instantiates `rPLL`, `OSER10` and `ELVDS_OBUF` by hand.  Those are device
+primitives out of the Gowin library, not generator output, so there is no
+`.ipc` behind it and editing it is ordinary RTL work - but it is the one
+file in `src/hdmi/` that cannot be simulated here, which is why
+`tools/srcs.py` lists it in `STUBBED` and `sim/stubs/gowin_ip_sim.v` has a
+model for it.
+
+## HDMI
+
+`src/hdmi/`, four files, August 2026.  It replaced Gowin's `DVI_TX` IP,
+which is what its name says: DVI, video only, no data islands and
+therefore no sound.  The docs for that IP list two options, external clock
+and OBUF type, and audio is not among them; there is no Gowin HDMI IP with
+audio in the Education install either.  So sound over HDMI meant writing
+the encoder.
+
+```
+hdmi_tx.v       timing, packet scheduling, audio capture, the packet picker
+tmds_channel.v  one channel: 8b/10b, control words, TERC4, both guard bands
+hdmi_packet.v   the 32-clock packet and its BCH ECC
+hdmi_serdes.v   rPLL x5, four OSER10, four ELVDS_OBUF - the only Gowin part
+```
+
+`tmds_channel.v` and `hdmi_packet.v` are transcriptions of HDMI 1.4a
+sections 5.4 and 5.2.3.4, derived from Sameer Puri's
+[hdl-util/hdmi](https://github.com/hdl-util/hdmi) (MIT) and rewritten in
+Verilog-2001.  The rest is ours, because upstream's top level generates
+its own video timing and this design already has `sdram2.v` doing that.
+
+Four things worth knowing before touching it:
+
+- **It takes its timing from `de`/`hs`/`vs` and knows no mode.**  A data
+  island has to be announced 8 clocks ahead and a video period 10, which
+  means knowing the future, so the video goes through a 12-deep delay line
+  and the scheduler reads the undelayed signals.  Sync and pixels are
+  delayed together, so the picture does not move.
+- **The data island sits in the back porch**, four packets a line, starting
+  four clocks after `hs` falls.  There are 176 clocks there and the island
+  needs 144, which leaves the video preamble and guard band their ten with
+  room over.  It runs on blanking lines too, and that is what carries the
+  audio across the frame boundary.
+- **The audio is resampled here, not taken from the I²S path.**  A counter
+  divides the pixel clock by 1024, which at 50.143 MHz is 48.968 kHz.
+  That exact ratio is the whole point: HDMI wants Fs = f_TMDS x N / (128 x
+  CTS), so CTS = 8N holds whatever the clock really is, and N = 6144 with
+  CTS = 49152 are constants rather than a measurement.  The sink
+  regenerates the audio clock from them and plays at the true rate; the
+  "48 kHz" in the IEC 60958 channel status is the nearest declarable value
+  and is informational.  The I²S output is untouched and still runs at its
+  own rate off `ppuclk_p`.
+- **Four packet types go out and two deliberately do not.**  Sent: audio
+  clock regeneration, audio sample, audio InfoFrame, AVI InfoFrame, plus
+  null packets in the slots with nothing to fill them.  Not sent: the
+  General Control Packet - AVMUTE defaults to clear and the colour depth
+  is the default 8 bits - and the HDMI Vendor Specific InfoFrame, which
+  only matters for 3D and 4K modes.  **If a display shows the picture but
+  stays silent, the GCP is the first thing to try.**
+
+The AVI InfoFrame carries **VIC 0**, because 1280x600 at 50.7 Hz is not a
+CEA mode and there is no code for it.  Whether a given sink will accept
+audio on a mode it does not recognise is not something that can be settled
+here.
+
 ## Resource budget
 
-From the January 2025 place and route (`tang/impl/pnr/test003.rpt.txt`):
+From the August 2026 place and route (`tang/impl/pnr/test003.rpt.txt`):
 
 ```
-Logic      8000/20736   39%
-Register   3477/15915   22%
-BSRAM                   46%
+Logic      8394/20736   41%
+Register   3611/15915   23%
+BSRAM        22/46      48%
 DSP           0/         0%
 PLL           2/2      100%
+IOLOGIC       8/121      7%
 ```
 
-**Both PLLs are spoken for** - the design has one `sys_rpll` and `dvi_tx`
-brings its own - so a new clock has to come out of the existing counter
-chain, not a new PLL.  BSRAM at 46% is the next tightest, and it is what
-ROMs, FIFOs and sector buffers all come out of.  Logic and registers have
-plenty of room.
+January 2025 was 39% / 22% / 46%; stereo took the BSRAM up and the HDMI
+encoder took the logic up.
+
+**Both PLLs are spoken for** - `sys_rpll` off the crystal and
+`hdmi_ser/pll_hdmi` off the pixel clock - so a new clock has to come out of
+the existing counter chain, not a new PLL.  That was true before as well;
+the second PLL used to be inside `dvi_tx`, doing the same job.  BSRAM at
+48% is the next tightest, and it is what ROMs, FIFOs and sector buffers all
+come out of.  Logic and registers have room.
+
+The **IOLOGIC** row is new and is the four `OSER10`s.
 
 ## Pins
 
