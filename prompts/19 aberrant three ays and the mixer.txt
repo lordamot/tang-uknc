@@ -1,0 +1,117 @@
+so. what we have now. uknc starts with sd card and dsk mounted. loads and works. i tested game with beeper sound - works properly. but now seems AY modules not working - game switched to AY do not play music, and rarely sounds something where it should have AY sound effects. Player was not able to start and shown "Зависание при приеме а.в.п 154736/105763" message. Please check aberrant sound module docs, schematics and fix it in our uknc emulator - there should be 3 AY modules in total and whole device should work as if it was plugged into real uknc.
+
+****
+
+The hardware this file is named after is real and documented:
+aberranthacker/aberrant_sound_module, for the MS 0511.  Its map, and the
+board answers ONLY the three AY word addresses:
+
+  0177360 AY1        0177370 unused (MIDI data on the FPGA variant)
+  0177362 AY2        0177372 DAC, the Covox
+  0177364 AY3        0177374 YM3812, the OPL2
+  0177366 unused     0177376 unused
+
+0177366-0177377 are decoded onto the expansion connector P2, so with none
+of those implemented here nothing must answer there - a bus timeout is how
+software learns they are absent.  Word write latches an AY register number,
+byte write sends data to it.  Three AY-3-8912s.
+
+Three faults, all confirmed against that.
+
+One, the decode left adr[3] don't-care, so the top half aliased onto the
+bottom.  Swept over all 65536 addresses:
+
+  OLD ack : 0177360-0177377      NEW ack : 0177360-0177365
+  0177372 Covox  old: ACKED -> AY2   new: silent
+  0177374 OPL2   old: ACKED -> AY3   new: silent
+
+So a player probing for a Covox or an OPL2 was answered by hardware that is
+not there, and then every write it aimed at them was latched into AY2 or
+AY3 as a register address or a data byte.
+
+Two, the third AY did not exist - dd3 was commented out with its outputs
+tied to zero, so 0177364 acknowledged and did nothing.
+
+Three, the chips ran at the 3.1339 MHz PPU clock with CE tied high.  An
+AY-3-8912 wants 1.7734 MHz on CLC, so everything was 1.77 times too fast,
+about nine semitones sharp.  A phase accumulator now gives 1.773355 MHz,
+45 Hz low.  It gates sound generation only: ym2149.sv writes its registers
+in a plain always @(posedge CLK) with no CE guard, so no bus write is
+missed while the enable is low.
+
+AY does not play still (and random sounding in game as before), player hangs still - something looks wrong
+
+****
+
+Two inferences in a row had not moved the symptom, so this stopped guessing
+and measured instead.
+
+The bus is right: the module's README says the expansion connector attaches
+devices to the ПП, and 0177360 is inside the PPU's 0177000-0177777 I/O
+space.  The write timing is right: +BUSTRACE, a new switch that samples the
+PPU bus on the edge aberrant actually uses, shows I/O writes holding the
+strobe for four to six of those clocks with address, data and sel stable
+throughout, so the registered bdir/bc are safe.
+
+sel was 11 on all 26151 writes in 60 ms, which looked like proof that byte
+writes never happen - but the VM2 core does generate them
+(wb_sel[0] <= wio_wo | ~adr[0]), so the boot ROM simply never does a byte
+I/O write.  That observation proves less than it looks and was dropped.
+
+What settles the module itself is a unit test, sim/tb/tb_aberrant.v, run by
+make ab-test.  The full-machine testbench cannot do this - it has no SD
+card, so no game or player ever runs and the boot ROM never touches the
+AYs, which is how the whole write path stayed unexercised while three bugs
+in it were guessed at from outside.  The unit test drives the wishbone the
+way ppu.v's core really drives it, measured rather than assumed, and passes
+everything: registers land, all three chips are independently addressable,
+and AY1 oscillates 0..255.
+
+So the module is correct when the writes arrive in the expected form, and
+the fault is upstream where simulation cannot see.  Rather than guess a
+third time, the next step proposed was two sticky LED probes.
+
+lets build test
+
+****
+
+leds[4] lit once anything in 0177360-0177365 was decoded, leds[5] once a
+BYTE write - real register data - was.  Sticky, cleared only by a power
+cycle, deliberately not by INIT, which pulses on every RESET instruction
+and would wipe the answer mid-run.
+
+I see the problem source it seems. First and funny fact - player program stopped hanging now, no sound although. BUT here is a clue for you. Volume setting 33% - beeper of keyboard presses only from time to time and generally silenced. 66 and 100% works good. Next - the game. Beeper does not play music there if volume 33% - only some small sounding and silenced. AY there - 33% plays one AY channel it seems, 66% plays other channel, 100% silenced. So the problem IS mixer and volume settings. Should work so: volume setting - overall output level, not affects what and how is mixed at all. each AY should have all channels abc output mixed together same level, then 3 outputs mixed together and with beeper - and that single output comes as R and L channels and can be lowered using volume control. Revert indicators test back also - but note that it affected something that allowed player to start
+
+****
+
+Right, and the mechanism was mine.  The volume control scaled by SHIFTING
+UP, so 100% multiplied by four and the result had to be clamped.  Anything
+past a third of the AY's range clamped flat and went quiet, which is why
+the setting changed WHAT was audible rather than how loudly, and why a chip
+feeding mostly one side appeared at one setting and vanished at another.
+The ABC panning made that worse and was never what the real module does.
+
+Rebuilt to the spec given: each chip's A, B and C at one level, the three
+chips summed, the beeper added, one sum to both sides, and the volume only
+dividing down.  aberrant.v already computed exactly that as m_channel - all
+nine channels added - and it was the output nothing read.
+
+Headroom so nothing ever clips: m_channel reaches 2295, shifted up three is
+18360, the beeper adds 4096, total 22456 against the 32767 a signed sample
+allows.  100% is the unattenuated sum, 66% is >>1, 33% is >>2.  No
+saturation anywhere.
+
+Checked against the arithmetic: with m_channel forced to 1234 octal the
+HDMI packet carries sub0 80538008053800, sample 0x053800 = 1336, which is
+(668<<3)>>2 for the 33% the testbench sets, identical in both subframes.
+
+Probes reverted.  But the observation that the probe build stopped the
+player hanging is the third time in this session that an unrelated change
+has moved something in the MCU, SD and floppy area - after the dock problem
+that resolved when spi_ext went away, and the start screen that came back
+when the tone was removed.  None had a causal explanation and all
+correlated with placement.  The cause is the one progress.md already names:
+those paths are clocked by data signals constrained at an invented 1 us, so
+the timing report is green about paths it never analysed.  Re-clocking them
+onto a real clock with enables is the fix, and it is not something to start
+without asking.

@@ -177,13 +177,38 @@ load-into-RAM scheme.
 
 ## Sound (`aberrant.v`)
 
-Two `YM2149` instances (from `ay/ym2149.sv`), plus a third data path
-stubbed to zero.  Left, right and mono outputs; `top.v` uses the mono one,
-adds the МХ2-01 beeper, scales it by `system_volume` from the OSD, and
-sends it through `fifo_audio` to `audio.v` (`audio_drive`), which is an I²S
-transmitter on `HP_BCK`/`HP_WS`/`HP_DIN`.
+**Three** `YM2149` instances (`ym2149.sv`), modelling the three AY-3-8912s
+of the real Aberrant sound module - `aberranthacker/aberrant_sound_module`,
+which is where the file gets its name.  Until Aug 2026 only two were built
+and the third was a data path stubbed to zero.
 
-**The chip select in `aberrant.v` is not what its comment says.**  See the
-trap list in `CLAUDE.md`; the decode resolves to `0177360`-`0177366` and
-`0177370`-`0177376`, with a full alias at `0177760`-`0177776` that lands
-inside МХ2-01's range.
+The board's map, and it answers **only** the three AY word addresses:
+
+| | | | |
+|---|---|---|---|
+| `0177360` AY1 | `0177362` AY2 | `0177364` AY3 | `0177366` unused |
+| `0177370` MIDI data | `0177372` ЦАП (Covox) | `0177374` YM3812 (OPL2) | `0177376` unused |
+
+`0177366`-`0177377` are decoded onto the expansion connector P2 on the real
+board, so with none of those devices implemented here nothing must answer
+there - a bus timeout is how software learns they are absent.  The decode
+used to leave `adr[3]` don't-care, which aliased `0177372` onto AY2 and
+`0177374` onto AY3.
+
+**A word write latches an AY register number; a byte write sends data to
+it.**  `aberrant.v` turns that into the chips' BDIR/BC pair, which is why
+`nwtbt` is `&sel`.  The chips are clocked by a phase accumulator at
+1.773355 MHz, the AY-3-8912's specified 1.7734 MHz within 45 Hz; they used
+to free-run at the 3.1339 MHz PPU clock, 1.77 times too fast.
+
+`sim/tb/tb_aberrant.v` (`make ab-test`) drives the wishbone port the way
+`ppu.v`'s core really drives it and checks all three chips take registers
+and produce a tone.  The full-machine testbench cannot: it has no SD card,
+so no game or player ever runs and the boot ROM never touches the AYs.
+
+**The mix is mono, at one level.**  `m_channel` - all nine channels summed
+- shifted up three, plus the beeper at bit 12, is 22456 at most, inside
+the 32767 a signed sample allows.  `system_volume` only divides that down;
+it must never scale up, which is what it did until Aug 2026, when 100%
+multiplied by four and clamped, so the volume setting changed which parts
+of the mix were audible rather than how loud they were.

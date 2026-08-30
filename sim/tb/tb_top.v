@@ -247,11 +247,15 @@ module tb_top;
         // of the pin as two different words.  Nothing in the machine plays
         // anything on its own during a short run, so without this the
         // audio path reports silence and proves nothing either way.
+        // The mix is mono by design - all nine AY channels summed at one
+        // level, plus the beeper, to both sides - so this forces the one
+        // sum aberrant.v produces and both slots should carry it equally.
+        // "with L != R" is therefore expected to be zero now; it was a
+        // stereo check back when the AYs were panned ABC.
         if ($test$plusargs("AUDIOTEST")) begin
-            force uut.left_channel  = 11'o1234;
-            force uut.right_channel = 11'o0765;
-            $display("[tb] %0t audio test: L=%o R=%o forced onto the AY mix",
-                     $time, 11'o1234, 11'o0765);
+            force uut.mono_channel = 12'o1234;
+            $display("[tb] %0t audio test: m_channel=%o forced onto the mix",
+                     $time, 12'o1234);
         end
 
         #(run_ms * 1000000);
@@ -502,6 +506,18 @@ module tb_top;
                      uut.ppu_wbm_wre_o ? "wr" : "rd",
                      uut.ppu_wbm_wre_o ? uut.ppu_wbm_dat_o
                                       : uut.ppu_wbm_dat_i);
+
+    // +BUSTRACE: the PPU's I/O bus on every edge aberrant.v sees, so the
+    // length of a cycle and the stability of the data can be read off
+    // rather than assumed.  aberrant is clocked on ppuclk_n, the opposite
+    // phase to the core, and it registers bdir/bc - so the AY samples DI a
+    // whole PPU period after the strobe that set them.  Whether the master
+    // still holds the data then is the question this answers.
+    always @(posedge uut.ppuclk_n)
+        if ($test$plusargs("BUSTRACE") && tracing && uut.ppu_wbm_stb_o)
+            $display("[bus] %0t adr=%o wre=%b sel=%b dat=%o ack=%b",
+                     $time, uut.ppu_wbm_adr_o, uut.ppu_wbm_wre_o,
+                     uut.ppu_wbm_sel_o, uut.ppu_wbm_dat_o, uut.ppu_wbm_ack_i);
 
     //--------------------------------------------------------------------
     // The HDMI receiver.

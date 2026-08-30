@@ -32,6 +32,7 @@ output       ppu_wbm_ack_o;
 output [10:0]l_channel;
 output [10:0]r_channel;
 output [11:0]m_channel;
+
 //---------------------------------------------------------------------------------
 // Chipselect.  The real Aberrant sound module (aberranthacker/
 // aberrant_sound_module, for the MS 0511) lays its range out like this:

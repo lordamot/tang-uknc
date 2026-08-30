@@ -260,5 +260,17 @@ flash-mcu:
 	$(BLFLASH) --interface=uart --baudrate=$(BAUDRATE) --port=$(COMX) \
 	  --chipname=bl616 --config=$(BUILD)/flash/bl616.ini
 
+# A unit test for the sound module alone.  The full-machine testbench has
+# no SD card, so no game or player ever runs and the boot ROM never
+# touches the AYs - which left the whole write path unexercised while
+# three bugs in it were guessed at from the outside.  This drives the
+# wishbone port the way ppu.v's core really drives it, measured with
+# +BUSTRACE on the full machine.
+ab-test: $(VERILATOR)
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_aberrant -Mdir $(BUILD)/sim/ab -o tb_aberrant \
+	  sim/tb/tb_aberrant.v tang/src/aberrant.v tang/src/ym2149.sv >/dev/null
+	$(BUILD)/sim/ab/tb_aberrant
+
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out

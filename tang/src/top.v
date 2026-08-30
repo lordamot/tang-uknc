@@ -951,42 +951,40 @@ vp065 dd2(
    .pin_ac_o     (                 )
 );
 //------------------------------------------------------------//
-// aberrant.v pans the three AYs the usual ABC way - l_channel is A + B/2 and
-// r_channel is C + B/2 - and until now only m_channel was used, so both
-// I2S slots got the same word and the panning was thrown away.  The two
-// channels are 11 bits against mono's 12, so they are shifted up one place
-// further to keep the same full-scale point.  The beeper is one bit and
-// belongs in the middle, so it goes into both.
-wire [15:0] ay_left  = {2'd0, left_channel,  3'd0};
-wire [15:0] ay_right = {2'd0, right_channel, 3'd0};
-wire [15:0] beeper   = {4'd0, sound, 11'd0};
-
-// Headroom.  With the third AY fitted left_channel reaches 3*255 for the
-// A channels plus (3*255)>>1 for the half of B, which is 1147; shifted up
-// three that is 9176, and the beeper adds 2048.  At 100% the volume shift
-// takes that to 44896, which does not fit in sixteen bits - and these
-// samples are read as signed two's complement, both by the HDMI encoder
-// and by an I2S DAC, so anything above 32767 comes back as a large
-// NEGATIVE number.  That wrap is a full-scale click, which is far worse
-// than the loudness it was meant to buy.  Clip instead, which is what the
-// analogue mixer on the real module does.
-wire [17:0] mix_l = {2'd0, ay_left } + {2'd0, beeper};
-wire [17:0] mix_r = {2'd0, ay_right} + {2'd0, beeper};
-
-function [15:0] sat;
-    input [17:0] v;
-    sat = (v[17:15] != 3'd0) ? 16'h7FFF : v[15:0];
-endfunction
+// The mixer.
+//
+// One level, one sum, and the volume control only makes it quieter.
+//
+// It used to pan the AYs ABC - A to the left, C to the right, B split -
+// and then scale by SHIFTING UP, so 100% multiplied by four and the result
+// had to be clamped.  That made the volume setting change WHAT you could
+// hear rather than how loudly: at full volume anything past a third of the
+// AY's range clamped flat and went quiet, and a chip feeding mostly one
+// side was audible at one setting and not at another.
+//
+// The real module sums A, B and C of each chip at the same level, sums the
+// three chips, and drives one output.  aberrant.v already computes exactly
+// that as m_channel - all nine channels added - and it was the output
+// nothing read.  The beeper joins it, and the one sum goes to both sides.
+//
+// Headroom, so nothing ever clips: m_channel is 12 bits and reaches
+// 9 * 255 = 2295, which shifted up three is 18360, and the beeper adds
+// 4096.  The total is 22456, comfortably inside the 32767 a signed sample
+// allows - so full volume is the unattenuated sum and the quieter settings
+// divide down from it.  No saturation is needed and none is done.
+wire [15:0] ay_mix = {1'd0, mono_channel, 3'd0};   // 0..18360
+wire [15:0] beeper = {3'd0, sound, 12'd0};         // 0 or 4096
+wire [15:0] mix    = ay_mix + beeper;              // 0..22456
 
 reg  [15:0] volume_data_l = 16'd0;
 reg  [15:0] volume_data_r = 16'd0;
 
 always @(*)
     case(system_volume)
-    'b00 : begin volume_data_l = 16'd0;         volume_data_r = 16'd0;        end
-    'b01 : begin volume_data_l = sat(mix_l);    volume_data_r = sat(mix_r);   end
-    'b10 : begin volume_data_l = sat(mix_l<<1); volume_data_r = sat(mix_r<<1);end
-    'b11 : begin volume_data_l = sat(mix_l<<2); volume_data_r = sat(mix_r<<2);end
+    'b00 : begin volume_data_l = 16'd0;    volume_data_r = 16'd0;    end
+    'b01 : begin volume_data_l = mix >> 2; volume_data_r = mix >> 2; end
+    'b10 : begin volume_data_l = mix >> 1; volume_data_r = mix >> 1; end
+    'b11 : begin volume_data_l = mix;      volume_data_r = mix;      end
     endcase
 // The HDMI side takes the same post-volume words, and resamples them at
 // clkpix/1024 - see src/hdmi/hdmi_tx.v.  It does not go through the FIFO

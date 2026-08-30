@@ -1,0 +1,65 @@
+tried on other tv - complete silence, no matter if button hold pressed or not
+
+****
+
+That changed everything.  Neither sink plays the tone, so the white noise
+was the first television's own behaviour when it has no valid audio, and
+the real symptom is that no sink plays our audio at all.  Both agree.
+
+That kills "quirky television" and puts it back on the stream.  With the
+encoder verified correct against an independent decoder, what is left is
+how we present the audio rather than the audio itself - and there was a
+concrete deviation.  The standing packets were round-robined one line in
+four, so every InfoFrame went out 7800 times a second.  The spec asks for
+once per two fields; a real transmitter sends once per frame.  A sink that
+re-arms its audio path whenever an Audio InfoFrame arrives would be reset
+7800 times a second and never produce a sample - which fits two sinks both
+showing the picture, both acting on control packets, and both silent.
+
+Now placed by line number: AVI, audio InfoFrame and GCP once a frame,
+50.7 Hz; ACR every 32 lines, 990 Hz.  The freed slot carries audio, so
+there are four audio slots a line instead of three.  Also set AVI A0, since
+R3..R0 is only defined when it is.
+
+Measured over 100 ms: acr 99, avi 6, ai 6, gcp 6, audio 4980, 0 ecc errors,
+0 bad parity, all GCPs Clear_AVMUTE.
+
+aha! white noise disappeared it seems (only very low level noise present and almost not heard). button press gives one short clean beep now! and thats on first monitor we currently use! I also hear proper correct sound from uknc key presses! the only thing currently worries me - i do not see uknc start screen - just black one with flashing cursor
+
+****
+
+So the InfoFrame cadence was the cause.  It also retroactively confirms the
+beeper fix: the AND-of-all-five really was the bug, it was just inaudible
+through a sink that was not playing anything.
+
+On the black screen, the answers that mattered were that the start screen
+appears with the SD card OUT, and is absent with it in whether or not a
+.dsk is mounted - and that it went away in the build that added the tone.
+
+Nothing in the tone touches the card.  It is a 15-bit counter and two muxes
+on the audio wires; what it does is add about 170 LUTs and move the
+placement.  The SD and floppy paths are the ones that cannot survive that,
+for a reason progress.md already records: sd_img_mounted[0..3], disk_step,
+fdd/clk_dsk and ram1/curs_set are flops clocked by DATA signals, and
+test003.sdc constrains them at an invented 1 us.  The timing report says
+zero setup violations about paths it never honestly analysed, so
+place-and-route can break them silently and the report stays green.  That
+is the fragility progress.md warns about, in the sentence "None of this is
+broken today.  All of it is why the design is fragile against
+re-place-and-route."
+
+The tone had done its job - it proved the sink played nothing even from a
+known-good bipolar signal, which is what led to the cadence - so it is
+removed rather than defended.  git has it if it is wanted again.
+
+The simulated frame is black too at 1.3 s, but that is the known sim-side
+defect in progress.md, the CPU RAM mismatch at about 1.04 s, so it is not
+evidence about the board and was not leaned on.
+
+1
+
+****
+
+Not a message I could read - the previous reply had no numbered options -
+so it got a one-line request to say which of three things was meant rather
+than a guess.
