@@ -1,0 +1,93 @@
+next one. you mentioned relayout of internal tang's BL controller so it wont be flashable through usb-c. I believe it was our mistake - can you restore it back so usb-c will work as needed again. and I need clear instruction how to reflash tang while its usb-c can not be used for that
+
+****
+
+One correction to the premise before the change, because it moves what
+"restore" means.
+
+The pin relayout never touched FPGA programming.  The Tang's USB-C is a
+programmer because the board's own BL616 presents an FTDI FT2232 to the
+host - openFPGALoader's board entry for tangnano20k is literally cable
+ft2232 - and that is independent of every user pin on the FPGA.  No
+bitstream can take it away.  What the docs said costs the USB-JTAG bridge
+is flashing that BL616 with something else, which is a firmware choice,
+optional, and not what this repository's flash-mcu target does.
+
+What the relayout did cost is pin 69.  It used to be uart_tx, the FPGA's
+transmitter into that same BL616, which is what put the VP-65 serial
+console on the USB-C plug.  MiSTeryNano spends 69 on spi_irqn for its
+internal-BL616 link, so the console moved to header pins 48 and 55 and
+needed a USB-UART adapter.  That is the regression, and it was ours.
+
+Asked which to restore, the answer was uart_tx back on 69 and the
+external M0S Dock as the only attachment.  Done:
+
+  test003.cst   spi_csn 86, spi_sclk 13, spi_dat 76, spi_dir 75 and
+                spi_irqn 69 removed; uart_tx 48 -> 69, uart_rx 55 -> 70.
+                13, 48, 55, 75, 76 and 86 are now free.
+  top.v         the five ports and the spi_ext mux gone; spi_io_din/ss/clk
+                come straight off m0s[3:1].
+  tb_top.v      the tie-offs for those five ports removed.
+
+The m0s bus is untouched at 42/41/56/54/51, so nothing about the dock
+wiring changes and the shipped MCU firmware is unaffected.
+
+Measured.  make lint clean.  make sim identical to the run before the
+change - ppu 5640 memory ops, cpu 14553, 3 video frames, 10179
+read-after-write checks with 0 wrong, 7668 HDMI packets with 0 ecc errors
+- which is the evidence that nothing but placement moved.  make bitstream
+builds, and the pin report places uart_tx on 69 out and uart_rx on 70 in,
+with no spi_* pins left.  Setup-violated endpoints 0, hold 548 - the same
+artefact as before, clk_25 and clk_3_12 declared as unrelated base clocks.
+Logic went 41% to 42%, register and BSRAM unchanged; that is Gowin
+repacking after the IO constraints changed, not new hardware.  Not run on
+a board.
+
+The internal-BL616 link is not deleted from history, only from the design:
+git show 36e8c2b has the five IO_LOC lines, the five ports and the
+spi_ext flop if it is ever wanted back.  It is worth being clear about
+what it was worth - it had never been exercised on hardware here, it needs
+a Tang Nano 20K of assembly 3921 or later, and it costs the USB-JTAG
+bridge the moment you actually flash that chip.  Trading a console that
+works for that was the wrong way round.
+
+Now the second half: programming the FPGA when USB-C cannot do it.  This
+is howto.md section 5.5 and howto-ru.md 5.5, both new.  The shape of it:
+
+First find out which half is missing.  With the Tang plugged in alone,
+lsusb | grep 0403 should show 0403:6010 and openFPGALoader --detect -b
+tangnano20k should name a GW2AR-18C.  If the FTDI is there, the port is
+fine and the problem is a driver or a udev rule.  If instead a plain
+serial port appeared and no FTDI, the on-board BL616 is running something
+that is not Sipeed's debugger - which is what happens when the
+MiSTeryNano companion firmware is flashed into it, and is the only way to
+reach this state, since nothing in this repository asks you to do that.
+
+Putting the debugger back needs no adapter and no soldering, because the
+BL616's bootloader is in mask ROM and cannot be erased:
+
+  1. Fetch bl616_fpga_partner_20kNano.bin from Sipeed - it is
+     board-specific, and the Tang Console 60K's Console.bin is not
+     interchangeable with it.
+  2. Hold the UPDATE button, which is behind the HDMI connector on the top
+     side and is neither of the buttons the core reads as buts[0]/buts[1],
+     and then plug the USB-C cable in.
+  3. Find the port with ls /dev/ttyACM* or dmesg | tail.
+  4. make flash-mcu COMX=/dev/ttyACM0 FW_BIN=.../bl616_fpga_partner_20kNano.bin
+     The existing target already writes at address 0, which is where the
+     debugger firmware goes, so only the file changes.  BLDevCube does the
+     same job on Windows and macOS: chip BL616/618, single download, that
+     file, 0x0.
+  5. Replug.  lsusb shows 0403:6010 again and make flash-fpga works.
+
+And if the chip is dead rather than reprogrammed, Sipeed reserve JTAG test
+points on the Tang Nano 20K for an external debugger, and openFPGALoader
+takes -c <cable> for any adapter it knows instead of -b tangnano20k.
+Which pads those are is on the board schematic; this repository has not
+identified them and cannot test them, so that is written up as a
+direction and not as an instruction.
+
+Steps 1 to 4 are Sipeed's published procedure plus this repository's own
+flashing target.  The make flash-mcu command is the one that has actually
+been run here, against the external board, with a different file.  Nothing
+in section 5.5 has been performed on this hardware.

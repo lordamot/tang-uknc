@@ -101,7 +101,7 @@ Compiling module '**'("/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.
 Compiling module 'audio_drive'("/var/www/own/tang-uknc/tang/src/audio.v":2)
 NOTE  (EX0101) : Current top module is "top"
 [5%] Running netlist conversion ...
-WARN  (CV0018) : Input buts[1] is unused("/var/www/own/tang-uknc/tang/src/top.v":99)
+WARN  (CV0018) : Input buts[1] is unused("/var/www/own/tang-uknc/tang/src/top.v":93)
 Running device independent optimization ...
 [10%] Optimizing Phase 0 completed
 [15%] Optimizing Phase 1 completed

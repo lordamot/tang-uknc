@@ -81,23 +81,15 @@ module tb_top;
     reg  spi_io_clk = 1'b0;
     reg  spi_io_din = 1'b0;
 
-    // This testbench plays an external BL616 / M0S Dock, so it hangs off
-    // the m0s bus and not off the on-board BL616's pins.  Only the three
-    // input bits are driven here; m0s[0] and m0s[4] are the FPGA's own
-    // outputs.  Pulling m0s[2] low is also what makes top.v switch its
-    // inputs away from the internal BL616, so the first transaction may be
-    // lost - the retry loop below is the same one main.c runs, and covers
-    // it exactly as it does on hardware.
+    // This testbench plays an external BL616 / M0S Dock, which is the only
+    // attachment the design has.  Only the three input bits are driven
+    // here; m0s[0] and m0s[4] are the FPGA's own outputs.
     wire [4:0] m0s;
     assign m0s[1] = spi_io_din ;
     assign m0s[2] = spi_io_ss  ;
     assign m0s[3] = spi_io_clk ;
     wire spi_io_dout = m0s[0];
     wire mcu_intn    = m0s[4];
-
-    // The Tang's own BL616 is not present in simulation; its chip select
-    // is held idle so it never wins the mux.
-    wire spi_dir, spi_irqn;
 
     //--------------------------------------------------------------------
     // The design
@@ -115,9 +107,7 @@ module tb_top;
         .O_sdram_ras_n(O_sdram_ras_n), .O_sdram_wen_n(O_sdram_wen_n),
         .O_sdram_dqm(O_sdram_dqm),     .O_sdram_addr(O_sdram_addr),
         .O_sdram_ba(O_sdram_ba),       .IO_sdram_dq(IO_sdram_dq),
-        .m0s(m0s),
-        .spi_csn(1'b1), .spi_sclk(1'b0), .spi_dat(1'b0),
-        .spi_dir(spi_dir), .spi_irqn(spi_irqn)
+        .m0s(m0s)
     );
 
     //--------------------------------------------------------------------

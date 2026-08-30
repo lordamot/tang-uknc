@@ -59,5 +59,6 @@ GND           GND
 ```
 
 Audio (I2S) is now on 71 BCK, 72 WS, 73 DIN, 74 amplifier
-enable.  Serial is 48 out, 55 in.  Details in `howto.md`,
-section 2.
+enable.  Serial is unchanged on 69 out, 70 in - the Tang's
+own BL616, so the console is the USB-C port.  Details in
+`howto.md`, section 2.

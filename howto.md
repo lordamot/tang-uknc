@@ -80,39 +80,37 @@ for the old bitstream will not work with the new one and vice versa:
                      before (to Aug 2026)   now
     MCU link         71 72 73 74 75         42 41 56 54 51
     audio I2S        56 55 54 51            71 72 73 74
-    serial           69 out  70 in          48 out  55 in
+    serial           69 out  70 in          69 out  70 in
 ```
 
 The MCU link had to move to match upstream, and it lands exactly where the
 audio was, so the audio moved to the pins the MCU link vacated.  **Rewire
 both** or you will get a machine that either says nothing or plays the SPI
-traffic at you.
+traffic at you.  The serial port did not move and needs nothing done to
+it.
 
-### 2.2 Using the Tang's own BL616 instead
+### 2.2 Why the Tang's own BL616 is not used
 
 The Tang Nano 20K carries a BL616 of its own - the one that presents the
-USB-C port as a programmer and a serial console.  This core now also
-listens on the five pins that reach it, exactly as MiSTeryNano does:
+USB-C port as a programmer and a serial console.  MiSTeryNano can run the
+companion firmware in *that* chip and talk to the FPGA over five dedicated
+pins, with no wiring between boards at all:
 
 ```
     spi_csn 86    spi_sclk 13    spi_dat 76    spi_dir 75    spi_irqn 69
 ```
 
-so with the companion firmware flashed into *that* chip there is no wiring
-between boards at all.  The core works out for itself which BL616 is
-talking: the internal one is used until an external dock pulls its chip
-select low for the first time, after which the external one owns the link
-until power-off.
+**This core does not do that, on purpose.**  Look at the last pin: 69 is
+also the FPGA's TX into that BL616, which is what makes the УКНЦ's serial
+port appear on the USB-C plug.  The interrupt line takes it, so you cannot
+have both.  On top of that, flashing the on-board BL616 replaces the
+USB-JTAG bridge, so you lose the ordinary way of programming the FPGA over
+USB-C (see section 5.5 for what to do then), and it needs a Tang Nano 20K
+of assembly **3921 or later** - earlier boards do not route all five
+signals.
 
-Two costs, and they are the reason this is not the default:
-
-- flashing the on-board BL616 replaces the USB-JTAG bridge, so you lose
-  the ordinary way of programming the FPGA over USB-C;
-- it needs a Tang Nano 20K of assembly **3921 or later**.  Earlier boards
-  do not route all five signals.
-
-**Untested here.**  The pins are constrained and the mux is in the
-bitstream, but this repository has never run that variant on hardware.
+So this build keeps the console and uses an external BL616 board, which is
+the only arrangement anyone here has actually run.
 
 > While flashing, connect only the USB cable of the board you are
 > flashing.  With +5 V bridged, two cables tie two host supplies together.
@@ -347,6 +345,88 @@ If you have Gowin EDA installed (Windows or Linux):
 4. Access Mode **SRAM Program** with `bin/tang.fs`, or **Embedded Flash /
    exFlash Program** to keep it.
 5. Program.
+
+### 5.5 If USB-C will not program the FPGA
+
+The USB-C port is a programmer because the Tang's **own** BL616 presents an
+FTDI FT2232 to the host.  That is independent of every user pin, so no
+bitstream can take it away - but flashing that BL616 with something else
+can, because the program that serves the FTDI is gone.
+
+First work out which half is missing.  Plug the Tang in on its own:
+
+```sh
+lsusb | grep 0403                        # 0403:6010 = the FT2232
+openFPGALoader --detect -b tangnano20k   # should name a GW2AR-18C
+```
+
+- **FTDI present, device detected** - the port is fine and the trouble is
+  elsewhere: the WinUSB driver on Windows (section 5.2), or the udev rules
+  on Linux.
+- **No FTDI, but a plain serial port appeared instead** - the on-board
+  BL616 is running something that is not Sipeed's debugger.  That is what
+  happens if the MiSTeryNano companion firmware was flashed into it.
+
+**Nothing in this repository asks you to do that.**  `make flash-mcu`
+targets the *external* BL616 board, and this core does not use the Tang's
+own BL616 at all - see section 2.2.  So the second case only arises if
+somebody flashed it deliberately.
+
+#### Putting the debugger back
+
+The BL616's bootloader lives in mask ROM and cannot be erased, so the chip
+is always recoverable over the same USB-C plug.  No adapter, no soldering.
+
+1. Fetch Sipeed's debugger firmware **for this board**:
+
+   `https://api.dl.sipeed.com/TANG/Debugger/onboard/BL616/2025030317/bl616_fpga_partner_20kNano.bin`
+
+   The file is board-specific.  The Tang Console 60K's is
+   `bl616_fpga_partner_Console.bin` and the two are not interchangeable.
+
+2. Put the chip into DFU mode: hold the **UPDATE** button - it is behind
+   the HDMI connector on the top side of the board, and it is neither of
+   the buttons the core reads as `buts[0]`/`buts[1]` - and *then* plug the
+   USB-C cable in.  Release it once the board is powered.
+
+3. Find the port: `ls /dev/ttyACM*`, or `dmesg | tail`.
+
+4. Write it at address 0, which is what this repository's target already
+   does - only the file changes:
+
+```sh
+make flash-mcu COMX=/dev/ttyACM0 \
+     FW_BIN=~/Downloads/bl616_fpga_partner_20kNano.bin
+```
+
+   If you are not in the `dialout` group yet, wrap it:
+   `sg dialout -c 'make flash-mcu COMX=... FW_BIN=...'`.  Section 4.2.
+
+   On Windows or macOS the same job is BLDevCube: chip **BL616/618**,
+   single-download, that file, address **0x0**, Open UART, Create &
+   Download.
+
+5. Unplug and plug back in.  `lsusb` should show `0403:6010` again and
+   `make flash-fpga` should work.
+
+> Watch which chip you are talking to.  Both BL616s enumerate as serial
+> ports in their bootloaders and both are flashed by the same tool.  Have
+> only the board you are flashing plugged in.
+
+#### If the on-board BL616 is dead rather than reprogrammed
+
+Sipeed reserve JTAG test points on the Tang Nano 20K "for those who want to
+use their own debugger", so an external adapter can drive the FPGA with the
+on-board chip out of the picture entirely; `openFPGALoader -c <cable>`
+takes any adapter it knows instead of `-b tangnano20k`.  Which pads those
+are is on the board's schematic on the Sipeed wiki - **this repository has
+not identified them and cannot test them**, so that is a direction, not an
+instruction.
+
+> None of section 5.5 has been performed here.  Steps 1-4 are Sipeed's
+> published procedure plus this repository's own flashing target; the
+> `make flash-mcu` invocation is the one that has been run, against the
+> external board, with a different file.
 
 ---
 

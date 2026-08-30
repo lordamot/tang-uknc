@@ -87,13 +87,7 @@ module top(
     O_sdram_ba,
     IO_sdram_dq,
 
-    m0s,
-
-    spi_csn,
-    spi_sclk,
-    spi_dat,
-    spi_dir,
-    spi_irqn
+    m0s
 );
 input         clk27;
 input  [ 1:0] buts ;
@@ -131,18 +125,14 @@ output [10:0] O_sdram_addr ;
 output [ 1:0] O_sdram_ba   ;
 inout  [31:0] IO_sdram_dq  ;
 
-// MCU link, wired as MiSTeryNano wires it.  Two MCUs can be attached at
-// the same time: an external BL616 / M0S Dock on the m0s bus, and the Tang
-// Nano 20k's own on-board BL616 on the five dedicated pins.  The FPGA's
-// outputs are driven to both; its inputs follow whichever one answers
-// first.  See the mux further down, next to mcu_spi.
-inout  [ 4:0] m0s        ;  // external: 0 miso, 1 mosi, 2 csn, 3 sclk, 4 irqn
-
-input         spi_csn    ;  // internal BL616, chip select
-input         spi_sclk   ;  // internal BL616, clock
-input         spi_dat    ;  // internal BL616, MCU -> FPGA
-output        spi_dir    ;  // internal BL616, FPGA -> MCU
-output        spi_irqn   ;  // internal BL616, interrupt out
+// MCU link, wired as MiSTeryNano wires it: an external BL616 / M0S Dock on
+// the m0s bus, and nothing else.  MiSTeryNano can also talk to the Tang
+// Nano 20k's own on-board BL616 over 86/13/76/75/69 and this core did
+// briefly, but that link needs pin 69 for its interrupt and 69 is the
+// FPGA's TX into that same BL616 - the USB-C serial console.  The console
+// is worth more here than an untested second attachment, so the internal
+// path is gone.
+inout  [ 4:0] m0s        ;  // 0 miso, 1 mosi, 2 csn, 3 sclk, 4 irqn
 //------------------------------------------------------------//
 assign O_sdram_dqm[ 3: 2] = 2'b11   ;
 assign IO_sdram_dq[31:16] = 16'hZZZZ;
@@ -379,30 +369,19 @@ wire        sdc_int       ;
 wire  [7:0] int_ack       ;
 
 //------------------------------------------------------------//
-//  Which BL616 is talking
+//  The MCU bus
 //------------------------------------------------------------//
-// intn and dout leave the FPGA, so they simply go to both MCU ports - it
-// costs nothing to drive a port with nothing on it.  din, ss and clk come
-// in, so exactly one source has to be selected.  The internal BL616 is the
-// default; the first time the external one pulls its chip select low the
-// inputs switch over to the m0s bus and stay there.  That is MiSTeryNano's
-// own rule, and it is why an M0S Dock needs no build option or jumper.
+// One attachment, so there is nothing to select between: miso and irqn are
+// the FPGA's outputs onto the bus, the other three are its inputs off it.
+// The dock needs no build option and no jumper.
 wire        spi_io_dout;
 wire        int_out_n  ;
 
-assign spi_dir  = spi_io_dout;
-assign spi_irqn = int_out_n  ;
 assign m0s[4:0] = { int_out_n, 3'bzzz, spi_io_dout };
 
-reg         spi_ext;
-always @(posedge mist_clk or negedge n_all_rst) begin
-    if(!n_all_rst)      spi_ext <= 1'b0;
-    else if(!m0s[2])    spi_ext <= 1'b1;
-end
-
-wire spi_io_din = spi_ext ? m0s[1] : spi_dat ;
-wire spi_io_ss  = spi_ext ? m0s[2] : spi_csn ;
-wire spi_io_clk = spi_ext ? m0s[3] : spi_sclk;
+wire spi_io_din = m0s[1];
+wire spi_io_ss  = m0s[2];
+wire spi_io_clk = m0s[3];
 
 mcu_spi msp1(
     .clk           (      mist_clk),

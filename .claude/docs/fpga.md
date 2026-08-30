@@ -244,9 +244,9 @@ clk27         4      buts[0]  88   buts[1]  87   leds[5:0]  20,19,18,17,16,15
 HDMI          O_tmds_clk_p 33,34   data[0] 35,36   data[1] 37,38   data[2] 39,40
 SD card       sdclk 83  sdcmd 82  sddat0 84  sddat1 85  sddat2 80  sddat3 81
 audio         HP_BCK 71  HP_WS 72  HP_DIN 73  PA_EN 74
-serial        uart_tx 48  uart_rx 55
-MCU external  m0s[0] 42  m0s[1] 41  m0s[2] 56  m0s[3] 54  m0s[4] 51
-MCU internal  spi_dir 75  spi_dat 76  spi_csn 86  spi_sclk 13  spi_irqn 69
+serial        uart_tx 69  uart_rx 70      (to the on-board BL616, USB-C)
+MCU           m0s[0] 42  m0s[1] 41  m0s[2] 56  m0s[3] 54  m0s[4] 51
+free          13, 48, 55, 75, 76, 86
 ```
 
 ### The MCU link
@@ -256,29 +256,33 @@ table is now the upstream one.  It was not before: Alexey had the five
 signals on 71-75 against BL616 io12/13/10/11/14, which is why every
 version of this document until now told you to ignore upstream diagrams.
 
-Upstream supports two MCUs at once and so does this, from `top.v`:
+One attachment, an external BL616 / M0S Dock, from `top.v`:
 
 ```
-role                external M0S Dock   internal BL616   BL616 GPIO
-miso, FPGA -> MCU   m0s[0]  42          spi_dir   75     10
-mosi, MCU -> FPGA   m0s[1]  41          spi_dat   76     11
-csn                 m0s[2]  56          spi_csn   86     12
-sclk                m0s[3]  54          spi_sclk  13     13
-irqn, FPGA -> MCU   m0s[4]  51          spi_irqn  69     14
+role                m0s bit   FPGA pin   BL616 GPIO
+miso, FPGA -> MCU   m0s[0]    42         10
+mosi, MCU -> FPGA   m0s[1]    41         11
+csn                 m0s[2]    56         12
+sclk                m0s[3]    54         13
+irqn, FPGA -> MCU   m0s[4]    51         14
 ```
 
-The two outputs go to both ports unconditionally; `m0s[3:1]` are driven
-`z` so the dock owns them.  The three inputs are selected by `spi_ext`,
-a single flop that comes out of reset choosing the internal BL616 and
-latches to the external one the first time `m0s[2]` is seen low.  So an
-M0S Dock needs no build option and no jumper - plugging it in and letting
-its firmware start is the whole configuration - and the first transaction
-may be lost while the flop settles, which the firmware's retry loop in
-`main.c` absorbs.
+`m0s[3:1]` are driven `z` so the dock owns them; `m0s[0]` and `m0s[4]` are
+the FPGA's outputs.  No build option, no jumper, no mux.
 
-The internal path has never been exercised on hardware here.  It also
-costs the USB-JTAG bridge (flashing that BL616 replaces it) and needs a
-Tang Nano 20K of assembly 3921 or later.
+**Upstream's second attachment is deliberately not here.**  MiSTeryNano
+also drives the Tang Nano 20K's own on-board BL616 over `spi_dir` 75,
+`spi_dat` 76, `spi_csn` 86, `spi_sclk` 13 and `spi_irqn` 69, selecting
+between the two with a flop that latches to the dock the first time
+`m0s[2]` goes low.  This core carried that for one afternoon on 30 August
+2026 and then gave it up, because **pin 69 is the FPGA's TX into that same
+BL616** - the USB-C serial console - and the interrupt line takes it.  The
+internal path had never been exercised on hardware here, needs a Tang Nano
+20K of assembly 3921 or later, and costs the USB-JTAG bridge as well the
+moment you actually flash that chip.  Trading a working console for an
+untested attachment was the wrong way round.  Putting it back is the five
+`IO_LOC` lines, the five ports and the `spi_ext` flop, all of which are in
+`git show 36e8c2b`.
 
 ### What that move cost
 
@@ -289,15 +293,15 @@ core's I²S was, and upstream's `bl616_mon_rx` is 55, the fourth. So:
                 before (to Aug 2026)   now
 MCU link        71 72 73 74 75         42 41 56 54 51
 audio I2S       56 55 54 51            71 72 73 74
-serial          69 out  70 in          48 out  55 in
+serial          69 out  70 in          69 out  70 in   (unchanged)
 ```
 
 The audio simply swapped onto the pins the MCU link vacated.  The serial
-port could not: 69 is the FPGA's TX into the on-board BL616 and upstream
-spends it on `spi_irqn`, and 70 is that BL616's TX, which would fight an
-external adapter. Both ends therefore move to the header pins upstream
-reserves for a USB-UART adapter, 48 and 55 - **the VP-65 serial port no
-longer reaches the USB-C port at all**, and needs an adapter.
+port went to 48/55 for a few hours, because upstream spends 69 on
+`spi_irqn`, and came straight back to 69/70 when the internal BL616 link
+was dropped - so **the VP-65 console is on the USB-C port exactly as it
+always was**, and needs no adapter.  Upstream's 48/55 remain free and are
+where to put it if 69 is ever wanted for the interrupt again.
 
 `src/test003_lcd.cst` still carries the old five-pin MCU block. It is
 `enable="0"` in the `.gprj` and names ports that no longer exist, so it

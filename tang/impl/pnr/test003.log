@@ -7,11 +7,11 @@ Running placement......
 [10%] Placement Phase 0 completed
 [20%] Placement Phase 1 completed
 [30%] Placement Phase 2 completed
+WARN  (TA1132) :  'm0s[3]' was determined to be a clock but was not created.
 WARN  (TA1132) :  'sd_img_mounted[0]' was determined to be a clock but was not created.
 WARN  (TA1132) :  'sd_img_mounted[1]' was determined to be a clock but was not created.
 WARN  (TA1132) :  'sd_img_mounted[2]' was determined to be a clock but was not created.
 WARN  (TA1132) :  'sd_img_mounted[3]' was determined to be a clock but was not created.
-WARN  (TA1132) :  'msp1/n4_24' was determined to be a clock but was not created.
 WARN  (TA1132) :  'fdd/clk_dsk_n' was determined to be a clock but was not created.
 WARN  (TA1132) :  'fdd/sd_rd' was determined to be a clock but was not created.
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
@@ -24,8 +24,8 @@ WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "c
 WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "curs_set"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "curs_set"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "curs_set"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "msp1/n4_24" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "msp1/n4_24"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "m0s[3]" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "m0s[3]"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "fdd/sd_rd" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "disk_step" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_3_12"
@@ -51,6 +51,7 @@ Running routing......
 [60%] Routing Phase 0 completed
 [70%] Routing Phase 1 completed
 [80%] Routing Phase 2 completed
+WARN  (PR1014) : Generic routing resource will be used to clock signal 'm0s_in[3]' by the specified constraint. And then it may lead to the excessive delay or skew
 WARN  (PR1014) : Generic routing resource will be used to clock signal 'clk27_d' by the specified constraint. And then it may lead to the excessive delay or skew
 [90%] Routing Phase 3 completed
 Running timing analysis......
@@ -65,5 +66,5 @@ Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.pin.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.txt" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.tr.html" completed
-Sun Aug 30 13:46:19 2026
+Sun Aug 30 15:06:43 2026
 

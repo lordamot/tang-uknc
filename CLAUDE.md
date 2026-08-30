@@ -191,15 +191,26 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   It was not before - Alexey had it on FPGA 71→io12, 72→io13, 73→io10,
   74→io11, 75→io14 - so anything written earlier says the opposite.  Now
   the external dock is `m0s[4:0]` = 42/41/56/54/51 against BL616
-  io10/11/12/13/14, and the Tang's own BL616 is on 86/13/76/75/69, with
-  `top.v` choosing between them: `spi_ext` comes out of reset on the
-  internal one and latches to the dock the first time `m0s[2]` goes low.
-  Upstream's pins 51/54/56 are where the audio used to be, so **the audio
-  moved to 71-74 and the serial port to 48/55**, and a board wired for the
-  old bitstream has to be rewired in both places.  `mnano/spi.c` is
-  byte-identical to upstream and did not change; the FPGA side was always
-  the deviation.  `src/test003_lcd.cst` still has the old block and is
-  stale.
+  io10/11/12/13/14, and that is the **only** MCU attachment.  Upstream's
+  pins 51/54/56 are where the audio used to be, so **the audio moved to
+  71-74**, and a board wired for the old bitstream has to be rewired
+  there.  The serial port moved to 48/55 with it and then straight back to
+  69/70; see the next trap.  `mnano/spi.c` is byte-identical to upstream
+  and did not change; the FPGA side was always the deviation.
+  `src/test003_lcd.cst` still has the old block and is stale.
+- **Pin 69 is the USB-C serial console, and upstream wants it for
+  `spi_irqn`.  You cannot have both.**  MiSTeryNano also drives the Tang's
+  own on-board BL616 over 86/13/76/75/69, muxed against the dock by a flop
+  `spi_ext`.  This core carried that for one afternoon on 30 Aug 2026 and
+  gave it up: 69 is the FPGA's TX into that same BL616, so the internal
+  link costs the VP-65 console - and the console works, while the internal
+  link had never been run on hardware, needs assembly 3921 or later, and
+  costs the USB-JTAG bridge as well once you actually flash that chip.  So
+  `uart_tx` is back on 69, `uart_rx` on 70, and 13/48/55/75/76/86 are
+  free.  `git show 36e8c2b` has the removed form.  **The FPGA design never
+  affected USB-C programming either way** - that is an FT2232 the on-board
+  BL616 presents, independent of every user pin; only reflashing that
+  BL616 takes it, and `howto.md` §5.5 is how to put it back.
 - **The working tree is always dirty with `mode change 100755 => 100644`.**
   That is a checkout artefact across the vendored u8g2 tree, not work.  Use
   `git diff --summary` to see whether anything real is in there.

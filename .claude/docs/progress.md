@@ -379,14 +379,18 @@ never the divergence - `mnano/spi.c` is byte-identical to upstream's, GPIO
 12/13/10/11/14 - so this was a change to `test003.cst` and `top.v` only,
 and the firmware binary in `bin/` is unaffected.
 
-What `top.v` gained is upstream's dual-MCU arrangement, not just new pin
-numbers: `spi_dir`/`spi_dat`/`spi_csn`/`spi_sclk`/`spi_irqn` on 75/76/86/
-13/69 reach the Tang's own on-board BL616, the two FPGA outputs are driven
-to both ports at once, and a single flop `spi_ext` selects the three
-inputs - internal after reset, external for good once `m0s[2]` is first
-seen low.  A dock therefore needs no build option; the transaction during
-which the flop settles may be lost, and `main.c`'s retry loop absorbs that
-exactly as it does upstream.
+`top.v` also gained upstream's dual-MCU arrangement - `spi_dir`/`spi_dat`/
+`spi_csn`/`spi_sclk`/`spi_irqn` on 75/76/86/13/69 to the Tang's own
+on-board BL616, with a flop `spi_ext` selecting the inputs - **and lost it
+again the same afternoon.**  `spi_irqn` wants pin 69, and 69 is the FPGA's
+TX into that same BL616, which is what puts the VP-65 console on the USB-C
+plug.  The internal path had never been run on hardware here, needs
+assembly 3921 or later, and costs the USB-JTAG bridge as well once the chip
+is actually flashed; the console is worth more than all of that.  So the
+five ports, the five `IO_LOC` lines and the `spi_ext` flop are gone, the
+dock is the only attachment, and there is no mux to settle - `main.c`'s
+retry loop now has nothing to absorb.  `git show 36e8c2b` has the removed
+form if it is ever wanted back.
 
 The cost is that upstream's 51/54/56 are where this core's I²S was, and 55
 is upstream's `bl616_mon_rx`:
@@ -395,14 +399,15 @@ is upstream's `bl616_mon_rx`:
                 before                 now
 MCU link        71 72 73 74 75         42 41 56 54 51
 audio I2S       56 55 54 51            71 72 73 74
-serial          69 out  70 in          48 out  55 in
+serial          69 out  70 in          69 out  70 in   (unchanged)
 ```
 
-Audio swapped onto the pins the link vacated. The serial port could not
-stay: 69 is the FPGA's TX into the on-board BL616 and upstream spends it
-on `spi_irqn`, and 70 is that BL616's TX, which an external adapter would
-fight - so **VP-65 no longer reaches the USB-C serial port** and needs a
-USB-UART adapter on 48/55.
+Audio swapped onto the pins the link vacated. The serial port went to
+upstream's 48/55 for a few hours, because upstream spends 69 on
+`spi_irqn`, and came back to 69/70 the moment the internal BL616 link was
+dropped - so **VP-65 is on the USB-C serial port exactly as it always
+was**.  48 and 55 are free and are where to put it if 69 is ever wanted
+for the interrupt again.
 
 Checked: lint clean; `make sim` output bit-identical to the same run
 before the change, including the one read-after-write mismatch, which is

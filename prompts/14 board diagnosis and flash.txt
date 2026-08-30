@@ -1,0 +1,82 @@
+tang connected. diagnose behavior we are checking
+
+****
+
+The board answers, and the USB-C question is settled by measurement rather
+than by argument.
+
+  0403:6010  SIPEED "20K's FRIEND"  serial 2023030621  (FT2232)
+    interface 00 -> /dev/ttyUSB0    JTAG
+    interface 01 -> /dev/ttyUSB1    UART, which is FPGA pins 69 and 70
+  openFPGALoader --detect: idcode 0x81b, Gowin GW2A(R)-18(C)
+
+So the on-board BL616 is still running Sipeed's stock debugger firmware,
+JTAG over USB-C works, and bin/tang.fs loaded into SRAM over it cleanly.
+Nothing ever had to be restored for programming; that half of the worry
+was the documentation conflating two different things.
+
+The pin 69 restore can also be checked from here, which I did not expect.
+spi_irqn is int_out_n, and int_out_n is asserted while coldboot is set -
+which, with no MCU attached to acknowledge it, is forever.  On pin 69,
+the FPGA's transmitter into the BL616, a line held low is a permanent
+UART break.  uart_tx instead idles high.  So the two bitstreams have to
+differ at the moment of configuration, and they do:
+
+  capture across configure          bytes on /dev/ttyUSB1
+  old (spi_irqn on 69), round 1     00
+  new (uart_tx on 69),  round 1     -
+  old, round 2                      00
+  new, round 2                      -
+
+Two for two each way.  Repeated re-opens of the port with either
+bitstream give nothing, which is correct: ftdi_sio reports the break edge
+and not the level, so the signature is the transition and it appears only
+with the old bitstream.  The first attempt at this test probed an
+already-open line and found nothing either way, which looked like a null
+result until the capture was moved to span the configuration itself.
+
+That NUL is also a liveness proof.  int_out_n can only assert once
+sysctrl has clocked out of reset, so the PLL locked and sdram2's horz
+counter is running.
+
+Not checked, and not checkable from here: the HDMI picture and the audio
+fix, which need a display and speakers, and the MCU link, SD card and
+keyboard - no dock is visible from this host.
+
+The LEDs are active low, so a 0 is lit.  About a third of a second after
+configuration a healthy board should show 0, 2 and 3 lit and 1, 4 and 5
+dark: leds[0] is sys_rst_n out of reset, leds[3:2] are DCLO and ACLO
+released, which means the PPU reached R177716 and started the CPU.
+leds[1] is the beeper, leds[4] lights on a mounted floppy, leds[5] is
+led_init from the MCU.
+
+The board holds the new bitstream in SRAM only; a power cycle reverts it
+to whatever is in flash.
+
+lets flash new firmware onto flash
+
+****
+
+Written and verified by read-back.
+
+  make flash-fpga-flash        erase 0x000000-0x0e0000, write, exit 0
+
+Then the flash was dumped back with openFPGALoader --dump-flash
+--file-size 917504 and compared against the bitstreams:
+
+  new bin/tang.fs   907418 bytes of payload   MATCH, byte for byte
+  old HEAD tang.fs  907418 bytes              differs at byte 238
+
+with the area past the payload reading 0xff, as an erased flash should.
+So what is in the flash is this build and not the previous one, and that
+is a content comparison rather than an inference from behaviour.
+
+The FPGA also reconfigures from it cleanly - two resets with the capture
+spanning them, no break byte either time, which is what uart_tx idling
+high looks like.  On its own that would not have distinguished a reload
+from flash from an untouched SRAM, which is why the read-back is the
+claim and the reset is only corroboration.
+
+Still not tested: anything that needs eyes, ears or a dock.  Built,
+linted, simulated, timed, flashed and read back are six different things,
+and none of them is "the machine works".
