@@ -133,5 +133,6 @@ WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CL
 WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "t3/I"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "t4/I"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "t3n/I" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
+WARN  (CK3000) : Can't calculate clocks' relationship between: "dd1/clk8kHz" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
 [100%] Generate report file "/var/www/own/tang-uknc/tang/impl/gwsynthesis/test003_syn.rpt.html" completed
 GowinSynthesis finish

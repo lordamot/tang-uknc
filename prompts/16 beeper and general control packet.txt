@@ -1,0 +1,90 @@
+lets continue resurrecting sound. it currently works so machine starts with white noise - it is silenced when button pressed (e.g. when beeper tries to beep it seems - but no beeps just silence) and then again white noise. i also started dsk pt3x17_bugfixed.dsk - it is 3-channel ay player which starts playing on real hardware - here in fact its found aberrant module, starts play animation but tv is just complete silence instead of that white noise
+
+****
+
+The polarity of that is the useful part: noise while the machine is idle,
+silence when it actually plays.  Every data-corruption theory predicts the
+opposite, so it is two separate faults, and they were separated by
+measurement rather than by argument.
+
+The beeper - a real bug, and it explains "no beeps just silence" exactly.
+
+xm2-01.v line 131.  R177716[12:8] select the tone and [7] enables it.  The
+five terms were ANDed with an unselected divider contributing a plain zero:
+
+  sound = R177716[7] & (clk8kHz & R177716[12]) & (clk1kHz & R177716[11]) &
+          (clk500Hz & R177716[10]) & (clk250Hz & R177716[9]) &
+          (clk60Hz & R177716[8]) || ~(|R177716[12:8]) & R177716[7];
+
+Set one tone bit, which is what software does, and that clock is ANDed
+with four constant zeros - the line never leaves 0.  The only case that
+ever drove the speaker was all five bits clear, held high by the second
+term.  Selecting a tone produced silence.  An unselected divider is now
+don't-care instead, which keeps the author's AND intent, keeps the
+all-zero held-high case that platform.md documents, and makes a single bit
+sound:
+
+  sound = R177716[7] & (clk8kHz  | ~R177716[12])
+                     & (clk1kHz  | ~R177716[11])
+                     & (clk500Hz | ~R177716[10])
+                     & (clk250Hz | ~R177716[ 9])
+                     & (clk60Hz  | ~R177716[ 8]);
+
+The white noise - not the sound path at all.
+
+A 1200 ms simulation with +AUDIODBG showed the mix dead at zero for all
+23998 samples, and the HDMI decoder saw 59559 audio samples, every one
+zero, with 0 ecc errors, 0 bad parity and nothing flagged non-PCM.  So the
+encoder emits well-formed digital silence for the whole boot.
+
+The board settled it.  With the OSD volume at Mute, top.v forces
+volume_data to zero unconditionally - the samples are guaranteed zero
+whatever the machine does - and the noise was unchanged, and it does not
+get louder across 33/66/100%.  The noise therefore cannot be the payload.
+It is how the sink reads the stream.
+
+So the one outright spec violation in the encoder is now fixed: no General
+Control Packet was ever sent, and HDMI 1.4b 5.3.6 says one SHALL go out at
+least once per two video fields.  It joins the standing rotation as a
+fourth entry, so ACR, AVI, audio InfoFrame and GCP each go out one line in
+four - 7.8 kHz at this line rate.  SB0 bit 0 is Clear_AVMUTE; SB1 is
+{PP,CD}, both zero for 24-bit colour.
+
+Measured: lint clean; 479 GCPs in 60 ms with hdr 000003 and sub0 ...01;
+audio unchanged at 0 ecc errors, 0 bad parity, and 2480 samples carrying
+sound with L != R under +AUDIOTEST; memory ops byte-identical at ppu 5640
+and cpu 14553, so nothing but the packet rotation moved.  make bitstream
+builds with 0 setup-violated endpoints.  Flashed and verified by read-back:
+907418 bytes of payload matching bin/tang.fs exactly.
+
+What to expect is worth stating plainly.  The beeper fix should be
+audible - it is a real bug with a mechanism matching the symptom, and it
+is in the mix, which simulation covers.  The GCP is not a bet: it is a
+genuine "shall" violation now corrected and it was the first thing this
+repository's own notes said to try, but the Mute result proves the noise
+is not in the payload and there is no evidence from here that the GCP is
+what this television was missing.
+
+If the noise survives, the next suspect is the video timing, and it is a
+bigger job.  sdram2.v generates 1280x576-ish at 50.7 Hz, which is not a
+CEA mode, so the AVI InfoFrame honestly carries VIC 0.  Plenty of
+televisions treat a non-CEA timing as a PC input and route audio
+differently or not at all.  Settling that means moving to a real CEA mode -
+720x576p50 is VIC 17 - which is a display generator change, not an
+encoder one.  Two cheap observations would narrow it first: what the
+television's info panel reports for the incoming audio, and whether a
+second sink behaves the same way.
+
+lets flash and update prompts dir state
+
+****
+
+Flashed and verified.
+
+  make flash-fpga-flash    erase 0x000000-0x0e0000, write, exit 0
+  --dump-flash read back   907418 bytes MATCH bin/tang.fs byte for byte
+                           differs from the pre-session build at byte 238
+                           area past the payload reads 0xff
+
+prompts/15 and prompts/16 written to cover the dock investigation and this
+one.

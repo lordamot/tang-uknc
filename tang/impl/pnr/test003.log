@@ -12,6 +12,7 @@ WARN  (TA1132) :  'sd_img_mounted[0]' was determined to be a clock but was not c
 WARN  (TA1132) :  'sd_img_mounted[1]' was determined to be a clock but was not created.
 WARN  (TA1132) :  'sd_img_mounted[2]' was determined to be a clock but was not created.
 WARN  (TA1132) :  'sd_img_mounted[3]' was determined to be a clock but was not created.
+WARN  (TA1132) :  'clk8kHz' was determined to be a clock but was not created.
 WARN  (TA1132) :  'fdd/clk_dsk_n' was determined to be a clock but was not created.
 WARN  (TA1132) :  'fdd/sd_rd' was determined to be a clock but was not created.
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
@@ -24,6 +25,7 @@ WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "c
 WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "curs_set"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "curs_set"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "curs_set"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "m0s[3]" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "m0s[3]"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "fdd/sd_rd" and "clk_25"
@@ -32,6 +34,7 @@ WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CL
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "timer_clk_4" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "timer_clk_4"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "disk_step"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_dsk" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "fdd/clk_dsk_n"
@@ -46,6 +49,7 @@ WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[2
 WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[3]" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "isread_aud"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "isread_aud" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_3_12"
 [50%] Placement Phase 3 completed
 Running routing......
 [60%] Routing Phase 0 completed
@@ -66,5 +70,5 @@ Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.pin.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.txt" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.tr.html" completed
-Sun Aug 30 15:06:43 2026
+Sun Aug 30 16:15:27 2026
 

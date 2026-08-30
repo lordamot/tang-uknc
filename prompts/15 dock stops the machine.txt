@@ -1,0 +1,43 @@
+another problem to check - previous test run gave following: without external MOS board UKNC is starting, but of course no place for keyboard etc. with external MOS board connected - keyboard working, OSD sees and mounts dsk files, but UKNC itself is not starting
+
+****
+
+Two hypotheses fitted, and they were distinguishable at the board in about
+a minute.
+
+A - the reset is never released.  pp_rst is system_reset[0], and main.c
+line 288 asserts R=3 the moment the FPGA answers.  menu_init releases it
+with sys_set_val('R',3) immediately followed by sys_set_val('R',0) - two
+adjacent SPI transactions with no delay between them.  If the second is
+missed the PPU is held for ever.  With no dock nothing ever asserts reset,
+which is exactly why standalone works.  Simulation cannot catch this:
+tb_top.v puts 50 us and two other transactions between its R=3 and R=0.
+
+B - the mounted floppy.  mount_dsk feeds fdd4's disk_insert and the ROM
+tries to boot from the disk.  The testbench never mounts a disk and has no
+SD card model at all, so that whole path is unsimulated.
+
+Answers from the board: the LED pattern is unchanged with the dock - 0, 2
+and 3 still lit, so DCLO and ACLO are released and the CPU is running.
+That rules out A.  And with the dock connected but nothing mounted it does
+start, which is B.
+
+Then, on the bitstream flashed earlier in the session, it started working.
+
+The likely reason, though it was not confirmed before the investigation
+was stopped: that build removed the spi_ext mux.  Before, spi_io_clk was
+`spi_ext ? m0s[3] : spi_sclk`, so the SPI clock reached mcu_spi through
+combinational fabric; progress.md already recorded PR1014 warnings about
+exactly that, and noted that once the link became a mux "the SPI clock is
+no longer a pin the tool can name".  With the mux gone the clock is pin 54
+again and the tool treats it as a real clock - the new PnR report lists
+m0s[3] in its clock summary.  A marginal SPI clock would break the
+sustained sector streaming a mounted floppy needs while leaving the
+low-rate keyboard and OSD traffic intact, which is the shape of what was
+reported.  Hypothesis, not a finding.
+
+stoip please - it started working
+
+****
+
+Stopped.

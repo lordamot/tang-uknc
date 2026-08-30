@@ -128,8 +128,20 @@ assign clk1kHz  = sound_div[4];  // 8000/8   = 1000 Hz
 assign clk500Hz = sound_div[5];  // 8000/16  = 500  Hz
 assign clk250Hz = sound_div[6];  // 8000/32  = 250  Hz
 assign clk60Hz  = !sound_div;    // 8000/128 = 60   Hz
-assign sound         = R177716[7] & (clk8kHz & R177716[12]) & (clk1kHz & R177716[11]) &
-                      (clk500Hz & R177716[10]) & (clk250Hz & R177716[9]) & (clk60Hz & R177716[8]) || ~(|R177716[12:8]) & R177716[7];
+// R177716[12:8] select the beeper tone and [7] enables it.  The five terms
+// are ANDed, which is the author's intent, but an unselected divider used
+// to contribute a plain 0 rather than being left out - so setting ONE tone
+// bit, which is what software does, ANDed that clock with four constant
+// zeros and the speaker line never left 0.  Selecting a tone produced
+// silence; only the all-five-zero case, held high by the second term, ever
+// drove the line.  An unselected divider is now don't-care instead, which
+// leaves the AND of whatever IS selected, keeps the all-zero case held
+// high exactly as before, and makes a single bit sound.
+assign sound         = R177716[7] & (clk8kHz  | ~R177716[12])
+                                  & (clk1kHz  | ~R177716[11])
+                                  & (clk500Hz | ~R177716[10])
+                                  & (clk250Hz | ~R177716[ 9])
+                                  & (clk60Hz  | ~R177716[ 8]);
 //========================================================================================
 always @(posedge pin_vm_clk_p)
     if(pin_vm_init_i)begin

@@ -267,9 +267,9 @@ module tb_top;
                      mem_checks, mem_errs);
         $display("[tb] i2s: %0d frames, %0d with sound, %0d with L != R",
                  i2s_frames, i2s_nonzero, i2s_stereo);
-        $display("[tb] hdmi: %0d packets, %0d ecc errors  (acr %0d, avi %0d, ai %0d, audio %0d, null %0d)",
-                 rx_packets, rx_ecc_errs, rx_acr, rx_avi, rx_ai, rx_audio,
-                 rx_null);
+        $display("[tb] hdmi: %0d packets, %0d ecc errors  (acr %0d, avi %0d, ai %0d, gcp %0d, audio %0d, null %0d)",
+                 rx_packets, rx_ecc_errs, rx_acr, rx_avi, rx_ai, rx_gcp,
+                 rx_audio, rx_null);
         $display("[tb] hdmi audio: %0d samples, %0d with sound, %0d with L != R, overflow=%b",
                  rx_audio, rx_aud_nonzero, rx_aud_stereo, uut.hdmi_audio_ovf);
         $display("[tb] hdmi audio subframes: %0d with bad parity, %0d flagged not-PCM",
@@ -580,6 +580,7 @@ module tb_top;
     integer rx_frames  = 0;
     integer rx_packets = 0, rx_ecc_errs = 0;
     integer rx_acr = 0, rx_avi = 0, rx_ai = 0, rx_audio = 0, rx_null = 0;
+    integer rx_gcp = 0;
     integer rx_aud_nonzero = 0, rx_aud_stereo = 0;
     integer rx_aud_badpar = 0, rx_aud_invalid = 0;
     integer rx_bad_gb = 0, rx_bad_terc4 = 0;
@@ -648,6 +649,7 @@ module tb_top;
             case (ptype)
                 8'h00: rx_null  = rx_null  + 1;
                 8'h01: rx_acr   = rx_acr   + 1;
+                8'h03: rx_gcp   = rx_gcp   + 1;
                 8'h02: begin
                            // IEC 60958 subframes, 28 bits each: 24 sample
                            // bits then V, U, C, P.  Decoded here the way a

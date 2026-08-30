@@ -242,16 +242,30 @@ wire [223:0] AI_SUB = {56'd0, 56'd0,
                        {8'd0, 8'd0, 8'd0, 8'd0, 8'd0, 8'd0, 8'd0},
                        {8'd0, ai_pb5, ai_pb4, ai_pb3, ai_pb2, ai_pb1, ai_pb0}};
 
+// General Control Packet.  HDMI 1.4b 5.3.6 says it SHALL go out at least
+// once per two video fields; this design sent none at all, which left the
+// sink with no statement of the colour depth and no Clear_AVMUTE it could
+// ever have acted on.  SB0 bit 0 is Clear_AVMUTE and bit 4 Set_AVMUTE -
+// never both in one packet.  SB1 is {PP[3:0], CD[3:0]}: colour depth 0 is
+// "not indicated", which is what a 24-bit source sends, and the packing
+// phase is 0 with it.  SB2's top bit is Default_Phase, also 0.
+localparam [23:0] GCP_HDR = {8'd0, 8'd0, 8'd3};
+localparam [55:0] GCP_SUB = {40'd0, 8'h00, 8'h01};
+
 localparam [23:0] ACR_HDR = {8'd0, 8'd0, 8'd1};
 localparam [55:0] ACR_SUB = {ACR_N[7:0], ACR_N[15:8], {4'd0, ACR_N[19:16]},
                              ACR_CTS[7:0], ACR_CTS[15:8],
                              {4'd0, ACR_CTS[19:16]}, 8'd0};
 
 //------------------------------------------------------------------------
-// Picking a packet.  Four slots a line: the first carries one of the three
+// Picking a packet.  Four slots a line: the first carries one of the four
 // standing packets in turn, the rest carry audio when there is any and a
 // null packet when there is not.  Three samples a line is nearly twice
 // what 48.97 kHz needs at this line rate, so the audio never queues.
+//
+// One line in four each, at a 31.3 kHz line rate, puts every standing
+// packet out at 7.8 kHz - far above the once-per-two-fields the spec asks
+// of the GCP and the InfoFrames.
 //------------------------------------------------------------------------
 wire pick = (di_cnt == DI_DATA - 1) || (di_cnt == DI_DATA + 31) ||
             (di_cnt == DI_DATA + 63) || (di_cnt == DI_DATA + 95);
@@ -274,9 +288,11 @@ always @(posedge I_rgb_clk) begin
             2'd0: begin hdr_r <= ACR_HDR;
                         sub_r <= {ACR_SUB, ACR_SUB, ACR_SUB, ACR_SUB}; end
             2'd1: begin hdr_r <= AVI_HDR; sub_r <= AVI_SUB; end
-            default: begin hdr_r <= AI_HDR; sub_r <= AI_SUB; end
+            2'd2: begin hdr_r <= AI_HDR;  sub_r <= AI_SUB;  end
+            default: begin hdr_r <= GCP_HDR;
+                           sub_r <= {56'd0, 56'd0, 56'd0, GCP_SUB}; end
             endcase
-            info_sel <= (info_sel == 2'd2) ? 2'd0 : info_sel + 2'd1;
+            info_sel <= info_sel + 2'd1;   // two bits, wraps 0..3
         end else if (aud_avail) begin
             hdr_r     <= as_header;
             sub_r     <= {56'd0, 56'd0, 56'd0, as_sub0};
