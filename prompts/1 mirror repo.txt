@@ -1,0 +1,84 @@
+ok. mirror that repo partly (especially: docs, prompt / recaps savings)
+
+****
+
+Mirrored the parts asked for. The reference is ../zxevo-dune-demo; what
+came across is its .claude layout, its two rules files and its prompts
+convention, all rewritten for this project rather than copied.
+
+Created:
+
+CLAUDE.md - project overview, the architecture in a paragraph, the
+resource budget, pointers to every doc, and a Traps worth remembering list
+of eighteen entries. All of them were established by reading the sources,
+not assumed.
+
+.claude/rules/guideline.md - work guideline. The important departure from
+the reference: this repo cannot be built on this host and that is not a
+bug to be fixed, so RTL changes are delivered as source and the operator
+builds them. Also the rule that tang/test003.gprj is the source of truth
+for what is built, that vendor IP is regenerated and never hand-edited,
+and that octal stays octal.
+
+.claude/rules/git.md - branch model, commit style, and what is committed on
+purpose here that would normally be excluded: bin/tang.fs, bin/bl616.bin
+and tang/impl/pnr/, because the PnR reports are the only record of the
+resource budget and cannot be regenerated on this host. Also a note that
+the tree is permanently dirty with mode changes across the vendored u8g2
+tree, and that those are not work.
+
+.claude/docs/platform.md - the machine. Both address maps derived from the
+decode logic, the PPU register map at 0177010 through 0177054, the
+CPU-PPU channel with its three channels and its interrupt vectors, the
+MX2-01 system registers, keyboard, serial, floppy and sound.
+
+.claude/docs/fpga.md - the implementation. The live file list by role, the
+dead file list with why each is dead, the clock tree, the bus fabric and
+why ORed acks are dangerous, the vendor IP table, the resource budget and
+the complete pinout including the BL616 wiring.
+
+.claude/docs/video.md - sdram2.v, which is the SDRAM controller, the
+two-port arbiter and the display generator in one 780-line file. Timing,
+the four planar pixel formats, the eight-entry four-bit palette, the
+cursor, the per-line control words, and the SDRAM side.
+
+.claude/docs/mcu.md - the BL616 half. The SPI link at 20 MHz mode 1, the
+four targets and their commands, the power-on handshake, the value letters
+that have to agree in three places, the menu forms and the keyboard table.
+
+.claude/docs/build.md - both toolchains, neither installed here, and what
+can honestly be checked without them.
+
+.claude/docs/tools.md - bin2mif, which is a committed x86-64 binary with no
+source, and the ROM data.
+
+.claude/docs/progress.md - state of the port and five known defects,
+written up with evidence.
+
+prompts/ - 0 initial.txt completed with its reply in the reference's
+format (prompt verbatim, a line of asterisks, the reply as plain text),
+and this file added as 1.
+
+Two real defects turned up while reading, and both are written up in
+progress.md rather than fixed, because fixing either changes a binary that
+cannot be tested from here.
+
+The AY chip select in aberrant.v. Its comment says 177130/2. Running the
+expression over the address range gives 0177360 to 0177376, which is
+correct for this machine - but the mask clears two address bits, so it
+also matches 0177760 to 0177776, inside the MX2-01 range. Reads are saved
+by the priority mux in top.v. Writes are not: the AY latches bdir and bc
+from any write up there. Harmless today because MX2-01 stops at 0177716,
+but a trap for anyone adding a register.
+
+menu.c's settings_file table. A missing comma concatenates "/uknc.ini" and
+"/agat9.ini" into one string, and the indices do not match sysctrl.h - so
+on this core, core_id 5, the firmware saves and loads settings as
+/sd/amiga.ini. And CORE_ID_VIC20 is 0x10 against an array of seven.
+
+Not created: a Makefile. The reference has one because everything it
+builds is buildable there; here it would be stubs, which would be worse
+than nothing. build.md says what to run instead.
+
+The earlier question still stands: is the Gowin IDE available anywhere you
+can run it?

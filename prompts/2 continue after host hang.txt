@@ -1,0 +1,83 @@
+host hang. continue last session
+
+****
+
+Note on the gap in this record: the exchange that created the Makefile,
+tools/ and sim/ is not in this folder.  The host hung before it was
+appended and the prompt is not recoverable, so it is not reconstructed
+here - what follows picks up from the tree it left behind.
+
+Picked the session back up from the tree rather than from memory: tools/
+held a full toolchain, sim/ a testbench and stubs, the Makefile was the
+newest file in the repo, and mnano/build/ had a firmware image in it but
+build/fw/ did not exist.  So the harness had been written and was part way
+through its first end-to-end run when the machine went down.  Finished that
+run, then wired the results into the docs.
+
+What was verified, all of it re-run from scratch here:
+
+make lint - clean.  Verilator reads every source in tang/test003.gprj,
+with the vendor IP replaced by sim/stubs/gowin_ip_sim.v.  Zero errors,
+many warnings, all the author's.
+
+make fw - builds.  build/fw/bl616.bin, 430464 bytes.  Not byte-identical
+to the shipped bin/bl616.bin (399808 bytes, August 2024) and not expected
+to be: that one was built against a 2024 SDK.
+
+make sim - runs the machine.  About 10 ms of simulated time per wall
+second.
+
+make frames - now produces images.  It did not before: it wrote ASCII P3
+at a hardcoded 1024 wide when the active area is 1280x600, so the right
+quarter of every row was stale, and at the default run length no file came
+out at all because a frame is written on the vsync that ends it.  Now it
+writes binary P6 at the measured width, caps itself at +PPM_MAX frames,
+and says what it wrote.  It needs RUN_MS of about 45 or more.
+
+What the simulation says about the machine, which is the interesting part:
+
+The MCU side is right.  sysctrl answers 5c 42, reports core id 0x05, and
+takes its configuration over SPI exactly as mnano/main.c sends it.  Video
+runs: 51 Hz, 1280x600 active.  The PPU executes - 222198 memory cycles
+over 1.5 s of simulated time - and at 45 us it is walking 070000 upward
+read-then-write, which is its power-on RAM test.
+
+But the CPU never starts.  R177716 is read once and written once, both
+times as 000040, so bit 5 - the CPU's DCLO - is never cleared and the
+central processor sits in power-on reset for the whole run with zero
+memory cycles to its name.  Tracing the PPU's own memory port at 200 ms
+shows it looping over 22 addresses: 000000, 000002, 000030, 000032, a
+descending run of pushes around 000440-000504, and 022550.  That is a trap
+loop, not a processor waiting on a device.  The frames are solid black,
+which is what a machine that never got as far as drawing looks like.
+
+The leading suspect is that the testbench has no SD card model at all -
+sdcmd and sddat have pull-ups and nothing else - so mister/sd_card.v never
+completes a command and fdd/fdd4.v never gets a sector.  That is a guess,
+not a finding, and the thing to chase next is the FIRST divergence from
+hardware, not the symptom at 200 ms.
+
+To make that chase possible the testbench grew three plusargs: +PPUTRACE
+for acked wishbone cycles, +RAMTRACE for SDRAM-port accesses (which is
+where the code actually is - the wishbone is the I/O window only), and
++TRACE_MS=n to hold both off until n ms so the machine can be looked at
+somewhere other than at boot.  It also prints a memory-op count per
+processor at the end, which is the cheap version of the same question: a
+core with zero of them never ran.
+
+Housekeeping that had been left undone: .gitignore had two lines and now
+has five - tools/, build/, sim/out/ and mnano/build/ join .idea and
+.vscode, which takes about 5 GB of fetched toolchain out of git status.
+
+Docs updated to match, since all of them still said neither half could be
+built here: build.md now carries the Makefile, what lint and simulation do
+and do not cover, and the three things that had to be settled to get the
+firmware to compile (the SDK pinned to master_legacy for the 2024
+CherryUSB API, the bflb_flash.cmake host-tool patch, and the two -D's that
+go in through BOARD).  tools.md documents tools/ and records that mif.py
+retires the opaque bin2mif.  progress.md has the simulation results above.
+CLAUDE.md and the guideline say half the repo builds here now, and still
+say the bitstream does not - a simulation that boots is not a bitstream
+that was tested, and neither claim was made.
+
+Nothing was committed.  Nothing was run on hardware; nothing here can be.

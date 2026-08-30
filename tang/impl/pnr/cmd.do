@@ -1,14 +1,18 @@
--d /workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003.vg
+-d /var/www/own/tang-uknc/tang/impl/gwsynthesis/test003.vg
 -p GW2AR-18C-QFN88-8
 -pn GW2AR-LV18QN88C8/I7
--cst /workspace/verilog/tang20/2024/uknc/test003ho/src/test003.cst
--cfg /workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/device.cfg
+-cst /var/www/own/tang-uknc/tang/src/test003.cst
+-cfg /var/www/own/tang-uknc/tang/impl/pnr/device.cfg
+-sdc /var/www/own/tang-uknc/tang/src/test003.sdc
 -bit
 -tr
 -ph
 -timing
 -cst_error
 -convert_sdp32_36_to_sdp16_18
+-place_option 0
+-route_option 0
+-clock_route_order 0
 -correct_hold 1
 -route_maxfan 23
 -global_freq 100.000

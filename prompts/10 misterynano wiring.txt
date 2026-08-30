@@ -1,0 +1,76 @@
+Lets make BL616 and Tang interconnection as in MiSTery Nano original - update firmwares, and update docs also
+
+****
+
+Done, with one decision that needed you: upstream's pins collide with this
+core's audio, so the audio had to move.  You chose the full upstream
+arrangement and audio onto 71-74.
+
+What upstream actually does.  I read src/tang/nano20k/atarist.cst and
+top.sv out of harbaum/MiSTeryNano rather than working from memory.
+MiSTeryNano supports two MCUs at the same time and picks between them at
+run time:
+
+role                 external M0S Dock   internal BL616   BL616 GPIO
+miso, FPGA -> MCU    m0s[0]  42          spi_dir   75     10
+mosi, MCU -> FPGA    m0s[1]  41          spi_dat   76     11
+csn                  m0s[2]  56          spi_csn   86     12
+sclk                 m0s[3]  54          spi_sclk  13     13
+irqn, FPGA -> MCU    m0s[4]  51          spi_irqn  69     14
+
+The two FPGA outputs go to both ports unconditionally; m0s[3:1] are driven
+z so a dock owns them.  The three inputs are selected by one flop,
+spi_ext, which comes out of reset on the internal BL616 and latches to the
+external one the first time m0s[2] is seen low.  That is why a dock needs
+no build option and no jumper.
+
+The firmware was already right.  mnano/spi.c is byte-identical to
+upstream's firmware/misterynano_fw/spi.c - I diffed it - GPIO
+12/13/10/11/14 and all.  The MCU side was never the divergence; only the
+FPGA side was, so nothing in mnano/ changed and bin/bl616.bin is
+untouched and still current.
+
+What moved on the FPGA.  Upstream's m0s pins are 51, 54 and 56, which is
+exactly where HP_BCK, HP_DIN and PA_EN were, and 55 (HP_WS) is upstream's
+bl616_mon_rx.  All four audio pins.  This core has no HDMI audio, so I2S
+is the only sound path there is.
+
+                 before                 now
+MCU link         71 72 73 74 75         42 41 56 54 51
+audio I2S        56 55 54 51            71 72 73 74
+serial           69 out  70 in          48 out  55 in
+
+Audio swapped onto the pins the MCU link vacated.  The serial port could
+not stay where it was: pin 69 is the FPGA's TX into the on-board BL616 and
+upstream spends it on spi_irqn, and pin 70 is that BL616's TX, which an
+external adapter would fight.  Both ends therefore move to 48 and 55, the
+header pair upstream reserves for a USB-UART adapter.  The consequence is
+real and worth saying plainly: the VP-65 serial port no longer reaches the
+USB-C port at all.
+
+Changed: tang/src/top.v (ports m0s/spi_csn/spi_sclk/spi_dat/spi_dir/
+spi_irqn, and the mux), tang/src/test003.cst, sim/tb/tb_top.v (the
+testbench now plays a dock on the m0s bus, which also exercises the
+switch), README.md, howto.md, howto-ru.md, CLAUDE.md, and
+.claude/docs/{fpga,mcu,build,progress}.md.
+
+Checked.  make lint clean.  make sim boots - core id 0x05, PPU releases
+the CPU, 15 frames - and the output is bit-identical to the same run
+against the pre-change tree, including the one known read-after-write
+mismatch, which is the point: nothing but placement moved.  I reconstructed
+that baseline by reverse-patching, because git checkout gives you the
+January tree and not the working one.  make bitstream builds; every pin is
+placed where constrained, 0 setup violations, 529 hold (the artefact
+test003.sdc describes), Logic 39% Register 23% BSRAM 48%.
+
+Not checked: hardware.  This is the one kind of change where that matters
+most - it is entirely about which pad a signal leaves by, and no
+simulation can see it.  The internal-BL616 half has never been exercised
+at all; it also costs the USB-JTAG bridge and needs a Tang Nano 20K of
+assembly 3921 or later.
+
+Two loose ends.  src/test003_lcd.cst still has the old five-pin MCU block
+and now names ports that do not exist; it is enable="0" in the .gprj so it
+does not break the build, and I left it alone as an earlier revision.  And
+your own board, if it is wired from the old table, needs rewiring in two
+places, not one - the audio moved too.

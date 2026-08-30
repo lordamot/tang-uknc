@@ -1,28 +1,56 @@
-Reading netlist file: "/workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003.vg"
-Parsing netlist file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/gwsynthesis/test003.vg" completed
+Reading netlist file: "/var/www/own/tang-uknc/tang/impl/gwsynthesis/test003.vg"
+Parsing netlist file "/var/www/own/tang-uknc/tang/impl/gwsynthesis/test003.vg" completed
 Processing netlist completed
-Reading constraint file: "/workspace/verilog/tang20/2024/uknc/test003ho/src/test003.cst"
+Reading constraint file: "/var/www/own/tang-uknc/tang/src/test003.cst"
 Physical Constraint parsed completed
 Running placement......
 [10%] Placement Phase 0 completed
 [20%] Placement Phase 1 completed
 [30%] Placement Phase 2 completed
-WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
+WARN  (TA1132) :  'sd_img_mounted[0]' was determined to be a clock but was not created.
+WARN  (TA1132) :  'sd_img_mounted[1]' was determined to be a clock but was not created.
+WARN  (TA1132) :  'sd_img_mounted[2]' was determined to be a clock but was not created.
+WARN  (TA1132) :  'sd_img_mounted[3]' was determined to be a clock but was not created.
+WARN  (TA1132) :  'msp1/n4_24' was determined to be a clock but was not created.
+WARN  (TA1132) :  'fdd/clk_dsk_n' was determined to be a clock but was not created.
+WARN  (TA1132) :  'fdd/sd_rd' was determined to be a clock but was not created.
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "ram1/curs_set" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "ram1/curs_set"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "curs_set" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[0]"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[1]"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[2]"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[3]"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "curs_set"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "curs_set"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "curs_set"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "msp1/n4_24" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "msp1/n4_24"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "fdd/sd_rd" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "disk_step" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUTD.default_gen_clk" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUTD.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "pl1/rpll_inst/CLKOUTD.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUTD.default_gen_clk" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "timer_clk_4" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "timer_clk_4"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "disk_step"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_dsk" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "fdd/clk_dsk_n"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "fdd/clk_dsk_n"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "fdd/sd_rd"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "fdd/sd_rd"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "fdd/clk_dsk_n" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "disk_step" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[0]" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[1]" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[2]" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[3]" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "isread_aud"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "isread_aud" and "clk_3_12"
 [50%] Placement Phase 3 completed
 Running routing......
 [60%] Routing Phase 0 completed
 [70%] Routing Phase 1 completed
 [80%] Routing Phase 2 completed
-WARN  (PR1014) : Generic routing resource will be used to clock signal 'spi_io_clk_d' by the specified constraint. And then it may lead to the excessive delay or skew
 WARN  (PR1014) : Generic routing resource will be used to clock signal 'clk27_d' by the specified constraint. And then it may lead to the excessive delay or skew
 [90%] Routing Phase 3 completed
 Running timing analysis......
@@ -32,10 +60,10 @@ Bitstream generation in progress......
 Bitstream generation completed
 Running power analysis......
 [100%] Power analysis completed
-Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.power.html" completed
-Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.pin.html" completed
-Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.rpt.html" completed
-Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.rpt.txt" completed
-Generate file "/workspace/verilog/tang20/2024/uknc/test003ho/impl/pnr/test003.tr.html" completed
-Fri Jan 24 17:27:12 2025
+Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.power.html" completed
+Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.pin.html" completed
+Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.html" completed
+Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.txt" completed
+Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.tr.html" completed
+Sun Aug 30 12:08:38 2026
 

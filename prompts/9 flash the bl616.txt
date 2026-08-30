@@ -1,0 +1,60 @@
+add docs about command and how to use flashing toolchain without adding into PATH. BL616 is now connected and in boot mode at /dev/ttyACM0 - I need to flash it
+
+****
+
+I'll add myself to dialout, wait a bit
+
+****
+
+Flashed, and verified: the device reported the same SHA256 as the host,
+b4dfd9ba46c955b7c8adfef78666db7f0d4d5e12bfc3eb5c680b73221661770b, over
+430512 bytes at 0x000000.  That is bin/bl616.bin, which is byte-identical
+to what the last make fw produced, so the board is now running the
+August 2026 firmware.
+
+The dialout group did not need waiting for.  Adding it with usermod does
+not reach a process that is already running - credentials are fixed at
+login - so getent group dialout listed you while id -nG in my shell still
+did not, and the port stayed unwritable.  sg dialout -c '<command>' gets
+round it: sg is setuid and reads /etc/group rather than the caller's
+credentials, so it needs no password and no relogin.  The flash ran as
+sg dialout -c 'make flash-mcu COMX=/dev/ttyACM0'.
+
+make flash-mcu now actually flashes.  It used to only print the command to
+type.  It takes COMX (default /dev/ttyACM0), FW_BIN (default bin/bl616.bin,
+point it at build/fw/bl616.bin to flash a fresh build) and BAUDRATE
+(default 2000000), and it refuses early with a sentence saying which if the
+SDK is not fetched, the firmware file is missing, or the port is not
+writable.
+
+It drives the flasher through a generated build/flash/bl616.ini with an
+absolute filedir rather than reusing the SDK's own mnano/flash_prog_cfg.ini,
+because that one globs ./build/build_out/misterynano_fw*_$(CHIPNAME).bin
+relative to the current directory and so only works from mnano/ after a
+firmware build.  The generated ini flashes the shipped binary with no build
+tree at all.  I checked the absolute path parses by running the flasher
+against a bogus port first, so nothing was touched while testing.
+
+On the PATH question: nothing needs to go on it.  The flasher is
+tools/bouffalo_sdk/tools/bflb_tools/bouffalo_flash_cube/BLFlashCommand-ubuntu,
+a self-contained PyInstaller bundle - no Python, no install, and
+tools/env.sh has nothing to do with it, that file is for building.  An
+absolute path to the binary is the whole invocation.  There is one per
+host: -ubuntu is x86-64 Linux, -arm is aarch64, and project.build picks
+between them by arch.  The SDK's own make -C mnano flash route needs
+nothing on PATH either - its flash: target is one line, $(command_flash) -
+but it flashes whatever is in mnano/build/build_out/ and fails if that is
+empty.
+
+Documented in four places.  .claude/docs/build.md gained a "Flashing the
+BL616" section covering boot mode, what the handshake failure actually
+means, the permissions trap with the sg escape, and the no-PATH
+invocation with the ini spelled out.  howto.md and howto-ru.md got the
+user-facing version: section C is now make flash-mcu rather than a note
+that it prints a line, and the dialout paragraph explains the getent/id
+mismatch instead of just saying to log out.  CLAUDE.md got two traps, one
+for the flasher and one for the group.
+
+What I have not done is check that the firmware runs.  Flashing verified
+the bytes in the chip; it says nothing about the menu, the keyboard or the
+SD card, and nobody here can watch the board.

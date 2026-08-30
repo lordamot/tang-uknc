@@ -1,0 +1,49 @@
+so, can you run all of these and perform tests?
+
+****
+
+Ran the lot from scratch - make clean first, so nothing was left over from
+the earlier run - and tested the helper scripts rather than just calling
+them.  Sixteen steps.  Fifteen passed and one failed, and the one that
+failed had never been run before.
+
+make clean            removes build/, sim/out/, mnano/build/
+make help             prints
+make toolchain        idempotent - re-running skips all six steps
+tools/srcs.py         30 sources, 10 IP, 1 constraint file; every path the
+                      .gprj names exists on disk
+make mif              16384 words and 361 words converted
+mif.py round trip     mif -> bin -> mif -> hex is byte-identical to
+                      mif -> hex, so the converter is self-consistent in
+                      both directions
+make lint             clean
+make sim              boots, 300 ms in 34 s
+make frames           two frames written
+make wave             FAILED - no VCD at all
+make fw               builds in 8 s, 430464 bytes
+make flash-mcu        prints the instructions
+openFPGALoader        v1.1.1, --scan-usb finds no board attached
+sim_patch.py          runs, writes build/sim/src/ym2149.sv
+tools/env.sh          puts verilator, yosys, riscv gcc, cmake and ninja on
+                      PATH and sets BL_SDK_BASE
+
+The failure: Verilator's --binary ignores $dumpfile and $dumpvars unless
+the model was generated with --trace, so make wave ran the simulation and
+wrote nothing.  Since tracing costs enough that make sim should not carry
+it, the fix is a second binary - build/sim/objw - built with --trace,
+which only make wave depends on.  It now writes a valid VCD: 2390 signals,
+and about 25 MB per simulated millisecond.  That size is why make wave got
+its own default of 2 ms rather than the 300 ms the other targets use;
+WAVE_MS raises it.
+
+The lint warning census, since it is the first time anyone has counted:
+90 WIDTHEXPAND, 28 WIDTHTRUNC, 21 TIMESCALEMOD, 14 COMBDLY, 4 ZERODLY,
+4 CASEINCOMPLETE, 2 PINMISSING, 2 CASEX, and one each of REALCVT,
+MULTIDRIVEN, MODDUP and IMPLICIT.  Zero errors.  These are the author's
+and none of them was touched.
+
+Two things worth saying plainly.  make flash-fpga was NOT run - it writes
+to a board, no board is attached, and that is not a test to run without
+being asked.  And make sim still ends with the CPU at zero memory
+operations: the trap loop from the last exchange is unchanged, because
+nothing was done about it here.

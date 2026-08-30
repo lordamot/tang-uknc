@@ -46,6 +46,7 @@
         <File path="src/wmrst.v" type="file.verilog" enable="1"/>
         <File path="src/xm2-01.v" type="file.verilog" enable="1"/>
         <File path="src/test003.cst" type="file.cst" enable="1"/>
+        <File path="src/test003.sdc" type="file.sdc" enable="1"/>
         <File path="src/test003_lcd.cst" type="file.cst" enable="0"/>
         <File path="src/test003.rao" type="file.gao" enable="0"/>
     </FileList>

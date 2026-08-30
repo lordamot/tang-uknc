@@ -1,0 +1,93 @@
+so - its a problem - update all - we need recent files not outdated
+
+****
+
+Fixed, and the fix was to stop believing this repository's own
+documentation.
+
+Every doc here, from before I arrived, said the bitstream needs the Gowin
+IDE and that it cannot run on this machine.  Nobody had tried.  The
+Education edition is a free 648 MB tarball, needs no licence file for the
+GW2AR-18C, and ships gw_sh, a headless Tcl shell that does synthesis and
+place-and-route without a window.  It is now in tools/ with everything
+else, fetched by make toolchain, nothing installed on the host.
+
+Getting it to start took four rounds with its own bundled libraries, which
+are the sort of thing worth writing down because they will happen again to
+anyone else:
+
+  GLIBCXX_3.4.14 not found          its libstdc++ is older than its own Qt
+  FT_Done_MM_Var undefined          its freetype is older than the system
+                                    fontconfig
+  ZLIB_1.2.3.4 not found            same story with zlib
+  Cannot mix incompatible Qt
+    library (5.15.18) with this
+    library (5.15.14)               a 2019 Qt5Core sitting in bin/ next to
+                                    a 2025 Qt in lib/, in the same install
+
+All four are the same shape: the bundled copy shadows a newer system one,
+or shadows another bundled one.  fetch.sh now moves the stale duplicates
+into _shadowed/ and the Makefile wraps gw_sh in LD_LIBRARY_PATH,
+QT_PLUGIN_PATH and QT_QPA_PLATFORM=offscreen.
+
+Then three things about gw_sh itself, none of which the IDE tells you:
+its SDC parser takes no backslash continuations; ram_rw_check is called
+rw_check_on_ram; and -use_sspi_as_gpio 1 is not optional, because HP_BCK,
+HP_WS and HP_DIN sit on pins 56/55/54 which are the SSPI pins, and without
+freeing them placement fails outright with PR2017.  The IDE keeps that
+setting in impl/test003_process_config.json as SSPI = True, so
+tools/gowin_tcl.py reads it from there rather than hard-coding it - the
+same reason srcs.py reads the file list out of the .gprj instead of
+keeping a second copy.
+
+make bitstream now builds the whole thing in about a minute and copies the
+result to bin/tang.fs.  Both shipped binaries are current:
+
+  bin/tang.fs      7262008 bytes   30 Aug 2026
+  bin/bl616.bin     430512 bytes   30 Aug 2026
+
+The bitstream carries the four VM2 core fixes, the AY chipselect, the
+stereo audio and the timing constraints.  Resource use: Logic 39%,
+Register 23%, BSRAM 48% - up from 46%, which is exactly the second audio
+FIFO the stereo needed - PLL 2/2.
+
+And the .sdc has finally been run, which is the part I could not do
+before.  It found things.
+
+The first run reported 729 setup violations, because the counter-bit
+clocks and five flops-clocked-by-data were being analysed against the
+tool's default 100 MHz - signals that actually run between 3 and 25 MHz,
+and event strobes that fire a few hundred thousand times a second.
+Declared at their real rates, setup violations went to zero, with margin
+everywhere: clk_25 needs 25.071 MHz and makes 106.612, clk_3_12 needs
+3.134 and makes 40.105, the PLL's two outputs need 50.143 and 4.179 and
+make 67.225 and 41.239.
+
+Hold violations went the other way, from 30 to 559, and that number is an
+artefact I could not get rid of.  create_generated_clock is the right
+description of clk_25 and clk_3_12 - they are divides of the PLL output -
+but this parser will not resolve the source.  Not [get_nets {clkram}],
+because that name does not survive synthesis; not
+[get_pins {pl1/rpll_inst/CLKOUT}]; not that with -master_clock either.  So
+they are declared as independent clocks, the tool cannot relate the edges
+of what is physically one counter, and it analyses the crossings at worst
+case.  The .sdc says so at the top, in the file, where the next person
+will read it: make the generated-clock form resolve before drawing any
+conclusion from 559.
+
+Two smaller things the run confirmed.  clk_6_25 cannot be constrained
+because synthesis removes it - top.v brings sdram2's cpu_clk out to a wire
+nothing reads, which is defect 5 in progress.md turning up in a second
+place.  And bin/tang.fs and tang/impl/pnr/test003.fs are now genuinely the
+same file, which they were not before: they used to be the same size and
+date with different contents, and which one anyone was running had never
+been established.
+
+Docs updated to match, and that is most of a rewrite rather than a tweak,
+because CLAUDE.md, the guideline, build.md, tools.md, progress.md and both
+howtos all rested on the claim that this could not be done.  The guideline
+now carries the general version of the lesson: treat "this cannot be done
+here" as a claim with a date on it.
+
+What is still true: nothing has been on a board.  Built, linted,
+simulated and timed are four different claims and none of them is "works".

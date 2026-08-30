@@ -1,0 +1,77 @@
+reference of structure, docs, etc - ../zxevo-dune-repo
+
+this repo: MC0511 UKNC implementation for TANG20k FPGA board
+
+current question: will you be able to understand it and proceed with fixes and updates?
+
+****
+
+Yes. Here is what the repository is, and the honest caveats.
+
+What this is: a Gowin project (tang/test003.gprj, GW2AR-18C / Tang Nano
+20K) plus a MisterNano-derived BL616 firmware in mnano/. The .gprj file
+list is the ground truth for what is live - 40 sources - and the structure
+is clear.
+
+Two 1801VM2 cores - cpu_wb (central) and ppu_wb (peripheral), both
+wrapping wm2wb/vm2_wb.v plus vm2_plm.v, 2800 lines between them, the
+actual VM2 implementation.
+
+Peripherals: xm2-01.v (the MX2-01 channel), vp1_120.v, vp65.v
+(keyboard/serial), vp1-128fdd.v plus fdd/fdd4.v (floppy), aberrant.v (AY
+glue), audio.v.
+
+Platform glue: sdram2.v (the GW2AR's on-die SDRAM), dvi_tx for HDMI,
+mkcolorreg.v and load.v, and the MisterNano block - mcu_spi, sysctrl, hid,
+osd_u8g2, sd_card, sd_rw - which is how the BL616 provides USB HID, SD
+images and the OSD menu over SPI.
+
+Last place and route, January 2025: 39 percent logic, 22 percent
+registers, 46 percent BSRAM, both PLLs used. Room to add things, with
+BSRAM as the tightest budget.
+
+Things that will matter.
+
+../zxevo-dune-repo does not exist. The repo meant is ../zxevo-dune-demo -
+it has the CLAUDE.md plus .claude/docs plus Makefile plus prompts layout. I
+read it; I understand the convention to mirror here.
+
+No FPGA toolchain on this machine. No gw_sh, no Gowin IDE, no
+yosys/nextpnr, no iverilog/verilator, no openFPGALoader, no RISC-V
+toolchain for the BL616. So I can write and review RTL, but I cannot
+synthesize, place or verify a bitstream - you would be building in the
+Gowin IDE and flashing. mnano/run_make also hardcodes /home/alex/ SDK
+paths that do not exist here.
+
+Vendor IP is opaque. The src/ip/* blocks are IP Core Generator output
+(.ipc/.mod). Changing an SDRAM/FIFO/PLL parameter means regenerating them
+in the IDE - I cannot do that from here, though I can say exactly which
+knob to turn.
+
+About 40 percent of tang/src/ is dead weight: fdd4 (Kopiya).v, .bak, .v_,
+three unused sdram*.v, four AY implementations of which only ay/ym2149.sv
+is in the build. Easy to trip over. Worth an explicit live-vs-dead doc.
+
+No SDC file at all - the PnR report says Timing Constraints File: ---, and
+the worst reported setup path, -6.4 ns in ppu1/ppu, is against an
+unconstrained default. So "does it still meet timing" is not a question
+this project can currently answer. That is the first real risk for any RTL
+change.
+
+The dirty working tree is harmless: chmod-only changes plus one deleted
+symlink, no content edits. But bin/tang.fs and tang/impl/pnr/test003.fs
+are not the same bitstream despite the same date - worth knowing which one
+is actually on your board.
+
+What I would propose: the same shape as the dune repo - a CLAUDE.md with
+the architecture map and the traps, .claude/docs for the machine (UKNC
+memory map, the two CPUs' channel protocol, video, the MisterNano SPI
+protocol, the build and flash procedure), and a Makefile that at minimum
+drives the ROM tooling and, if you will install a simulator, an iverilog
+lint/sim target so RTL changes get some check before a 40-minute IDE round
+trip.
+
+One thing I need either way: is the Gowin IDE available anywhere you can
+run it, or is every build going to happen on a different machine? That
+changes whether I can close the loop myself or have to hand you a build to
+run.

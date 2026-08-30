@@ -1,0 +1,95 @@
+add two files: howto.md and howto-ru.md second one is russian but they same. step-by-step instruction of how to flash all it - both - companion board and tang, explain windows also and mac os - and linux, of course
+
+and add how to use
+
+****
+
+Both files written, mirrored section for section - nine top-level chapters
+and fourteen sub-sections in each, cross-linked at the top.
+
+What they cover, in order: what you need; wiring the two boards, with the
+warning that this is not the stock MiSTeryNano pinout and the upstream
+table gives you a machine that does nothing; preparing the SD card;
+flashing the BL616; flashing the Tang Nano 20K; first boot; how to use it;
+troubleshooting; notes.
+
+The BL616 half is the fiddly one, so it gets the most room: how to enter
+boot mode by hand (hold BOOT, reset, release BOOT), how to find the port on
+each of the three systems, and then three ways to actually write it - the
+BLDevCube/BLFlashCube GUI, which is the sane route on Windows and macOS;
+BLFlashCommand on the command line, with a ready-made .ini pointing at
+bin/bl616.bin at address 0, since the SDK's own ini points at a build
+directory a user flashing the prebuilt binary will not have; and make -C
+mnano flash for anyone who built it themselves.  The Bouffalo SDK ships
+that flasher for Windows, macOS, Ubuntu and ARM, so one set of instructions
+covers everything.
+
+The Tang half is openFPGALoader or the Gowin Programmer, with the SRAM
+versus flash distinction made explicit and up front, because writing to
+SRAM and then wondering where it went after a power cycle is the obvious
+first mistake.  Per-platform install notes: apt on Linux plus the udev
+rules, brew on macOS, and on Windows the Zadig step to put WinUSB on
+Interface 0 - with a warning not to touch Interface 1, which is the serial
+port.
+
+The usage chapter came out of reading the firmware rather than guessing:
+F12 opens the menu and never reaches the machine, ESC closes it, cursor
+up/down moves and Space or Enter selects; the four menu screens as they are
+actually laid out in menu.c; mount a .dsk on Disk 0 then Reset, and what
+Cold Boot does differently; write protection and why you want it before
+running something you do not trust; volume and the ABC panning; the RGB/BGR
+switch; and a PC-to-УКНЦ key table taken from mnano/uknc.h - F6 is ПОМ, F7
+УСТ, F8 ИСП, F9 СБРОС, F10 СТОП, Ctrl is УПР, left Alt АЛФ, right Alt
+ГРАФ, Caps Lock ФИКС, Esc АР2 - with the note that changing a binding means
+reflashing the MCU and not the FPGA.
+
+Two things stated plainly rather than smoothed over.  The settings file
+name depends on which firmware you flash: the shipped bin/bl616.bin writes
+/amiga.ini because of the menu.c table bug, a firmware built from current
+sources writes /uknc.ini.  And bin/tang.fs and tang/impl/pnr/test003.fs are
+the same size and date but different files, so the document says to use
+bin/tang.fs.
+
+One correction made after writing: the Russian troubleshooting section had
+the two processors the wrong way round - "центральный процессор запускает
+периферийный" - which is backwards, the peripheral one starts the central
+one over R177716.  Fixed.
+
+Nothing was committed.
+
+why docs read old firmware? did not you update it?
+
+****
+
+Correct, and it was two different situations that I should have separated
+instead of quietly writing down the old numbers.
+
+The MCU firmware could be updated here and had not been.  make fw had been
+building build/fw/bl616.bin all along and nothing ever copied it to bin/,
+so the shipped binary was still the August 2024 one - without the
+settings-file fix, which is the whole point of that change reaching
+anybody.  Rebuilt from the current sources and copied across: bin/bl616.bin
+is now 430512 bytes, and it reads and writes /uknc.ini.  The old one is in
+git history if it has to come back; nothing was lost.
+
+The bitstream could not, and that is the part worth saying out loud.
+bin/tang.fs is still January 2025 and cannot be rebuilt on this machine at
+all - it needs the Gowin IDE.  So it does not contain the four VM2 core
+fixes, the AY chipselect, or the stereo audio.  All of that is in
+tang/src/ as source and nowhere else.  Anyone flashing bin/tang.fs today
+gets the January 2025 machine: mono AY, old chipselect, unfixed core.
+
+Both howto files now say this where a reader will actually hit it - a
+"What is and is not in them" section right under the file table, before
+any flashing instructions - rather than leaving someone to work out why
+the sound is still mono.  Section 3 also got simpler: the settings file is
+now /uknc.ini, with a line explaining that firmware flashed before this
+wrote /amiga.ini, so if settings look forgotten after the update, that is
+why and the old file can just be renamed.
+
+build.md and progress.md updated to match, including the header line of
+progress.md, which claimed a January 2025 bitstream and an August 2024
+firmware as if both were current.
+
+The FPGA half now needs a Gowin run to be worth anything.  That is the
+board session.

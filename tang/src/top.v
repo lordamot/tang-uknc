@@ -1,12 +1,12 @@
 /*
-IO_LOC "PA_EN" 51;
-IO_PORT "PA_EN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "HP_DIN" 54;
-IO_PORT "HP_DIN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "HP_WS" 55;
-IO_PORT "HP_WS" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "HP_BCK" 56;
+IO_LOC "HP_BCK" 71;
 IO_PORT "HP_BCK" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "HP_WS" 72;
+IO_PORT "HP_WS" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "HP_DIN" 73;
+IO_PORT "HP_DIN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "PA_EN" 74;
+IO_PORT "PA_EN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
 */
 /*
 IO_LOC "LCD_B[4]" 27;
@@ -87,11 +87,13 @@ module top(
     O_sdram_ba,
     IO_sdram_dq,
 
-    spi_io_ss,
-    spi_io_clk,
-    spi_io_din,
-    spi_io_dout,
-    mcu_intn
+    m0s,
+
+    spi_csn,
+    spi_sclk,
+    spi_dat,
+    spi_dir,
+    spi_irqn
 );
 input         clk27;
 input  [ 1:0] buts ;
@@ -129,18 +131,23 @@ output [10:0] O_sdram_addr ;
 output [ 1:0] O_sdram_ba   ;
 inout  [31:0] IO_sdram_dq  ;
 
-input         spi_io_ss  ;
-input         spi_io_clk ;
-input         spi_io_din ;
-output reg    spi_io_dout;
-output        mcu_intn   ;
+// MCU link, wired as MiSTeryNano wires it.  Two MCUs can be attached at
+// the same time: an external BL616 / M0S Dock on the m0s bus, and the Tang
+// Nano 20k's own on-board BL616 on the five dedicated pins.  The FPGA's
+// outputs are driven to both; its inputs follow whichever one answers
+// first.  See the mux further down, next to mcu_spi.
+inout  [ 4:0] m0s        ;  // external: 0 miso, 1 mosi, 2 csn, 3 sclk, 4 irqn
+
+input         spi_csn    ;  // internal BL616, chip select
+input         spi_sclk   ;  // internal BL616, clock
+input         spi_dat    ;  // internal BL616, MCU -> FPGA
+output        spi_dir    ;  // internal BL616, FPGA -> MCU
+output        spi_irqn   ;  // internal BL616, interrupt out
 //------------------------------------------------------------//
 assign O_sdram_dqm[ 3: 2] = 2'b11   ;
 assign IO_sdram_dq[31:16] = 16'hZZZZ;
 assign O_sdram_cke        = 1'b1    ;
 assign PA_EN              = 1'b1    ;
-
-assign mcu_intn = int_out_n;
 
 //------------------------------------------------------------//
 reg  [23:0]count_rst = 0                ;
@@ -345,6 +352,32 @@ wire  [7:0] mcu_dout      ;
 wire        hid_int       ;
 wire        sdc_int       ;
 wire  [7:0] int_ack       ;
+
+//------------------------------------------------------------//
+//  Which BL616 is talking
+//------------------------------------------------------------//
+// intn and dout leave the FPGA, so they simply go to both MCU ports - it
+// costs nothing to drive a port with nothing on it.  din, ss and clk come
+// in, so exactly one source has to be selected.  The internal BL616 is the
+// default; the first time the external one pulls its chip select low the
+// inputs switch over to the m0s bus and stay there.  That is MiSTeryNano's
+// own rule, and it is why an M0S Dock needs no build option or jumper.
+wire        spi_io_dout;
+wire        int_out_n  ;
+
+assign spi_dir  = spi_io_dout;
+assign spi_irqn = int_out_n  ;
+assign m0s[4:0] = { int_out_n, 3'bzzz, spi_io_dout };
+
+reg         spi_ext;
+always @(posedge mist_clk or negedge n_all_rst) begin
+    if(!n_all_rst)      spi_ext <= 1'b0;
+    else if(!m0s[2])    spi_ext <= 1'b1;
+end
+
+wire spi_io_din = spi_ext ? m0s[1] : spi_dat ;
+wire spi_io_ss  = spi_ext ? m0s[2] : spi_csn ;
+wire spi_io_clk = spi_ext ? m0s[3] : spi_sclk;
 
 mcu_spi msp1(
     .clk           (      mist_clk),
@@ -783,7 +816,10 @@ vp1_128fdd vp128(
 //------------------------------------------------------------//
 wire [10:0] left_channel ;
 wire [10:0] right_channel;
-wire [11:0] mono_channel ;
+wire [11:0] mono_channel ;   // driven by aberrant, no longer mixed - the
+                             // audio path is stereo now.  Left connected
+                             // because it is what a mono menu option would
+                             // use, not because anything reads it today.
 
 aberrant ay1(
    .ppu_vm_clk_p (         ppuclk_n),
@@ -911,37 +947,70 @@ vp065 dd2(
    .pin_ac_o     (                 )
 );
 //------------------------------------------------------------//
-reg  [15:0] volume_data = 16'd0;
+// aberrant.v pans the two AYs the usual ABC way - l_channel is A + B/2 and
+// r_channel is C + B/2 - and until now only m_channel was used, so both
+// I2S slots got the same word and the panning was thrown away.  The two
+// channels are 11 bits against mono's 12, so they are shifted up one place
+// further to keep the same full-scale point.  The beeper is one bit and
+// belongs in the middle, so it goes into both.
+wire [15:0] ay_left  = {2'd0, left_channel,  3'd0};
+wire [15:0] ay_right = {2'd0, right_channel, 3'd0};
+wire [15:0] beeper   = {4'd0, sound, 11'd0};
+
+reg  [15:0] volume_data_l = 16'd0;
+reg  [15:0] volume_data_r = 16'd0;
 
 always @(*)
     case(system_volume)
-    'b00 : volume_data <= 16'd0;
-    'b01 : volume_data <= ({2'd0, mono_channel, 2'd0}+{4'd0, sound, 11'd0});
-    'b10 : volume_data <= ({2'd0, mono_channel, 2'd0}+{4'd0, sound, 11'd0})<<1;
-    'b11 : volume_data <= ({2'd0, mono_channel, 2'd0}+{4'd0, sound, 11'd0})<<2;
+    'b00 : begin volume_data_l =  16'd0;
+                 volume_data_r =  16'd0;                  end
+    'b01 : begin volume_data_l =  (ay_left  + beeper);
+                 volume_data_r =  (ay_right + beeper);    end
+    'b10 : begin volume_data_l = ((ay_left  + beeper)<<1);
+                 volume_data_r = ((ay_right + beeper)<<1);end
+    'b11 : begin volume_data_l = ((ay_left  + beeper)<<2);
+                 volume_data_r = ((ay_right + beeper)<<2);end
     endcase
 //------------------------------------------------------------//
-wire [15:0] data_aud  ;
+// One FIFO per channel.  fifo_audio is 16 bits wide and regenerating it as
+// 32 would mean an IP Core Generator run on the operator's machine, so the
+// second channel gets a second instance of the same core instead.  Both are
+// read on the same strobe, so they stay in step; audio_drive picks which
+// word goes out in which I2S slot.
+wire [15:0] data_aud_l;
+wire [15:0] data_aud_r;
 wire        isread_aud;
-wire        Empty_aud ;
-wire        Full_aud  ;
+wire        Empty_aud_l, Full_aud_l;
+wire        Empty_aud_r, Full_aud_r;
 
 fifo_audio abf1(
-    .Data (volume_data),
-    .WrClk(   ppuclk_p),
-    .RdClk( isread_aud),
-    .WrEn (       1'b1),
-    .RdEn (       1'b1),
-    .Q    (   data_aud),
-    .Empty(  Empty_aud),
-    .Full (   Full_aud)
+    .Data (volume_data_l),
+    .WrClk(     ppuclk_p),
+    .RdClk(   isread_aud),
+    .WrEn (         1'b1),
+    .RdEn (         1'b1),
+    .Q    (   data_aud_l),
+    .Empty(  Empty_aud_l),
+    .Full (   Full_aud_l)
+);
+
+fifo_audio abf2(
+    .Data (volume_data_r),
+    .WrClk(     ppuclk_p),
+    .RdClk(   isread_aud),
+    .WrEn (         1'b1),
+    .RdEn (         1'b1),
+    .Q    (   data_aud_r),
+    .Empty(  Empty_aud_r),
+    .Full (   Full_aud_r)
 );
 
 audio_drive ad1(
     .clk_1p536m(  ppuclk_p),
     .rst_n     (   sys_rst),
 
-    .idata     (  data_aud),
+    .idata     (data_aud_l),
+    .idata_rgt (data_aud_r),
     .req       (isread_aud), /// fifo_empty/fifo_rd
 
     .HP_BCK    (    HP_BCK),

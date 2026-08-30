@@ -424,16 +424,28 @@ static void menu_goto_form(menu_t *menu, int form, int entry) {
   menu->offset = 0;
 }
 
+// Indexed by core_id, so the order here has to match the CORE_ID_*
+// defines in sysctrl.h and not the order the cores were written in.
+// CORE_ID_VIC20 is 0x10 and cannot be an index into this - it is handled
+// separately in settings_file_name() below.
 static const char *settings_file[] = {
-  NULL,
-  CARD_MOUNTPOINT "/atarist.ini",  // core id = 1
-  CARD_MOUNTPOINT "/c64.ini",      // core id = 2
-  CARD_MOUNTPOINT "/uneon.ini",    // core id = 3
-  CARD_MOUNTPOINT "/vic20.ini",    // core id = 4
-  CARD_MOUNTPOINT "/amiga.ini",    // core id = 5
-  CARD_MOUNTPOINT "/uknc.ini"      // core id = 6
-  CARD_MOUNTPOINT "/agat9.ini"     // core id = 7
+  NULL,                            // core id = 0  CORE_ID_UNKNOWN
+  CARD_MOUNTPOINT "/atarist.ini",  // core id = 1  CORE_ID_ATARI_ST
+  CARD_MOUNTPOINT "/c64.ini",      // core id = 2  CORE_ID_C64
+  CARD_MOUNTPOINT "/uneon.ini",    // core id = 3  CORE_ID_UNEON
+  CARD_MOUNTPOINT "/amiga.ini",    // core id = 4  CORE_ID_AMIGA
+  CARD_MOUNTPOINT "/uknc.ini",     // core id = 5  CORE_ID_UKNC
+  CARD_MOUNTPOINT "/agat9.ini"     // core id = 6  CORE_ID_AGAT9
 };
+
+// Returns NULL for a core with no settings file of its own, which both
+// callers check: opening NULL would take FatFs down.
+static const char *settings_file_name(void) {
+  if(core_id == CORE_ID_VIC20) return CARD_MOUNTPOINT "/vic20.ini";
+  if(core_id < sizeof(settings_file)/sizeof(settings_file[0]))
+    return settings_file[core_id];
+  return NULL;
+}
 
 static int iswhite(char c) {
   return c == ' ' || c == '\r' || c == '\n' || c == '\t';
@@ -445,7 +457,9 @@ static int menu_settings_load(menu_t *menu) {
   sdc_lock();  // get exclusive access to the file system
 
   FIL fil;
-  if(f_open(&fil, settings_file[core_id], FA_OPEN_EXISTING | FA_READ) == FR_OK) {    
+  const char *fname = settings_file_name();
+  if(!fname) { sdc_unlock(); return 0; }
+  if(f_open(&fil, fname, FA_OPEN_EXISTING | FA_READ) == FR_OK) {    
     char buffer[FF_LFN_BUF+10];
 
     printf("Settings file opened\r\n");
@@ -524,7 +538,7 @@ static int menu_settings_load(menu_t *menu) {
     }
     f_close(&fil);
   } else {
-    printf("Error opening file %s\r\n", settings_file[core_id]);
+    printf("Error opening file %s\r\n", fname);
     sdc_unlock();
     return -1;
   }
@@ -540,7 +554,9 @@ static void menu_settings_save(menu_t *menu) {
   
   // saving does not work, yet, as there is no SD card write support by now
   FIL file;
-  if(f_open(&file, settings_file[core_id], FA_WRITE | FA_CREATE_ALWAYS) == FR_OK) {
+  const char *fname = settings_file_name();
+  if(!fname) { sdc_unlock(); return; }
+  if(f_open(&file, fname, FA_WRITE | FA_CREATE_ALWAYS) == FR_OK) {
     f_puts("; MiSTeryNano settings\n", &file);
 
     // write variable values

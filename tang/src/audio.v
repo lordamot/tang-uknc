@@ -3,7 +3,8 @@ module audio_drive(
     input        clk_1p536m,//bit时钟，每个采样点占32个clk_1p536m(左右声道各16)
     input        rst_n     ,//低电平有效异步复位信号
     //用户数据接口
-    input [15:0] idata     ,
+    input [15:0] idata     ,//left  channel sample
+    input [15:0] idata_rgt ,//right channel sample
     output       req       ,//数据请求信号，可接外部FIFO的读请求(为避免空读，尽量和!fifo_empty相与后作为fifo_rd)
     //audio接口
     output       HP_BCK   ,//同clk_1p536m
@@ -45,7 +46,10 @@ if(!rst_n)
 else
     begin
     req_r1  <= req_r;
-    idata_r <= req_r1?idata:idata_r<<1;
+    // b_cnt is 2 on the load for the WS=0 slot and 18 on the load for
+    // WS=1, so bit 4 says which channel is being loaded.  Feeding the same
+    // word to both, as this did before, is what made the AY mono.
+    idata_r <= req_r1?(b_cnt[4]?idata_rgt:idata):idata_r<<1;
     end
 end
 //HP_DIN_r

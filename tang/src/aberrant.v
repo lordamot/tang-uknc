@@ -35,7 +35,15 @@ output [11:0]m_channel;
 //---------------------------------------------------------------------------------
 // Chipselect 177130/2
 //---------------------------------------------------------------------------------
-wire ceppu = ~(|((ppu_wbm_adr_i[15:3] ^ 13'o17736) & 13'o17736));
+// The mask was 13'o17736, which leaves two bits of the compare
+// don't-care: adr[3] (bit 0 of this field) and adr[9] (bit 6).  adr[3]
+// is deliberate - it is why 0177370-0177377 answers as well as
+// 0177360-0177367.  adr[9] was not: it also matched 0177760-0177777,
+// inside MX2-01's 0177700-0177777, and although the priority mux in
+// top.v hides that on reads, a write up there still clocked bdir/bc into
+// the AYs.  13'o17776 clears only bit 0, so adr[9] is compared and the
+// decode is now 0177360-0177377 and nothing else.
+wire ceppu = ~(|((ppu_wbm_adr_i[15:3] ^ 13'o17736) & 13'o17776));
 //---------------------------------------------------------------------------------
 assign ppu_wbm_ack_o = ceppu && ppu_wbm_stb_i;
 

@@ -1,0 +1,62 @@
+you fallen in a loop. here is what needs to be done actually: 1. fix cpu vhdl rare bug https://github.com/1801BM1/cpu11/issues/31 2. add aberrant sound module into here. 3. add disk loads and especially kkve with osd
+
+****
+
+Item 1 is done.
+
+Upstream issue #31 is the dc_fl bug in the VM2 predecoder.  dc_fl was
+formed from the registered copies of the exchange-type flags that choose
+the bus operation - R, W or RMW - and those are predecoder outputs that
+can change on the same edge as dc_fl itself, so in a synchronous model it
+latched the previous clock's state.  ix[0], the RMW flag, is loaded from
+it, so an inc (PC)+ following an instruction that had set the exchange
+type to read - upstream's test uses cmp #1, #1 - read the prefetch
+register instead of doing the read-modify-write.
+
+It was fixed upstream on 22 August 2026, commit e057663, "vm2: fix
+instruction pre-decoder dc_mop flags", which is four days after the issue
+and was not there when this repository's copy was taken.  The patch
+touches one line in vm2_wb.v:
+
+  -assign dc_fl = (ir_stb ? pld[10] : ~dc_fb) & ((ir_stb & dc_bi) | (dc_iord & ~dc_iowr));
+  +assign dc_fl = ir_stb ? pld[10] & (pld[5] | (pld[4] & ~pld[3])) :
+  +                        ~dc_fb & (dc_iord & ~dc_iowr);
+
+The ir_stb branch now reads the predecoder outputs directly instead of
+their registered copies.  Applied verbatim to tang/src/wm2wb/vm2_wb.v with
+a comment recording where it came from and why.  It is Verilog, not VHDL -
+the VHDL in this tree is the unused AY line under tang/src/ay/.
+
+Both processors are this same module, so it lands on the CPU and the PPU
+alike.  Lint is clean and the machine boots in simulation with the timings
+unchanged, which is the regression that matters.  It does not change the
+two open oddities from the last exchange: the read-after-write mismatches
+that start at 1.037 s and the PPU halting the CPU at 1.047 s are both
+still exactly where they were.
+
+Our copy of the core is from October 2023 and still predates three other
+upstream fixes: 8d097ae (Aug 2024, a non-blocking assignment in the
+prefetch), and abe8b68 and 2f765b4 (Dec 2023, shadow PSW/PC in halt mode,
+and the interrupt-acknowledge timeout vector).  None applied - say if they
+should be.
+
+Items 2 and 3 need a word from you, because both names mean something
+already present or something I cannot identify.
+
+On the sound: aberrant.v is already in the design and already in the
+build.  It is instantiated in top.v as ay1 on the PPU bus, it holds two
+YM2149s, and its m_channel is summed with the beeper into volume_data and
+sent through fifo_audio to the I2S driver.  What is NOT connected is its
+stereo: l_channel and r_channel are declared in top.v, driven by the
+module, and read by nothing at all, so the AY plays mono and the ABC/ACB
+panning is thrown away.  If "add aberrant sound module" means wiring that
+stereo through to the I2S driver, that is a clear job and I can do it.  If
+it means something else - a second sound module, or bringing the audio
+into the simulation so it can be checked without a board - say which.
+
+On item 3: I cannot work out what kkve is.  Disk loading through the OSD
+already exists for four .dsk floppies via fdd/fdd4.v and the MCU's menu.
+Searching turned up КЦГД, КГД and CDR as УКНЦ controller names but nothing
+matching kkve.  Spell it out and it gets done.
+
+Nothing was committed.

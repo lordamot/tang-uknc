@@ -1,0 +1,111 @@
+apply remaining fixes, add stereo output
+
+****
+
+Both done, and fixing the stereo turned up a testbench bug that had been
+quietly invalidating everything.
+
+The three remaining upstream VM2 fixes are in, taken verbatim from
+1801BM1/cpu11 with a comment each recording where they came from:
+
+8d097ae (Aug 2024) - bir_fix was assigned with = inside a clocked block.
+Upstream calls it a syntax issue with no synthesis impact; taken to stay in
+step.
+
+abe8b68 (Dec 2023) - shadow PSW and PC update in halt mode.  cpsw_stb
+tested psw[] rather than psw_rc[], so the write that clears PSW[7] to let
+interrupts in did not itself unfreeze the shadow registers, and an
+interrupt taken on that very write stacked stale values and returned to the
+wrong place.
+
+2f765b4 (Dec 2023) - interrupt acknowledge timeout vector.  A bus timeout
+during an IAKO cycle has to raise the halt-mode exception on vector 274; it
+raised the ordinary bus exception on vector 4, because the IAKO flag was no
+longer held when the interrupt matrix looked at its inputs.  The same
+commit adds tadone to stop repeated abort requests turning it into the
+double timeout exception on vector 174.
+
+With all four VM2 fixes in, lint is clean and the machine boots in
+simulation with unchanged timings.
+
+The stereo.  aberrant.v already pans the two AYs the usual way - l_channel
+is A + B/2, r_channel is C + B/2 - and top.v mixed only m_channel, so both
+I2S slots got the same word and the panning was thrown away.  top.v now
+builds a left and a right mix, each with its own fifo_audio instance, and
+audio.v picks which word goes into which slot from b_cnt[4], which is 0 on
+the load for the WS=0 slot and 1 on the load for WS=1.  The channels are 11
+bits against mono's 12, so they shift up one place further to keep the same
+full-scale point, and the one-bit beeper is centre and goes into both.  A
+second instance of the same FIFO core costs one more BSRAM block and avoids
+an IP Core Generator run; regenerating fifo_audio at 32 bits wide would be
+tidier if BSRAM ever gets tight.
+
+To check it, the testbench now decodes I2S off the pin, which is the only
+way to tell a stereo path from a mono one without headphones.  And that is
+where it got interesting, because the first check said silence.
+
+The audio path was fine.  The testbench's SPI master was not.  mcu_spi.v
+samples MOSI on always @(negedge spi_io_clk), and the master assigned the
+next bit at the same timestamp as that edge - a delta-cycle race the slave
+lost every single time.  Every byte arrived shifted one bit left: 0x04
+became 0x08, and "R" (0x52) became 0xA4.  So no configuration value ever
+matched its letter and the machine was never configured at all.  It ran
+only because Verilator zero-initialises system_reset, and the volume stayed
+at mute, which is why the audio check saw nothing.  The status command
+survived the whole time because it is 0x00, and 0x00 shifted left is still
+0x00 - so the handshake looked perfect and reported the right core id.
+
+Fixed with a hold time after the falling edge.  Bytes now arrive intact -
+cmd=04 id=52 val=03, then 41/01, then 50/00 - and +SPITRACE prints what
+sysctrl actually receives.
+
+That changed the machine's behaviour, which is the point:
+
+  before   R177716 100000 -> 100020 at 1.047 s   (PPU halts the CPU)
+           read-after-write: 156579 checked, 201 wrong
+  after    no halt at all
+           read-after-write: 71766 checked, 31 wrong
+
+So the halt was an artefact of a machine that had never been told to run
+properly.  The stereo then verifies at the pin: forcing two different
+constants onto the panned outputs gives 5945 of 5970 I2S frames carrying
+sound with L different from R in every one; without the force the machine
+is silent, which it genuinely is - nothing in it plays anything during
+these runs.
+
+Still open, and now down to two things: 31 read-after-write mismatches in a
+handful of addresses around 070020 that start after the first second, and a
+screen that is still black at 1.4 s.
+
+Lint clean, firmware builds, nothing committed, nothing on hardware.
+
+And then, with the machine finally being configured, the screen came up.
+
+make frames RUN_MS=1400 PPM_FROM=1200 now gives a frame with white and blue
+on black:
+
+  СТАРТОВЫЙ ТЕСТ
+  - ошибка ОЗУ ЦП
+
+The start-up test, reporting a CPU RAM error.  Which is exactly what the
+read-after-write check has been saying: the mismatches are nearly all in
+bank 1 - the CPU's RAM - around 070020-070024.  The machine's own
+diagnostic and the testbench's independent check agree, which is the first
+time anything here has been corroborated by two things at once.
+
+The check needed rekeying before that number could be trusted, and it took
+three attempts.  sdram2.v fetches from BOTH banks in every processor slot -
+bank 0 is the PPU's own RAM, bank 1 is the CPU's - and the four-byte mask
+says which half of the 32-bit port word means anything: 1100 is the low
+half and bank 0, 0011 the high half and bank 1.  Bank 1 is reachable from
+both ports, which is how the PPU loads the CPU's memory and where the video
+reads the screen from.  Keying the shadow by port calls every cross-write a
+fault; keying it by bank is right, and took the coverage from 71766 checks
+to 1118476.  Still 31 wrong.
+
+Given that the last two faults were both in sim/ and not in tang/src/, the
+SDRAM model is the first suspect again: it does not implement
+auto-precharge, and its single read pipeline mixes the tail of one 4-word
+burst with the head of the next when the controller interleaves the two
+banks a few cycles apart.  That is the right shape for an occasional wrong
+word, and it is where I would look next.

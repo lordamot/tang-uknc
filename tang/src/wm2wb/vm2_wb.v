@@ -363,6 +363,7 @@ wire           ws_cend, ws_wait;       //
                                        //
 reg   [8:0]    qtim;                   // Q-bus/nINIT timer counter
 reg            tend;                   // Q-bus/nINIT timer counting end pulse
+reg            tadone;                 // suppress repetitive timeout aborts
 reg            tabort;                 // Q-bus false reply strobe
 reg            tevent;                 // Q-bus timeout exception request
 wire           tout;                   // Q-bus/nINIT timer 1/64 pulses
@@ -537,10 +538,19 @@ begin
    //
    // Q-bus false reply strobe
    //
-   if (!tena | tabort | tend)
+   if (!tena | tabort | tend | tadone)
       tabort <= 1'b0;
    else
       tabort <= ~tim_nrdy1 & qtim[0] & qtim[1] & qtim[4] & qtim[5];
+
+   //
+   // Suppress multiple timeout abort requests
+   //
+   if (!tena)
+      tadone <= 1'b0;
+   else
+      if (tabort)
+         tadone <= 1'b1;
 end
 
 always @(posedge vm_clk_p)
@@ -623,7 +633,23 @@ assign dc_j7 = ir_stb
 
 assign dc_i7  = (breg[2:0] == 3'b111);
 assign dc_bi  = pld[5];
-assign dc_fl  = (ir_stb ? pld[10] : ~dc_fb) & ((ir_stb & dc_bi) | (dc_iord & ~dc_iowr));
+//
+// Upstream 1801BM1/cpu11 commit e057663, "vm2: fix instruction pre-decoder
+// dc_mop flags" (22 Aug 2026), which closes issue #31.  dc_fl depends on
+// the exchange-type flags that pick the bus operation (R, W, RMW), and
+// those are predecoder outputs that can change on the same edge as dc_fl
+// itself - so in the synchronous models dc_fl latched the previous clock's
+// state instead of the current one.  ix[0] is loaded from it, so the RMW
+// flag came out stale and `inc (PC)+` after an instruction that had set
+// the exchange type to read (`cmp #1, #1` in the upstream test) read the
+// prefetch register instead of doing the read-modify-write.
+//
+// The fix takes the ir_stb branch straight off the predecoder outputs
+// pld[5], pld[4] and pld[3] rather than the registered dc_bi/dc_iord/
+// dc_iowr copies of them.
+//
+assign dc_fl  = ir_stb ? pld[10] & (pld[5] | (pld[4] & ~pld[3])) :
+                         ~dc_fb & (dc_iord & ~dc_iowr);
 assign dc_aux = dc_j7 | br_cmdrq;
 assign alt_cnst = (~dc_fb & plm[30]) | (dc_fb & plm[30] & plm[5] & plm[6]);
 
@@ -717,14 +743,14 @@ begin
       bir_fix <= 1'b0;
    else
       if (ir_stb)
-         bir_fix = (breg[14:12] != 3'o0)    // two ops instructions
-                 & (breg[14:12] != 3'o7)    //
-                 & (breg[8:6] == 3'o7)      // source is PC related
-                 & (breg[10:9] == 2'o1)     // source @PC or @-(PC) mode
-                 & (breg[2:0] != 3'o7)      // not PC related destination
-                 & (breg[5:3] != 3'o6)      // not E(Rn) destination
-                 & (breg[5:3] != 3'o7)      // not @E(Rn) destination
-                 & (VM2_CORE_FIX_PREFETCH != 0);
+         bir_fix <= (breg[14:12] != 3'o0)   // two ops instructions
+                  & (breg[14:12] != 3'o7)   //
+                  & (breg[8:6] == 3'o7)     // source is PC related
+                  & (breg[10:9] == 2'o1)    // source @PC or @-(PC) mode
+                  & (breg[2:0] != 3'o7)     // not PC related destination
+                  & (breg[5:3] != 3'o6)     // not E(Rn) destination
+                  & (breg[5:3] != 3'o7)     // not @E(Rn) destination
+                  & (VM2_CORE_FIX_PREFETCH != 0);
 end
 
 //______________________________________________________________________________
@@ -923,7 +949,19 @@ end
 
 always @(posedge vm_clk_p)
 begin
-   vec_stb <= wbi_stb_o & ~wbi_una_o;
+   //
+   // Upstream 1801BM1/cpu11 commit 2f765b4, "vm2: fix interrupt acknowledge
+   // timeout vector".  A bus timeout during an interrupt-acknowledge cycle
+   // has to raise the halt-mode exception on vector 274, not the ordinary
+   // bus exception on vector 4.  It did the wrong one because the IAKO
+   // cycle flag was no longer held when the interrupt matrix looked at its
+   // inputs.  Holding it while the timeout flags are active is the fix; the
+   // tadone flag above is the other half of the same commit, and stops the
+   // repeated abort requests that otherwise turned it into the double
+   // timeout exception on vector 174.
+   //
+   if (tovf_ack | tovf | ~tout_rq)
+      vec_stb <= wbi_stb_o & ~wbi_una_o;
    //
    // Interrupt requests acknowlegement and reset
    //
@@ -1506,7 +1544,16 @@ assign brd_wa     = wr2 & (plm_rn[4:0] == 5'b01111);
 assign psw_stb    = wr2 & ~plm[25];
 assign pswc_stb   = wr2 & ~plm[25] & ~plm[26];
 assign wr_psw     = psw_stb | (psw_wa & ~plm[8]);
-assign cpsw_stb   = (~psw[7] | ~psw[8]) & ((wr_psw & ~io_pswr) | (wb_wdone & io_pswr));
+//
+// Upstream 1801BM1/cpu11 commit abe8b68, "vm2: fix shadow PSW and PC update
+// in halt mode".  The shadow PSW/PC are frozen in halt mode to hold the
+// return vector, and unfrozen when PSW[7] is cleared to let interrupts in.
+// Testing psw[] rather than psw_rc[] means the very first write that clears
+// PSW[7] does not itself unfreeze them, so a pending interrupt taken on that
+// write stacks stale values and returns to the wrong place.  psw_rc is the
+// new value.
+//
+assign cpsw_stb   = (~psw_rc[7] | ~psw_rc[8]) & ((wr_psw & ~io_pswr) | (wb_wdone & io_pswr));
 assign pc_wr      = cpsw_stb | (pc1_wr & (~psw[7] | ~psw[8]) & (io_wr | ~io_pswr));
 assign pc1_wr     = (wr2 & wa_pc & ~io_rcdr) | word27 | (wr1 & io_rcdr & ~iopc_st[1]);
 

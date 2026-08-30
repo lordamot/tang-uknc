@@ -1,2 +1,8 @@
 .idea
 .vscode
+
+# Fetched toolchain and build products - see Makefile and tools/fetch.sh.
+/tools/
+/build/
+/sim/out/
+/mnano/build/

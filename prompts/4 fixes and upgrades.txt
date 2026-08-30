@@ -1,0 +1,121 @@
+lets do so we apply fixes and upgrades first - then physical device - ok?
+
+****
+
+Agreed, and asked which of four items to include - the SD card model in
+the simulation, the menu.c settings-file fixes, the AY chipselect, and an
+.sdc.  Answer: all four.
+
+Item 1 turned out not to be the item.  The plan was an SD card model,
+because the last exchange had named a missing one as the leading suspect
+for the PPU's trap loop.  Testing that guess before building on it was the
+right call, because it was wrong.
+
+Tracing the PPU's memory port showed it walking 070000 upward read-then-
+write for 45 ms, then dropping into a loop over 22 addresses: the trap
+vectors at 000000, 000002, 000030, 000032, a run of stack pushes, and
+022550.  Printing the data alongside the addresses showed the PPU writing
+000033 to 000450 and reading 000000 back nine microseconds later.  Memory
+was not holding what was written.
+
+The SDRAM model was storing it correctly - a trace on the model's own
+command decode showed the word going in and coming back out - and the
+tri-state data bus was carrying it, which was worth checking separately
+because Verilator's tri-state support is limited and this design drives
+the bus from a reg initialised to Z.  Zero words lost over 53 ms.
+
+The fault was one clock cycle, in sim/stubs/sdram_model.v.  The read data
+was driven from stage CAS of the latency pipeline instead of CAS-1.  Stage
+0 is loaded by a non-blocking assignment on the edge that carries the READ
+command, so it only becomes visible after that edge; driving from stage
+CAS put every word on the bus one clock after the controller had already
+sampled it.  Every read returned zero.  The PPU therefore found all its
+trap vectors zero, jumped to zero, executed zero as a HALT, trapped, and
+went round for ever - which looks exactly like a machine waiting on a
+device it does not have.
+
+One line changed, and the machine boots:
+
+  [tb] 45.29 ms  CPU DCLO released by the PPU
+  [tb] 45.29 ms  R177716 000040 -> 000000  (dclo=0 halt=0 aclo=1)
+  [tb] 45.54 ms  CPU ACLO released
+  [tb] 45.55 ms  CPU first bus cycle, addr 0360000
+
+Both processors then run - 225113 PPU and 1235221 CPU memory cycles over
+1.4 s - and video runs at 51 Hz.
+
+The testbench grew a read-after-write check as a result, on by default,
+because that is the check that would have found this in the first second
+rather than the second day.  A shadow copy of every word each processor
+writes, compared against what comes back.  It has to be one shadow per
+port, because the two processors have separate address spaces; a single
+array reports 90833 mismatches that are the check's own fault.
+
+So the SD card model itself was NOT built.  There is still no card in the
+simulation - sdcmd and sddat have pull-ups and nothing else, and sd_card's
+sdcmd_in/sddat_in, its ifdef VERILATOR split-port inputs, are not
+connected in top.v at all, which is where the two PINMISSING warnings in
+the lint come from.  Serving a floppy image would also need the MCU side
+of the protocol modelled, since the FPGA asks the MCU to translate sector
+numbers and the testbench's stand-in MCU only sends the three bytes that
+start the machine.  That is a real piece of work and it is not the next
+most valuable one, because the machine still does not draw a screen.
+
+Item 2, menu.c.  settings_file[] had three faults at once: a missing comma
+welding "/uknc.ini" and "/agat9.ini" into one string, an order that did
+not match the CORE_ID_ defines in sysctrl.h - so this core, id 5, read and
+wrote /sd/amiga.ini - and CORE_ID_VIC20 being 0x10 against an array of
+seven.  The table now follows sysctrl.h, and settings_file_name() handles
+VIC20 separately and bounds-checks the rest, returning NULL for a core
+with no settings file of its own.  Both callers check that NULL; opening
+it would have taken FatFs down.  The firmware builds.  It needs a reflash
+to take effect and has not been on hardware.
+
+Item 3, the AY chipselect.  Run over all 65536 addresses, the old mask
+13'o17736 leaves two bits of the compare don't-care and matches 32
+addresses: 0177360-0177377 and 0177760-0177777.  The second is inside
+MX2-01's range.  The mask is now 13'o17776, which compares adr[9] and
+leaves only adr[3] don't-care - 16 addresses, 0177360-0177377, verified
+the same way.  adr[3] stays don't-care on purpose: the two chips are
+picked by adr[2:1], not by adr[3].  The design lints clean and the machine
+boots with the same timings as before, which is a regression test that did
+not exist a day ago.
+
+Item 4, the .sdc.  tang/src/test003.sdc is written and is in the .gprj.
+It names the clocks and does nothing else: clk27 at 37.037 ns, and the
+four counter-bit clocks - clk_25, clk_6_25, clk_3_12, clk_dac - as
+generated clocks off clkram with their real divides of 2, 8, 16 and 32.
+The PLL outputs are deliberately left to be derived through the rPLL
+primitive rather than declared by hand, which would replace the derived
+clock and get clkoutp's phase wrong.  The two data-driven pseudo-clocks,
+curs_set and sd_img_mounted, are cut with false paths, which is an
+admission rather than a fix and is commented as one.
+
+It has never been through the Gowin timing analyser, because this host
+cannot run it.  Expect violations on the first run - that is the point of
+it - and the file says so at the top, along with what was deliberately
+left undone: input and output delays on the SDRAM pins, the same for TMDS,
+and the question of whether clk4 and clk_3_12 can honestly be declared
+asynchronous when the two processors talk over the wishbone.
+
+What is now open, and it may be one thing rather than three.  The
+read-after-write check is silent for the first 1.037 seconds and then is
+not - 201 mismatches, all inside 070020-070024 and 002000 - and ten
+milliseconds after they start the PPU sets bit 4 of R177716 and halts the
+CPU.  The screen is black throughout.  A remapping is the obvious guess
+for the mismatches, which would make them correct behaviour wrongly
+reported; dropping the other port's shadow entry on every write was tried,
+to rule out the PPU writing the CPU's bank, and changed the count by
+nothing.
+
+Also fixed along the way, all in the harness rather than the machine: make
+wave produced no VCD at all, because Verilator's --binary ignores
+$dumpfile unless the model is built with --trace, so there is now a second
+binary that only make wave depends on; make frames wrote ASCII P3 at a
+hardcoded 1024 wide when the active area is 1280x600, and now writes
+binary P6 at the measured width; and +PPM_FROM, which skips the frames
+before a given millisecond, had to be a delay rather than a comparison
+against $time, because n * 1000000000 overflows a 32-bit integer at three
+seconds and silently disables itself.
+
+Nothing was committed and nothing has been on hardware.
