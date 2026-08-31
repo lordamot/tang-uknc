@@ -90,6 +90,10 @@ module top(
     m0s
 );
 input         clk27;
+// buts[0] is S1 and forces a reset; buts[1] is S2 and is read nowhere -
+// the pin stays constrained in the .cst so the port keeps its width.
+// They read 0 released and 1 pressed, whatever PULL_MODE=UP suggests:
+// n_all_rst below only makes sense that way round.
 input  [ 1:0] buts ;
 output [ 5:0] leds ;
 
@@ -315,9 +319,6 @@ always @(posedge clkpix)begin
 // that touches Gowin primitives.  src/ip/dvi_tx is still in the project
 // and uninstantiated; putting it back is this instance and nothing else.
 wire [9:0] tmds_ch0, tmds_ch1, tmds_ch2;
-wire       hdmi_audio_ovf;
-wire [15:0] hdmi_audio_dropc;
-wire [15:0] hdmi_audio_pktc;
 // The samples come from the volume stage further down; they are picked up
 // through these two wires so that block can stay where the author put it.
 wire [15:0] hdmi_audio_l;
@@ -338,9 +339,11 @@ hdmi_tx hdmi1(
     .O_tmds_ch0   (     tmds_ch0),
     .O_tmds_ch1   (     tmds_ch1),
     .O_tmds_ch2   (     tmds_ch2),
-    .O_audio_ovf  (hdmi_audio_ovf),
-    .O_audio_dropc(hdmi_audio_dropc),
-    .O_audio_pktc (hdmi_audio_pktc)
+    // The three O_audio_* counters are diagnostic only and go nowhere here;
+    // sim/tb/tb_top.v still reads them.
+    .O_audio_ovf  (             ),
+    .O_audio_dropc(             ),
+    .O_audio_pktc (             )
 );
 
 hdmi_serdes hdmi_ser(
@@ -930,8 +933,8 @@ vp1_120 vp1
 );
 
 //------------------------------------------------------------//
-// The UKNC's own C2 serial port.  It does not reach pin 69 any more - the
-// diagnostic monitor below has the line; see there.
+// The UKNC's own C2 serial port.  It drives pin 69 - see the assign at the
+// end of the mixer block below.
 wire vp65_uart_tx;
 
 vp065 dd2(
@@ -987,77 +990,42 @@ wire [15:0] mix    = ay_mix + beeper;              // 0..34744, clip() catches
                                                   // chips and the beeper all
                                                   // peak at once
 
-// DC blocker.
+// The sum goes out unipolar, as it is.  That is measured, not assumed.
 //
-// Every AY channel is UNIPOLAR - it sits between 0 and 255 and never goes
-// negative - so the sum of nine of them carries a large steady offset, and
-// so does the beeper, which is 0 or 4096.  On the real module a coupling
-// capacitor takes that out before the amplifier.  Here it went into the
-// sample, and a television meets it as DC on its speaker amplifier: the
-// offset grows with the volume setting, so two-thirds distorts and full
-// volume trips the protection and mutes.  That is why the mix sounded
-// clean quiet, overloaded louder, and vanished at 100%, while the peak
-// never came near the 32767 a signed sample allows.
-//
-// One pole, the digital equivalent of that capacitor.  dc_acc holds the
-// running mean in 18.15 fixed point; at the 3.1339 MHz PPU clock a shift
-// of 15 puts the corner at 3.1339e6 / (2*pi*2^15) = 15 Hz, well below
-// anything the machine plays and slow enough not to chase the waveform.
-localparam integer DCB = 15;
-
-reg  signed [33:0] dc_acc = 34'sd0;
-wire signed [17:0] dc_x    = $signed({2'b00, mix});
-wire signed [17:0] dc_mean = dc_acc[32:15];
-wire signed [17:0] dc_out  = dc_x - dc_mean;
-
-always @(posedge ppuclk_p) dc_acc <= dc_acc + dc_out;
-
-// The result is centred on zero and swings about +/-22456 at worst, inside
-// a signed sample, but the clamp catches the settling transient after a
-// reset rather than letting it wrap.
-function signed [15:0] clip;
-    input signed [17:0] v;
-    clip = (v >  18'sd32767) ?  16'sh7FFF :
-           (v < -18'sd32767) ? -16'sh7FFF : v[15:0];
-endfunction
-
-// Button S2 bypasses the blocker, so one bitstream carries both answers:
-// dc_x is the raw unipolar sum, bit for bit what the build before this one
-// sent, and dc_out is that sum with the mean taken out.  Which one is in
-// use is reported in the diagnostic line, so the two can be told apart
-// from the serial rather than from memory.
-//
-// The buttons read 0 released and 1 pressed, whatever PULL_MODE=UP in the
-// .cst suggests - n_all_rst above only makes sense that way round, since
-// pressing S1 has to be what forces a reset.  So released is the design as
-// it stands and S2 held is the sound of the build before it.
-// The raw unipolar sum is the design.  The DC blocker stays in the source
-// and out of the path, on S2, because it may yet be right for some other
-// sink - but it is not right for this one, and the reason is measured.
-//
-// Four states were put on the board, each differing from the working one
-// in a single property:
+// Every AY channel sits between 0 and 255 and never goes negative, so the
+// sum of nine of them carries a large steady offset, and so does the
+// beeper.  A DC blocker used to take that out here, on the reasoning that
+// a real module has a coupling capacitor in front of its amplifier and
+// this one did not.  Four states went on the board, each one property
+// apart from the working one:
 //
 //   raw sum, 0..N, quiescent exactly 0        PLAYS
 //   raw sum minus a constant 512              silent - dips below zero
 //   DC blocked, bipolar, quiescent 0          silent - dips below zero
 //   DC blocked plus 8192, never negative      silent - permanent offset
 //
-// The third and fourth have identical AC content and comparable amplitude
-// to the first; the wire carried a clean 8192 +/- 580 that the sink
-// ignored while it played 510 +/- 510 from the raw path.  So it is not
-// amplitude, and the last test settles the rest: subtracting 512 changes
-// nothing but the sign of the troughs and it silences everything.
+// The third and fourth have the same AC content and comparable amplitude
+// to the first, so it is not amplitude; the second differs from the first
+// in nothing but the sign of its troughs, so it is not offset either.  No
+// mechanism is known, but this sink takes the raw sum and nothing else,
+// and the hardware being modelled has that capacitor anyway.  The
+// blocker's own motive - the mean steps with the program material - is
+// contained by keeping the beeper at 8192 rather than 16384, which is the
+// level that mutes the sink at full volume.
 //
-// Which leaves the obvious thing we were solving a problem the hardware
-// already solves.  A real MC0511 drives a unipolar sum through a coupling
-// capacitor, and a television has one too; blocking the DC digitally was
-// doing the capacitor's job badly and in front of a sink that will not
-// take the result.  The one defect that remains is the blocker's original
-// motive - the mean steps with the program material - and it is contained
-// by keeping the beeper at 8192 rather than 16384, which is the level that
-// tested clean at 66% and 100%.
-wire signed [17:0] dc_amp = buts[1] ? dc_out : dc_x;
+// The blocker was carried on S2, so that one bitstream held both answers.
+// That bypass and the blocker behind it are both gone; `git show` this
+// commit's parent for them.  S2 does nothing now.
+wire signed [17:0] snd_amp = $signed({2'b00, mix});
+
+// mix reaches 34744 when three chips and the beeper all peak at once,
+// which is past what a signed sample holds, so the corner is clipped
+// rather than allowed to wrap.
+function signed [15:0] clip;
+    input signed [17:0] v;
+    clip = (v >  18'sd32767) ?  16'sh7FFF :
+           (v < -18'sd32767) ? -16'sh7FFF : v[15:0];
+endfunction
 
 // REGISTERED, and that is the whole fix, not a tidy-up.
 //
@@ -1066,13 +1034,13 @@ wire signed [17:0] dc_amp = buts[1] ? dc_out : dc_x;
 // mixer runs on.  So the encoder could take the value while the adders
 // were still settling and send a carry-chain intermediate as a sample.
 //
-// Nothing in the diagnostics could see it: the probes sample these same
-// wires on posedge ppuclk_p, when everything has settled, so they reported
-// a clean +/-3300 waveform while the sink was being fed spikes.  What gave
-// it away was the board: with the blocker bypassed and the volume low the
-// AY played, and it went silent as soon as either the DC blocker (a 34-bit
-// accumulator, an 18-bit subtract and a clip behind the sample) or full
-// volume was in the path.  Depth of logic, not level of signal.
+// Nothing on the diagnostic line could see it: those probes sampled these
+// same wires on posedge ppuclk_p, when everything has settled, so they
+// reported a clean +/-3300 waveform while the sink was being fed spikes.
+// What gave it away was the board: with the DC blocker out of the path and
+// the volume low the AY played, and it went silent as soon as either the
+// blocker (a 34-bit accumulator, an 18-bit subtract and a clip behind the
+// sample) or full volume was in it.  Depth of logic, not level of signal.
 //
 // It was consistent rather than intermittent because the old divider took
 // a sample every 1024 pixel clocks and ppuclk_p is clkram/16: 1024 = 64*16,
@@ -1088,9 +1056,9 @@ reg  [15:0] volume_data_r = 16'd0;
 always @(posedge ppuclk_p)
     case(system_volume)
     'b00 : begin volume_data_l <= 16'd0;              volume_data_r <= 16'd0;              end
-    'b01 : begin volume_data_l <= clip(dc_amp >>> 2); volume_data_r <= clip(dc_amp >>> 2); end
-    'b10 : begin volume_data_l <= clip(dc_amp >>> 1); volume_data_r <= clip(dc_amp >>> 1); end
-    'b11 : begin volume_data_l <= clip(dc_amp);       volume_data_r <= clip(dc_amp);       end
+    'b01 : begin volume_data_l <= clip(snd_amp>>>2); volume_data_r <= clip(snd_amp>>>2); end
+    'b10 : begin volume_data_l <= clip(snd_amp>>>1); volume_data_r <= clip(snd_amp>>>1); end
+    'b11 : begin volume_data_l <= clip(snd_amp);     volume_data_r <= clip(snd_amp);     end
     endcase
 // The HDMI side takes the same post-volume words, and resamples them to
 // exactly 48 kHz with a phase accumulator - see src/hdmi/hdmi_tx.v.  It does not go through the FIFO
@@ -1099,169 +1067,11 @@ always @(posedge ppuclk_p)
 assign hdmi_audio_l = volume_data_l;
 assign hdmi_audio_r = volume_data_r;
 
-//------------------------------------------------------------//
-// Board diagnostics.
-//
-// Everything about a fault on this design has had to be inferred from a
-// picture and a loudspeaker, and the guesses that came out of that have
-// been wrong often enough to be expensive.  The serial console is the one
-// channel that can carry a number off a running board: uart_tx is pin 69
-// into the Tang's own BL616, which the host sees as /dev/ttyUSB1.  So the
-// monitor takes the line - vp65_uart_tx, the UKNC's own port, goes
-// nowhere, which costs nothing because no software here uses it, and
-// putting it back is the one assign at the end of this block.
-//
-// The events come off the PPU bus rather than out of the modules, so
-// neither xm2-01 nor aberrant had to be touched to be watched: a write
-// aberrant acked is an AY write, a write at 0177716 that xm2-01 acked is
-// the beeper register.  That also means the counters prove the ACK, which
-// is the thing a silent peripheral fails at first.
-//
-// The accumulators run on the PPU clock, next to the signals; dbgmon says
-// when to snapshot them by toggling a level, and reads the snapshot a
-// window later.  See dbg/dbgmon.v for why it is a level and not a pulse.
-wire dbg_win_tog;
-wire dbg_uart_tx;
-
-wire dbg_ppu_wr  = ppu_wbm_stb_o & ppu_wbm_wre_o;
-wire dbg_ay_hit  = dbg_ppu_wr & ppu_wbm_ack_i_abr;
-wire dbg_716_hit = dbg_ppu_wr & ppu_wbm_ack_i_xm2 &
-                   ({ppu_wbm_adr_o[15:1], 1'b0} == 16'o177716);
-
-reg  [ 2:0] dbg_togq  = 3'd0;
-reg         dbg_cyc_q = 1'b0;
-reg  [ 7:0] dbg_key_q = 8'd0;
-reg  [ 7:0] dbg_to_cnt= 8'd0;
-wire        dbg_ppu_cyc = ppu_wbm_stb_o;
-reg         dbg_ay_q  = 1'b0;
-reg         dbg_716_q = 1'b0;
-reg         dbg_snd_q = 1'b0;
-
-reg  [15:0] acc_716   = 16'd0;      // last word written to 0177716
-reg  [15:0] acc_716c  = 16'd0;      // writes to it this window
-reg  [15:0] acc_sndc  = 16'd0;      // edges of `sound` this window
-reg  [11:0] acc_mnmax = 12'd0;      // range of the nine summed AY channels
-reg  [11:0] acc_mnmin = 12'hfff;
-reg  [15:0] acc_ayc   = 16'd0;      // AY writes this window
-reg  [15:0] acc_ayadr = 16'd0;      // and the last of them
-reg  [15:0] acc_aydat = 16'd0;
-reg  [15:0] acc_ppuc  = 16'd0;      // PPU bus cycles this window - liveness
-reg  [15:0] acc_pputo = 16'd0;      // of which timed out with no ack
-reg  [15:0] acc_keyc  = 16'd0;      // keycode changes this window
-reg  signed [15:0] acc_vmax = 16'sh8000;   // range of the sample that goes out
-reg  signed [15:0] acc_vmin = 16'sh7fff;
-
-reg  [15:0] snp_716   = 16'd0;
-reg  [15:0] snp_716c  = 16'd0;
-reg  [15:0] snp_sndc  = 16'd0;
-reg  [11:0] snp_mnmax = 12'd0;
-reg  [11:0] snp_mnmin = 12'd0;
-reg  [15:0] snp_ayc   = 16'd0;
-reg  [15:0] snp_ayadr = 16'd0;
-reg  [15:0] snp_aydat = 16'd0;
-reg  [15:0] snp_ppuc  = 16'd0;
-reg  [15:0] snp_pputo = 16'd0;
-reg  [15:0] snp_keyc  = 16'd0;
-reg  signed [15:0] snp_vmax = 16'sd0;
-reg  signed [15:0] snp_vmin = 16'sd0;
-
-wire        dbg_latch = dbg_togq[2] ^ dbg_togq[1];
-wire signed [15:0] dbg_vol = $signed(volume_data_l);
-
-always @(posedge ppuclk_p) begin
-    dbg_togq  <= {dbg_togq[1:0], dbg_win_tog};
-    dbg_ay_q  <= dbg_ay_hit;
-    dbg_716_q <= dbg_716_hit;
-    dbg_snd_q <= sound;
-    dbg_cyc_q <= dbg_ppu_cyc;
-    dbg_key_q <= keycode;
-
-    // A PPU cycle that has had the strobe up for 64 clocks - 20 us, about
-    // what a 1801 waits - with nothing acking is a bus timeout, which is
-    // what an address no peripheral answers looks like from the outside.
-    // It counts once per cycle because the counter saturates above 63.
-    if (!ppu_wbm_stb_o || ppu_wbm_ack_i) dbg_to_cnt <= 8'd0;
-    else if (dbg_to_cnt != 8'hff)        dbg_to_cnt <= dbg_to_cnt + 8'd1;
-
-    if (dbg_latch) begin
-        snp_716   <= acc_716;                              // survives, not cleared
-        snp_716c  <= acc_716c;   acc_716c  <= 16'd0;
-        snp_sndc  <= acc_sndc;   acc_sndc  <= 16'd0;
-        snp_mnmax <= acc_mnmax;  acc_mnmax <= 12'd0;
-        snp_mnmin <= acc_mnmin;  acc_mnmin <= 12'hfff;
-        snp_vmax  <= acc_vmax;   acc_vmax  <= 16'sh8000;
-        snp_vmin  <= acc_vmin;   acc_vmin  <= 16'sh7fff;
-        snp_ayc   <= acc_ayc;    acc_ayc   <= 16'd0;
-        snp_ayadr <= acc_ayadr;
-        snp_aydat <= acc_aydat;
-        snp_ppuc  <= acc_ppuc;   acc_ppuc  <= 16'd0;
-        snp_pputo <= acc_pputo;  acc_pputo <= 16'd0;
-        snp_keyc  <= acc_keyc;   acc_keyc  <= 16'd0;
-    end else begin
-        if (dbg_716_hit & ~dbg_716_q) begin
-            acc_716  <= ppu_wbm_dat_o;
-            acc_716c <= acc_716c + 16'd1;
-        end
-        if (dbg_ay_hit & ~dbg_ay_q) begin
-            acc_ayadr <= {ppu_wbm_adr_o[15:1], 1'b0};
-            acc_aydat <= ppu_wbm_dat_o;
-            acc_ayc   <= acc_ayc + 16'd1;
-        end
-        if (sound ^ dbg_snd_q)          acc_sndc  <= acc_sndc + 16'd1;
-        if (dbg_ppu_cyc & ~dbg_cyc_q)   acc_ppuc  <= acc_ppuc + 16'd1;
-        if (dbg_to_cnt == 8'd63)        acc_pputo <= acc_pputo + 16'd1;
-        if (keycode != dbg_key_q)       acc_keyc  <= acc_keyc + 16'd1;
-        if (mono_channel > acc_mnmax)   acc_mnmax <= mono_channel;
-        if (mono_channel < acc_mnmin)   acc_mnmin <= mono_channel;
-        if (dbg_vol      > acc_vmax)    acc_vmax  <= dbg_vol;
-        if (dbg_vol      < acc_vmin)    acc_vmin  <= dbg_vol;
-    end
-end
-
-// Word 0 is a constant, so a reader can tell it has the line in step and
-// which format it is looking at.  tools/dbgmon.py names the rest.
-wire [16*18-1:0] dbg_probes = {
-    hdmi_audio_pktc,                                        // 17 HDMI audio packets sent
-    hdmi_audio_dropc,                                       // 16 HDMI samples dropped
-    snp_keyc,                                               // 15 keycode changes
-    snp_pputo,                                              // 14 PPU bus timeouts
-    snp_ppuc,                                               // 13 PPU bus cycles
-    16'hdb02,                                               // 12 end marker
-    {hdmi_audio_ovf, buts[1], 2'd0,
-                     system_volume, 2'd0, keycode},         // 11 status
-    snp_aydat,                                              // 10 last AY data
-    snp_ayadr,                                              //  9 last AY address
-    snp_ayc,                                                //  8 AY writes
-    snp_vmin,                                               //  7 sample min
-    snp_vmax,                                               //  6 sample max
-    {4'd0, snp_mnmin},                                      //  5 AY sum min
-    {4'd0, snp_mnmax},                                      //  4 AY sum max
-    snp_sndc,                                               //  3 beeper edges
-    snp_716c,                                               //  2 0177716 writes
-    snp_716,                                                //  1 0177716 value
-    16'hdb01                                                //  0 magic
-};
-
-dbgmon #(
-    .CLK_FRE(       50),
-    .BAUD   (   115200),
-    .NPROBE (       18),
-    .WIN    (  5000000)    // 100 ms at 50 MHz - ten lines a second
-) dbg (
-    .clk    (      clk_50),
-    // NOT sys_rst_n.  That name is a lie: it is high for the first 335 ms
-    // and low afterwards, and every module here takes it as `if (reset)`,
-    // active high.  sys_rst is its complement and is the active-low reset
-    // this module wants - low while the counter runs, high once it sticks.
-    .rst_n  (     sys_rst),
-    .probes (  dbg_probes),
-    .win_tog(dbg_win_tog),
-    .tx_pin ( dbg_uart_tx)
-);
-
-// One line to hand pin 69 back to the machine: vp65_uart_tx instead.
-assign uart_tx = dbg_uart_tx;
-//------------------------------------------------------------//
+// Pin 69 is the UKNC's own C2 serial port again.  A diagnostic monitor -
+// src/dbg/dbgmon.v, still in the project and instantiated nowhere - had the
+// line while the audio path was being chased, with about 160 lines of probe
+// accumulators here feeding it.  `git show` this commit's parent for them.
+assign uart_tx = vp65_uart_tx;
 
 // A diagnostic 1 kHz tone lived here, gated on buts[1], while the HDMI
 // audio was being chased.  It did its job - it proved the sink played

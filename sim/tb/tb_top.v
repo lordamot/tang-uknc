@@ -281,7 +281,7 @@ module tb_top;
                  rx_packets, rx_ecc_errs, rx_acr, rx_avi, rx_ai, rx_gcp,
                  rx_audio, rx_null);
         $display("[tb] hdmi audio: %0d samples, %0d with sound, %0d with L != R, overflow=%b",
-                 rx_audio, rx_aud_nonzero, rx_aud_stereo, uut.hdmi_audio_ovf);
+                 rx_audio, rx_aud_nonzero, rx_aud_stereo, uut.hdmi1.O_audio_ovf);
         $display("[tb] hdmi audio values: wire min %0d max %0d (%0d negative) | mixer min %0d max %0d",
                  rx_aud_min, rx_aud_max, rx_aud_neg, dut_aud_min, dut_aud_max);
         // The wire is sampled at 48 kHz and the mixer at 3.13 MHz, so the

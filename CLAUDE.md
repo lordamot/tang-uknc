@@ -37,8 +37,8 @@ four 800 KB floppies served out of `.dsk` files on the SD card; two
 AY-3-8910s and a one-bit beeper, out over both HDMI and I²S.
 
 ```
-Logic 47%   Register 30%   BSRAM 46%   PLL 2/2 (100%)     [Aug 2026 PnR]
-                             (44% / 25% without the diagnostic monitor)
+Logic 44%   Register 25%   BSRAM 48%   PLL 2/2 (100%)  [31 Aug 2026 PnR]
+      (47% / 30% / 46% in the run before, which had the diagnostic monitor)
 ```
 
 Key documentation: `.claude/docs/platform.md` (the machine: both address
@@ -214,9 +214,11 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   link had never been run on hardware, needs assembly 3921 or later, and
   costs the USB-JTAG bridge as well once you actually flash that chip.  So
   `uart_tx` is back on 69, `uart_rx` on 70, and 13/48/55/75/76/86 are
-  free.  Since Aug 2026 the pin carries the **diagnostic monitor** rather
-  than the VP-65 - see the `dbgmon` trap below - which does not change any
-  of this, only which module drives it.  `git show 36e8c2b` has the removed form.  **The FPGA design never
+  free.  For a fortnight in Aug 2026 the pin carried the **diagnostic
+  monitor** rather than the VP-65; that was removed on 31 Aug 2026 and
+  `uart_tx` is `vp65_uart_tx` again - see the `dbgmon` trap below.  Either
+  way it is one `assign` and it changes none of the above, only which
+  module drives the pin.  `git show 36e8c2b` has the removed form.  **The FPGA design never
   affected USB-C programming either way** - that is an FT2232 the on-board
   BL616 presents, independent of every user pin; only reflashing that
   BL616 takes it, and `howto.md` §5.5 is how to put it back.
@@ -242,16 +244,20 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   forever, and if that phase is the settling window then every sample is
   wrong, every time.  Anything crossing from the mixer to the encoder gets
   a flop.
-- **The board's diagnostic monitor owns pin 69, and it cannot see
-  everything.**  `src/dbg/dbgmon.v` prints 18 hex words ten times a second
-  down the USB-C serial line; `tools/dbgmon.py` reads them, and this agent
-  can open the port itself, so measuring a running board is a thing that
-  can be done here.  `vp065`'s transmitter - the УКНЦ's own C2 line - goes
-  nowhere as a result; one `assign` in `top.v` puts it back.  But the
-  probes sample `volume_data_l` on `posedge ppuclk_p`, in the mixer's own
-  domain, so a value that is wrong only *between* clock edges reads as
-  perfect: that is the bug above, and the monitor agreed with the design
-  for three build cycles while the board disagreed with both.
+- **The diagnostic monitor exists but is NOT in the build.**
+  `src/dbg/dbgmon.v` prints 18 hex words ten times a second down the USB-C
+  serial line and `tools/dbgmon.py` reads them, and this agent can open the
+  port itself, so measuring a running board is a thing that can be done
+  here - but the instance and its ~160 lines of probe accumulators came out
+  of `top.v` on 31 Aug 2026, and pin 69 is `vp65_uart_tx` again.  The
+  module stays in the `.gprj`, instantiated nowhere, like `ip/dvi_tx`;
+  putting it back is that instance plus a `probes` list, and `git show` the
+  removing commit's parent has the last one.  Remember why it was dropped
+  as an instrument as well: the probes sampled `volume_data_l` on
+  `posedge ppuclk_p`, in the mixer's own domain, so a value wrong only
+  *between* clock edges read as perfect - that is the bug above, and the
+  monitor agreed with the design for three build cycles while the board
+  disagreed with both.
 - **Flashing the FPGA is replug, flash, power-cycle - in that order.**
   `openFPGALoader -f -r` writes the flash and reports success but does
   **not** reliably reconfigure the chip, so without the power cycle you
@@ -270,10 +276,12 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   amplitude and not offset, and no mechanism is known - but a real MC0511
   drives a unipolar sum through a coupling capacitor and so does a
   television, so the digital blocker was doing that capacitor's job in
-  front of a sink that will not take the result.  The blocker stays in
-  `top.v` on **S2** for anyone with another display.  Its motive is still
-  real: the mean steps with the program material, which is why the beeper
-  is 8192 and not 16384 - at 16384 it mutes the sink at full volume.
+  front of a sink that will not take the result.  The blocker was carried
+  on **S2** for anyone with another display; on 31 Aug 2026 that bypass and
+  the blocker behind it were removed, so **S2 does nothing now** and the
+  raw sum is the only path.  Its motive is still real: the mean steps with
+  the program material, which is why the beeper is 8192 and not 16384 - at
+  16384 it mutes the sink at full volume.
 - **Real software never sets the beeper tone bits.**  `R177716[12:8]`
   selects among 8 kHz/1 kHz/500/250/60, and over 234 seconds of a running
   machine the register took four values - `100000`, `100020`, `100200`,

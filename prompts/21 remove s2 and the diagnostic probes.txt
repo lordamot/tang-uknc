@@ -1,0 +1,47 @@
+lets remove S2 button functionality completely and also remove all diagnostic probes added to serial console - need to check one of my concepts
+
+****
+
+Both out, and the bitstream is rebuilt.
+
+What went, in top.v:
+
+- The DC blocker and its S2 bypass.  dc_acc, dc_mean, dc_out and
+  dc_amp = buts[1] ? dc_out : dc_x are gone; the volume stage now takes
+  snd_amp = $signed({2'b00, mix}) and nothing else.  clip() stays, because
+  mix reaches 34744 and a signed sample stops at 32767.  buts[1] is read
+  nowhere now - the port stays two bits wide and pin 87 stays constrained,
+  so S2 is present and does nothing.
+- The whole diagnostics block: the dbgmon instance, the eighteen probe
+  words, the accumulators and snapshots behind them, and the three
+  hdmi_audio_* counter connections that only fed them.  About 160 lines.
+  uart_tx is assign uart_tx = vp65_uart_tx again, so pin 69 is the UKNC's
+  own C2 line.
+- src/dbg/dbgmon.v and tools/dbgmon.py both stay.  The module is in the
+  .gprj and instantiated nowhere, like ip/dvi_tx; putting it back is that
+  one instance plus a probes list.
+
+Checked: make lint clean, make sim clean (52413 read-after-write checks, 0
+wrong; 15292 HDMI packets, 0 ECC errors, 0 bad parity), make bitstream
+builds.  The testbench referenced uut.hdmi_audio_ovf, which was one of the
+wires removed, so it reads uut.hdmi1.O_audio_ovf now - the encoder's ports
+are untouched.
+
+The new place and route, 31 Aug 2026:
+
+  Logic 8923/20736 44%   Register 3873/15915 25%   BSRAM 22/46 48%
+
+against 47% / 30% / 46% before, so the monitor was costing about 670 LUTs
+and 810 registers.  BSRAM went UP by one block, and that is not noise:
+handing pin 69 back to vp065 makes its uartfifo reachable, and while its
+transmitter drove nothing the synthesiser had been pruning that block away.
+Timing is unchanged in character - 0 setup violations, the same clk_25 vs
+PLL hold artefact as before.
+
+Docs updated where they now said something false: CLAUDE.md (the resource
+line, the pin-69 trap, the dbgmon trap, the unipolar-sum trap), fpga.md
+(module table, the diagnostics section, the resource budget, the pinout
+note), platform.md, progress.md item 10, tools.md and build.md.
+
+Not claimed: nothing here was run on a board.  Built, linted, simulated and
+placed - bin/tang.fs is rebuilt and unflashed.

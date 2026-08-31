@@ -98,13 +98,12 @@ Compiling module 'uartfifo'("/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfif
 Compiling module '**'("/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfifo.v":130)
 Compiling module 'uart_tx(BAUD_RATE=19200)'("/var/www/own/tang-uknc/tang/src/uart/uart_tx.v":1)
 Compiling module 'uart_rx(BAUD_RATE=19200)'("/var/www/own/tang-uknc/tang/src/uart/uart_rx.v":1)
-Compiling module 'dbgmon(NPROBE=18)'("/var/www/own/tang-uknc/tang/src/dbg/dbgmon.v":28)
-Compiling module 'uart_tx'("/var/www/own/tang-uknc/tang/src/uart/uart_tx.v":1)
 Compiling module 'fifo_audio'("/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v":187)
 Compiling module '**'("/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v":186)
 Compiling module 'audio_drive'("/var/www/own/tang-uknc/tang/src/audio.v":2)
 NOTE  (EX0101) : Current top module is "top"
 [5%] Running netlist conversion ...
+WARN  (CV0018) : Input buts[1] is unused("/var/www/own/tang-uknc/tang/src/top.v":97)
 Running device independent optimization ...
 [10%] Optimizing Phase 0 completed
 [15%] Optimizing Phase 1 completed
@@ -130,10 +129,10 @@ WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CL
 WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "ram1/clk_25"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "ram1/clk_25" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "ram1/curs_set" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
-WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "t3/I"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "t4/I" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "t3/I" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "ram1/curs_set"
+WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "t3/I"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "t4/I"
 WARN  (CK3000) : Can't calculate clocks' relationship between: "t3n/I" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
 [100%] Generate report file "/var/www/own/tang-uknc/tang/impl/gwsynthesis/test003_syn.rpt.html" completed

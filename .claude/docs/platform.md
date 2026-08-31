@@ -246,8 +246,10 @@ the second rules out the sign on its own.  No mechanism for this is known.
 What it does match is the hardware: a real MC0511 drives a unipolar sum
 through a coupling capacitor, and a television has one too, so blocking the
 DC digitally was doing the capacitor's job in front of a sink that will not
-take the result.  The blocker is still in `top.v`, selected by **S2**, in
-case another display disagrees.
+take the result.  The blocker was carried in `top.v` on **S2** for a
+fortnight in case another display disagreed; both it and the S2 bypass were
+removed on 31 Aug 2026, so the raw sum is the only path there is.  `git
+show` the removing commit's parent for the code.
 
 The one defect that comes back with that decision is the blocker's original
 motive: the mean steps with the program material, so a loud enough beeper

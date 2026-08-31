@@ -252,7 +252,9 @@ bus entirely and needs a replug anyway.
 ### Reading the board
 
 `tools/dbgmon.py` reads the diagnostic monitor - see
-`.claude/docs/fpga.md`.  It finds the port through
+`.claude/docs/fpga.md`.  **The monitor is out of the build as of 31 Aug
+2026**, so there is nothing on the line until it is instantiated again;
+what follows is how to read it when there is.  It finds the port through
 `/dev/serial/by-id/*if01*` rather than a `ttyUSBn` name, because that
 number changes on every re-enumeration.
 

@@ -18,11 +18,11 @@ live set, by role:
 | video/memory | `sdram1.v`, `sdram2.v`, `mkcolorreg.v` |
 | peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `audio.v` |
 | serial | `uart/uart_{rx,tx}.v`, `uart/uart_{rx,tx}_path.v` |
-| diagnostics | `dbg/dbgmon.v` |
+| diagnostics | `dbg/dbgmon.v` (in the project, instantiated nowhere) |
 | MisterNano | `mister/{mcu_spi,sysctrl,hid,osd_u8g2,sd_card,sd_rw,sdcmd_ctrl,sector_dpram}.v` |
 | HDMI | `hdmi/{hdmi_tx,tmds_channel,hdmi_packet,hdmi_serdes}.v` |
 | vendor IP | `ip/{sys_rpll,fifo_audio,memstr,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v`, `fdd/ip/{buf_sec,rawtr_prom}/*.v` |
-| in the project but never instantiated | `load.v`, `ip/dvi_tx/*.v` |
+| in the project but never instantiated | `load.v`, `ip/dvi_tx/*.v`, `dbg/dbgmon.v` |
 
 ### Dead files - present but not built
 
@@ -241,12 +241,21 @@ board can be measured.  Everything before it had to be inferred from a
 picture and a loudspeaker, and the inferences were wrong often enough to
 cost several build-and-flash cycles each.
 
+**It is not in the build as of 31 Aug 2026.**  The instance and the ~160
+lines of probe accumulators that fed it came out of `top.v` so the audio
+path could be judged without anything experimental in the design; `uart_tx`
+is `vp65_uart_tx` again.  The module and `tools/dbgmon.py` are both kept,
+and putting it back is that instance plus whatever `probes` should hold -
+`git show` the removing commit's parent for the last set.  The rest of this
+section describes it as it was and as it would be again.
+
 Pin 69 is `uart_tx` into the Tang's own BL616, which the host sees as
 interface B of an FT2232 - `/dev/serial/by-id/*if01*`, some `/dev/ttyUSBn`
-whose number changes on every re-enumeration.  **The monitor owns that
-pin.**  `vp065`'s transmitter, the УКНЦ's own C2 line, goes to a wire named
-`vp65_uart_tx` and nowhere else; no software here uses it, and putting it
-back is one `assign` in `top.v`.
+whose number changes on every re-enumeration.  While the monitor is
+instantiated it owns that pin, and `vp065`'s transmitter - the УКНЦ's own
+C2 line - goes to `vp65_uart_tx` and nowhere else; no software here uses
+it, so it costs nothing either way, and each direction is one `assign` in
+`top.v`.
 
 The module is deliberately dumb: it prints N 16-bit words as lower-case
 hex, space separated, CR LF terminated, once every WIN clocks, and knows
@@ -259,7 +268,8 @@ the count, edges of the beeper line, range of the summed AY channels, range
 of the sample leaving the mixer, AY writes with the last address and data,
 PPU bus cycles, PPU bus timeouts, keycode changes, volume and button state,
 HDMI samples dropped, HDMI audio packets sent.  `tools/dbgmon.py` reads and
-names them.
+names them.  That word list went out of `top.v` with the instance; the
+decoder still knows it.
 
 Three things about it that are not obvious:
 
@@ -292,20 +302,25 @@ assumptions agrees with it and both are wrong together.
 
 ## Resource budget
 
-From the August 2026 place and route (`tang/impl/pnr/test003.rpt.txt`):
+From the 31 Aug 2026 place and route (`tang/impl/pnr/test003.rpt.txt`),
+the first without the diagnostic monitor:
 
 ```
-Logic      9597/20736   47%
-Register   4683/15915   30%
-BSRAM        21/46      46%
+Logic      8923/20736   44%
+Register   3873/15915   25%
+BSRAM        22/46      48%
 DSP           0/         0%
 PLL           2/2      100%
 IOLOGIC       8/121      7%
 ```
 
-January 2025 was 39% / 22% / 46%; stereo took the BSRAM up, the HDMI
-encoder took the logic up, and the diagnostic monitor added about 600 LUTs
-and 800 registers on top of that - 44% / 25% without it.
+January 2025 was 39% / 22% / 46%; stereo took the BSRAM up and the HDMI
+encoder took the logic up.  The run before this one was 47% / 30% / 46%,
+**with** the diagnostic monitor: it cost about 670 LUTs and 810 registers,
+and taking it out gave them back.  BSRAM went the other way, 21 blocks to
+22, and that is not noise - handing pin 69 back to `vp065` makes its
+`uartfifo` reachable again, and while its transmitter drove nothing the
+synthesiser had been pruning that block away.
 
 **Both PLLs are spoken for** - `sys_rpll` off the crystal and
 `hdmi_ser/pll_hdmi` off the pixel clock - so a new clock has to come out of
@@ -322,12 +337,14 @@ The **IOLOGIC** row is new and is the four `OSER10`s.
 
 ```
 clk27         4      buts[0]  88   buts[1]  87   leds[5:0]  20,19,18,17,16,15
+                     (S1 resets;  S2 is constrained but read nowhere)
 HDMI          O_tmds_clk_p 33,34   data[0] 35,36   data[1] 37,38   data[2] 39,40
 SD card       sdclk 83  sdcmd 82  sddat0 84  sddat1 85  sddat2 80  sddat3 81
 audio         HP_BCK 71  HP_WS 72  HP_DIN 73  PA_EN 74
 serial        uart_tx 69  uart_rx 70      (to the on-board BL616, USB-C)
-                                          uart_tx is the diagnostic monitor,
-                                          NOT vp065 - see below
+                                          uart_tx is vp065's C2 line; the
+                                          diagnostic monitor takes it when
+                                          it is instantiated - see below
 MCU           m0s[0] 42  m0s[1] 41  m0s[2] 56  m0s[3] 54  m0s[4] 51
 free          13, 48, 55, 75, 76, 86
 ```

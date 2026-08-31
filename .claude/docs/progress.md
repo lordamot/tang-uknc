@@ -520,7 +520,7 @@ Registering the output on `posedge ppuclk_p` makes the sample a settled
 value by construction, at 320 ns of latency and sixteen flip-flops.
 
 **The diagnostic monitor could not see this**, and that is the part worth
-remembering.  Its probes sample `volume_data_l` on `posedge ppuclk_p` too,
+remembering.  Its probes sampled `volume_data_l` on `posedge ppuclk_p` too,
 so they reported a clean waveform while the encoder was being fed spikes.
 Third time in this repository that an instrument shared the design's
 assumption and both were wrong together, after the SDRAM model and the
@@ -538,10 +538,12 @@ operator's television and the raw unipolar sum is not.  The table is in
 DC-blocked-plus-offset is silent at the same AC amplitude that plays from
 the raw path, and no mechanism for that is known.
 
-So the raw sum is the design, `S2` selects the blocker for anyone who wants
-to try it on another display, and the beeper stays at 8192.  This is a
-decision made on measurement with the cause not understood, which is worth
-flagging as such rather than filing as fixed.
+So the raw sum is the design and the beeper stays at 8192.  `S2` selected
+the blocker for anyone who wanted to try it on another display; on 31 Aug
+2026 the bypass and the blocker behind it were both removed, along with the
+diagnostic monitor, to take everything experimental back out of the audio
+path.  This is a decision made on measurement with the cause not
+understood, which is worth flagging as such rather than filing as fixed.
 
 Working as a result: **AY at 33/66/100, beeper at 66/100.**  Not working:
 the beeper at 33% is -24 dBFS and inaudible, and the beeper's mean still

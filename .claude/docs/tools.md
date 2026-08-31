@@ -31,7 +31,9 @@ than keeping a second file list that would drift out of date.  `--ip`
 lists just the vendor IP (which `sim/stubs/gowin_ip_sim.v` replaces),
 `--all` includes it, `--cst` gives the constraint files.
 
-`dbgmon.py` is the host end of `src/dbg/dbgmon.v`.  It finds the port by
+`dbgmon.py` is the host end of `src/dbg/dbgmon.v`, which is not in the
+build as of 31 Aug 2026 - the tool only has something to read once the
+monitor is instantiated again.  It finds the port by
 `/dev/serial/by-id/*if01*`, not by `ttyUSBn` - that number changes every
 time the board re-enumerates, and hardcoding it cost a test run.  It drops
 malformed lines rather than guessing at them, so a magic word mismatch

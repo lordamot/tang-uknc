@@ -23,7 +23,6 @@ WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[3]"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "curs_set"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "curs_set"
@@ -32,6 +31,7 @@ WARN  (TA1117) : Can't calculate clocks' relationship between: "m0s[3]" and "clk
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "m0s[3]"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "fdd/sd_rd" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "disk_step" and "clk_25"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "timer_clk_4" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "timer_clk_4"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_25"
@@ -69,5 +69,5 @@ Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.pin.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.txt" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.tr.html" completed
-Sun Aug 30 23:17:48 2026
+Mon Aug 31 10:49:48 2026
 
