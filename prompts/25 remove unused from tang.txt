@@ -29,3 +29,13 @@ What each check says:
 None of that is a board. The bitstream in bin/tang.fs is rebuilt and has not been heard.
 
 Left alone on purpose: tang/impl/ and the temp/ directories under the live IP, which git.md keeps; the internals of the vendor and upstream modules; the unused register R177024 in ppu.v, which I could not confirm is dead rather than write-only by design. Nothing is committed.
+
+so remove the files which are set to remove
+
+****
+
+Done. The script ran from the repository root and git rm took 195 paths out of the index and off the disk: the 62 files and directories on the list, plus the generated temp/ scratch under the twelve dead IP directories that went with them, plus tools/dbgmon.py by plain rm since it was never tracked. No untracked leftovers remain under tang/, tools/ or sim/.
+
+tang/src now holds exactly the 38 sources in test003.gprj plus the .cst and the .sdc, and tang/rom is down to the machine ROM, the binary it came from and the one bin2mif. The 22 tracked temp/ files under tang/impl and the live IP are untouched, as git.md asks.
+
+Lint is clean after the deletion and the AY unit test still reports 0 errors, so nothing on the build path depended on any of it. Nothing is committed; the deletions are staged with the rest of the working tree changes from the cleanup.
