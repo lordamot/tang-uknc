@@ -1,0 +1,31 @@
+refine tang code so remove all unused from it (e.g. do not need to remove unused parts from ВМ1 module or from AY module - but refine and cleanup our custom over those) - so remove not used monitors, debuggers, other files
+
+I also need you to translate chinese comments in code to english if any
+
+****
+
+The cleanup is done in the project file, the Makefile, the custom RTL, the simulation and the docs, and it is verified four ways: lint clean, the AY unit test passing, the full machine booting in simulation, and a bitstream that builds with the same placement as before. The one step left is deleting the files from disk, which my sandbox refused as a bulk delete. Run this from the repository root and the tree matches what the project file now says:
+
+bash build/remove-dead.sh
+
+The script is git rm over 63 paths. It removes the ten files that were in the project but instantiated nowhere (load.v, sdram1.v and the memstr IP only it used, dbg/dbgmon.v, ip/dvi_tx, fdd/ip/buf_sec, the two uart *_path.v files, test003_lcd.cst, test003.rao), the roughly forty files that were never in the project (three earlier SD stacks, the old OSD, the PS/2 path, the VHDL AY line, two earlier SDRAM arbiters, the Копия, .bak and .v_ copies, twelve dead IP cores), the ROM data only those read under tang/rom, the duplicate tang/rom128 and two spare bin2mif copies, sim/tb/tb_mix.v, which tests a saturating mixer the code no longer has, and tools/dbgmon.py. Everything except that last one stays in git history: tools/ is gitignored and the monitor's reader was never tracked, so the script removes it with a plain rm and the docs now say so.
+
+Until you run it, the build already ignores them: lint, sim and the bitstream read their file list from test003.gprj, and the ten entries are gone from it.
+
+In the custom RTL, what came out:
+- top.v: the two commented-out pinout blocks at the head, the commented-out clock block, the dangling clk_6_25 wire and the clk_dac BUFG, the undriven ppu_vm_clk_p, wite_clk_128, motor_on_128 and covox wires, and every write-only wire on module outputs (busy flags, the PPU's DCLO/ACLO, the MCU's led and colour outputs, mouse and joystick, FIFO empty/full). Those ports are now left open. The dvi_tx and dbgmon comments say where the removed things are.
+- aberrant.v: the ABC-panned left and right outputs and their registers. The mixer is mono by design and nothing read them. Also a duplicate wire.
+- sdram2.v: the cpu_clk and clk_dac ports and three unused divider wires, and two flags set but never read.
+- fdd4.v, vp65.v, hdmi_tx.v: one dead register or wire each.
+Verilator with every warning on now reports nothing in the custom files except unused bits of peripheral input ports, which is the bus interface and stays. The VM2 core, the YM2149 and the MiSTeryNano files were not touched.
+
+Chinese comments existed in one live file, audio.v, the I2S transmitter. All translated. The dead SD stack had more and is on the delete list.
+
+What each check says:
+- make lint: clean.
+- make ab-test: 0 errors, all three AYs take registers and the mono output moves.
+- make sim, 300 ms: PPU boots, CPU released, 15 frames, 213592 read-after-write checks with the one mismatch progress.md already records as pre-existing.
+- make bitstream: builds. Logic 44%, Register 25%, BSRAM 48%, unchanged. 0 setup violations, 524 hold against 559 before, the same artefact.
+None of that is a board. The bitstream in bin/tang.fs is rebuilt and has not been heard.
+
+Left alone on purpose: tang/impl/ and the temp/ directories under the live IP, which git.md keeps; the internals of the vendor and upstream modules; the unused register R177024 in ppu.v, which I could not confirm is dead rather than write-only by design. Nothing is committed.

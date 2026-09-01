@@ -6,56 +6,45 @@ constraints `tang/src/test003.cst`.
 
 ## What is actually built
 
-**`tang/test003.gprj` is the source of truth.**  Forty files are enabled in
-it; roughly as many `.v` files under `tang/src/` are not, and several of
-those are earlier revisions with the same module name as a live one.  The
+**`tang/test003.gprj` is the source of truth.**  Thirty-eight source
+files are in it, plus `test003.cst` and `test003.sdc`, and every one of
+them is instantiated: the tree was cleaned in September 2026 so that what
+is under `tang/src/` is what is built.  `tools/srcs.py` reads the list
+out for lint and simulation, `tools/gowin_tcl.py` for the bitstream.  The
 live set, by role:
 
 | role | files |
 |---|---|
 | top | `top.v` |
-| processors | `cpu.v`, `ppu.v`, `wm2wb/vm2_wb.v`, `wm2wb/vm2_plm.v` |
-| video/memory | `sdram1.v`, `sdram2.v`, `mkcolorreg.v` |
+| processors | `cpu.v`, `ppu.v`, `wm2wb/vm2_wb.v`, `wm2wb/vm2_plm.v`, `wmrst.v` |
+| video/memory | `sdram2.v`, `mkcolorreg.v` |
 | peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `audio.v` |
-| serial | `uart/uart_{rx,tx}.v`, `uart/uart_{rx,tx}_path.v` |
-| diagnostics | `dbg/dbgmon.v` (in the project, instantiated nowhere) |
+| serial | `uart/uart_rx.v`, `uart/uart_tx.v` |
 | MisterNano | `mister/{mcu_spi,sysctrl,hid,osd_u8g2,sd_card,sd_rw,sdcmd_ctrl,sector_dpram}.v` |
 | HDMI | `hdmi/{hdmi_tx,tmds_channel,hdmi_packet,hdmi_serdes}.v` |
-| vendor IP | `ip/{sys_rpll,fifo_audio,memstr,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v`, `fdd/ip/{buf_sec,rawtr_prom}/*.v` |
-| in the project but never instantiated | `load.v`, `ip/dvi_tx/*.v`, `dbg/dbgmon.v` |
+| vendor IP | `ip/{sys_rpll,fifo_audio,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v`, `fdd/ip/rawtr_prom/*.v` |
 
-### Dead files - present but not built
+### What was removed, September 2026
 
-Do not fix bugs in these, and do not delete them either; several are the
-author's working history.
+Until then about as many `.v` files sat under `tang/src/` outside the
+project as inside it - three earlier SD stacks (`sd/`, `sd_dat/`, `sdio/`),
+an earlier OSD, a PS/2 keyboard path, the VHDL AY line, two earlier SDRAM
+arbiters, files named `(Копия)`, `.bak` and `.v_` copies, and a dozen
+generated IP cores for paths that had been dropped - and several of them
+shared a module name with a live file (`src/fdd4.v` against
+`src/fdd/fdd4.v`, `src/ym2149.sv` against `src/ay/ym2149.sv`).  Ten more
+were in the project but instantiated nowhere: `load.v` (the older
+load-the-whole-image-into-RAM scheme), `sdram1.v` and the `memstr` IP it
+alone used, `dbg/dbgmon.v` (see **Board diagnostics**), `ip/dvi_tx` (see
+**HDMI**), `fdd/ip/buf_sec`, `uart/uart_{rx,tx}_path.v`, the disabled
+`test003_lcd.cst` (an RGB LCD pinout) and `test003.rao` (an oscilloscope
+setup probing the removed `load` instance).  With them went the ROM data
+only they read under `tang/rom/` and the duplicate `tang/rom128/`.
 
-```
-src/fdd4.v                      superseded by src/fdd/fdd4.v (different ports)
-src/fdd4 (Копия).v              a copy of the above
-src/vp1-128fdd (Копия).v        a copy
-src/sdcontroller.v              superseded by fdd/fdd4.v talking to mister/sd_rw
-src/fdd/sdcontroller.v
-src/sdram.v, sdram100.v         earlier arbiters; sdram1.v + sdram2.v are live
-src/osd.v (+ ip/osdfont)        earlier OSD; mister/osd_u8g2.v is live
-src/ps2/*                       earlier PS/2 keyboard path; HID comes over SPI now
-src/sd/*, src/sd_dat/*, src/sdio/*   three earlier SD stacks
-src/ym2149.sv                   root copy; ay/ym2149.sv is live
-src/ay/{ay8910.vhd,ayglue.v,ym2149.vhd}, src/YM2149_volmix.vhd,
-src/vol_table_array.vhd         the VHDL AY line, unused - the build is
-                                Verilog-only and no VHDL file is in the .gprj
-ip/{bufsec16,secrom16,secstat16,osdfont,filename,fifo_hs8,videofifo,
-    hdmi_rpll,lcd_rpll,gowin_clkdiv,sys_clkdiv2,sdram_controller_hs}
-                                generated IP for paths that were dropped
-```
-
-`ip/dvi_tx` joined `load.v` on the uninstantiated list in August 2026 when
-`hdmi/` replaced it - see **HDMI** below.  It is still in the project on
-purpose: it is the fallback, and putting it back is one instance in
-`top.v`.
-
-`src/test003_lcd.cst` is in the project but disabled - it is the pinout for
-driving an RGB LCD panel instead of HDMI.  `src/test003.rao` is a disabled
-Gowin Analyzer Oscilloscope setup.
+All of it is in git history - `git log --all -- <path>` finds the last
+commit that had a file - and none of it is coming back by accident, because
+the project file no longer names it.  If one of the earlier revisions is
+wanted for reference, read it out of history rather than restoring it.
 
 ## Clocks
 
@@ -73,29 +62,27 @@ runs on `clkram`:
 
 ```
 clk_25  = horz[0]   25.07 MHz   the "system" clock: MisterNano, xm2-01, fdd4, vp1_120
-clk_12  = horz[1]   12.5  MHz   internal
-clk_6   = horz[2]    6.27 MHz   exported as cpu_clk - NOT USED, see below
-clk_3   = horz[3]    3.13 MHz   ppu clock
-clk_dac = horz[4]    1.57 MHz   audio
+ppu_clk = horz[3]    3.13 MHz   the PPU clock, clk_3_12 in top.v
 clk_50  = clkram    50.14 MHz
 ```
 
-`BUFG` instances in `top.v` put `clk4`, `~clk4`, `clk_3_12`, `~clk_3_12`
-and `clk_dac` onto global lines.
+`BUFG` instances in `top.v` put `clk4`, `~clk4`, `clk_3_12` and
+`~clk_3_12` onto global lines.
 
 Two things to know before touching any of this:
 
-- **`clk_6_25` is dangling.**  `sdram2`'s `cpu_clk` output is wired to a
-  wire in `top.v` that nothing reads; the CPU actually runs off the PLL's
-  `clk4`.  So the CPU and the PPU are on *unrelated* clocks, not on a
-  divider chain from a common one.
-- **There is no timing constraints file.**  `tang/impl/pnr/test003.rpt.txt`
-  says `<Timing Constraints File>: ---`, so every number in
-  `test003.timing_paths` is against a tool default and the worst reported
-  setup figure (-6.4 ns, on `ppu1/ppu`) means nothing in particular.  The
-  design works on hardware; that is the only evidence there is.  Adding an
-  `.sdc` is the single highest-value change available and would probably
-  report a pile of violations on day one.
+- **The CPU and the PPU are on unrelated clocks.**  The CPU runs off the
+  PLL's `clk4`; the PPU off a counter bit.  Not a divider chain from a
+  common source.  `sdram2` used to export `horz[2]` (6.27 MHz) as
+  `cpu_clk` and `top.v` brought it to a wire nothing read, along with
+  `horz[4]` as `clk_dac` into a BUFG nothing read; both went in Sep 2026.
+  If the CPU is ever to run at twice the PPU rate off the one counter,
+  that is a new port, not a forgotten one.
+- **The timing constraints are `tang/src/test003.sdc`, Aug 2026.**  Before
+  it the report said `<Timing Constraints File>: ---` and every number was
+  against a tool default.  It reports 0 setup violations; the hold count
+  (524 as of Sep 2026) is an artefact of `clk_25` and `clk_3_12` having to
+  be declared as independent clocks - see `progress.md`.
 
 `test003.log` also carries a dozen `TA1117` warnings - the tool cannot
 relate the PLL output to `clk_25`, `clk_3_12` and `ram1/curs_set`, because
@@ -126,8 +113,7 @@ of the AY aliasing bug in `CLAUDE.md`.
 `sdram2.v` is both the SDRAM controller and the video generator - see
 `.claude/docs/video.md`.  It arbitrates two ports, `cpu_*` and `ppu_*`,
 each 19-bit address / 32-bit data with a 4-bit byte mask, against the
-display's own fetches.  `sdram1.v` is also in the build and instantiates
-`memstr`.
+display's own fetches.
 
 Vendor IP in the live build:
 
@@ -135,13 +121,11 @@ Vendor IP in the live build:
 |---|---|---|
 | `sys_rpll` | `top.v` | the board PLL |
 | `fifo_audio` | `top.v` | crossing from `ppuclk_p` to the I²S clock |
-| `rom208` | `ppu.v` | the PPU's ROM |
-| `memstr` | `sdram1.v` | line store |
-| `sdbuf_sdpb` | `load.v` (uninstantiated) | SD sector buffer |
+| `rom208` | `ppu.v` | the PPU's ROM, from `tang/rom/uknc_rom.mif` |
+| `sdbuf_sdpb` | `mister/sd_card.v` | SD sector buffer |
 | `dbufsec16` | `fdd/fdd4.v` | double sector buffer |
-| `rawtr_prom` | `fdd/fdd4.v` | the raw-track template, from `rom128/rawtrk.mif` |
+| `rawtr_prom` | `fdd/fdd4.v` | the raw-track template, from `src/fdd/rom128/rawtrk.mif` |
 | `uartfifo` | `vp65.v` | serial FIFO |
-| `buf_sec` | - | in the project, not instantiated |
 
 The `.ipc` file is the generator's input and the `.v` its output.  To
 change a depth, a width or a `.mif`, edit the `.ipc` in the Gowin IP Core
@@ -247,69 +231,48 @@ design at every volume setting.  It is not settled in general.
 
 ## Board diagnostics
 
-`src/dbg/dbgmon.v`, Aug 2026, and it is the only way anything on a running
-board can be measured.  Everything before it had to be inferred from a
-picture and a loudspeaker, and the inferences were wrong often enough to
-cost several build-and-flash cycles each.
+There is no instrument on the board as of September 2026.  For a fortnight
+in August 2026 there was one: `src/dbg/dbgmon.v` printed 18 16-bit words
+as hex down the USB-C serial line ten times a second, `tools/dbgmon.py`
+read and named them, and about 160 lines of probe accumulators in `top.v`
+fed it - counts of AY writes, bus timeouts, beeper edges, the range of the
+mixer output.  The instance came out on 31 Aug 2026 so the audio path
+could be judged with nothing experimental in the design, and the module
+and the reader were removed from the tree in Sep 2026 along with the rest
+of the uninstantiated code.  `git log --all -- tang/src/dbg` finds the
+module, and the commit before the one that dropped the instance has the
+last probe list.  The reader is not in history at all - `tools/` is
+gitignored and `dbgmon.py` was never force-added - but it was small: open
+`/dev/serial/by-id/*if01*` at the monitor's baud rate, split each CR LF
+line on spaces, check the magic word, name the columns.
 
-**It is not in the build as of 31 Aug 2026.**  The instance and the ~160
-lines of probe accumulators that fed it came out of `top.v` so the audio
-path could be judged without anything experimental in the design; `uart_tx`
-is `vp65_uart_tx` again.  The module and `tools/dbgmon.py` are both kept,
-and putting it back is that instance plus whatever `probes` should hold -
-`git show` the removing commit's parent for the last set.  The rest of this
-section describes it as it was and as it would be again.
+Three things worth carrying forward from it, for whatever replaces it:
 
-Pin 69 is `uart_tx` into the Tang's own BL616, which the host sees as
-interface B of an FT2232 - `/dev/serial/by-id/*if01*`, some `/dev/ttyUSBn`
-whose number changes on every re-enumeration.  While the monitor is
-instantiated it owns that pin, and `vp065`'s transmitter - the УКНЦ's own
-C2 line - goes to `vp65_uart_tx` and nowhere else; no software here uses
-it, so it costs nothing either way, and each direction is one `assign` in
-`top.v`.
-
-The module is deliberately dumb: it prints N 16-bit words as lower-case
-hex, space separated, CR LF terminated, once every WIN clocks, and knows
-nothing about what they mean.  The counters and the min/max live in `top.v`
-beside the signals they watch.  Reusing it for the next fault is a matter
-of wiring different words into `probes`.
-
-Currently 18 words at 10 lines a second: the last write to `0177716` and
-the count, edges of the beeper line, range of the summed AY channels, range
-of the sample leaving the mixer, AY writes with the last address and data,
-PPU bus cycles, PPU bus timeouts, keycode changes, volume and button state,
-HDMI samples dropped, HDMI audio packets sent.  `tools/dbgmon.py` reads and
-names them.  That word list went out of `top.v` with the instance; the
-decoder still knows it.
-
-Three things about it that are not obvious:
-
-- **The bus events come off the PPU bus, not out of the modules.**  A write
-  `aberrant` acked is an AY write; a write at `0177716` that `xm2-01` acked
-  is the beeper register.  So neither module had to be touched to be
-  watched, and the counters prove the **ack**, which is what a silent
-  peripheral fails at first.
-- **`win_tog` is a level, not a pulse.**  The accumulators are on the
-  3.13 MHz PPU clock and a 20 ns pulse from the 50 MHz domain would be
-  missed nine times in ten.  The cost is that each line carries the window
-  that ended at the previous toggle - one window of latency, constant.
-- **`rst_n` is `sys_rst`, not `sys_rst_n`.**  See the trap below.
-
-**`sys_rst_n` is active HIGH.**  The name is a lie and it has cost a build:
-it is high for the first 335 ms and low afterwards, and every module in this
-design takes it as `if (reset)`.  Wiring it to something that wants an
-active-low reset gives you a block that runs for a third of a second after
-power-on and is then held in reset forever.  `sys_rst` is its complement and
-is the active-low one.  The same reasoning fixes the buttons: `n_all_rst =
-init & ~buts[0]` only makes sense if **the buttons read 0 released and 1
-pressed**, whatever `PULL_MODE=UP` in the `.cst` suggests.
-
-**What the monitor cannot see.**  It samples `volume_data_l` on `posedge
-ppuclk_p`, in the same domain the mixer runs in, so a value that is wrong
-only *between* clock edges reads as perfect.  That is exactly the bug it
-failed to find - see `progress.md` defect 9 - and the general lesson is the
-one the SDRAM model already taught: an instrument that shares the design's
-assumptions agrees with it and both are wrong together.
+- **Pin 69 is the only line out.**  It is `uart_tx` into the Tang's own
+  BL616, which the host sees as interface B of an FT2232
+  (`/dev/serial/by-id/*if01*`, since the `ttyUSBn` number changes on
+  every re-enumeration).  The VP-65's transmitter, the УКНЦ's own C2
+  serial line, owns that pin now; a monitor takes it over with one
+  `assign` in `top.v`.  Take bus events off the PPU bus - a write
+  `aberrant` acked is an AY write - rather than out of the modules, so
+  nothing has to be touched to be watched, and count the **ack**, which is
+  what a silent peripheral fails at first.
+- **`sys_rst_n` is active HIGH.**  The name is a lie and it has cost a
+  build: it is high for the first 335 ms and low afterwards, and every
+  module in this design takes it as `if (reset)`.  Wiring it to something
+  that wants an active-low reset gives a block that runs for a third of a
+  second after power-on and is then held in reset forever.  `sys_rst` is
+  its complement and is the active-low one.  The same reasoning fixes the
+  buttons: `n_all_rst = init & ~buts[0]` only makes sense if **the buttons
+  read 0 released and 1 pressed**, whatever `PULL_MODE=UP` in the `.cst`
+  suggests.
+- **What such a monitor cannot see.**  It sampled `volume_data_l` on
+  `posedge ppuclk_p`, in the same domain the mixer runs in, so a value
+  that was wrong only *between* clock edges read as perfect.  That is
+  exactly the bug it failed to find - `progress.md` defect 9 - and the
+  general lesson is the one the SDRAM model already taught: an instrument
+  that shares the design's assumptions agrees with it and both are wrong
+  together.
 
 ## Resource budget
 
@@ -414,6 +377,7 @@ was dropped - so **the VP-65 console is on the USB-C port exactly as it
 always was**, and needs no adapter.  Upstream's 48/55 remain free and are
 where to put it if 69 is ever wanted for the interrupt again.
 
-`src/test003_lcd.cst` still carries the old five-pin MCU block. It is
-`enable="0"` in the `.gprj` and names ports that no longer exist, so it
-would have to be brought forward before that variant could be built.
+`src/test003_lcd.cst`, the pinout for an RGB LCD panel in place of HDMI,
+was disabled in the `.gprj`, carried the old five-pin MCU block and named
+ports that no longer existed; it was removed in Sep 2026 and is in git
+history if that variant is ever wanted.

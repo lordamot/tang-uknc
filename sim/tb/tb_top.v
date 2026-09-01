@@ -384,7 +384,7 @@ module tb_top;
             $display("[aud] %0t vol=%b sys_rst=%b l=%h r=%h fifo_l=%h fifo_r=%h emptyl=%b",
                      $time, uut.system_volume, uut.sys_rst,
                      uut.volume_data_l, uut.volume_data_r,
-                     uut.data_aud_l, uut.data_aud_r, uut.Empty_aud_l);
+                     uut.data_aud_l, uut.data_aud_r, uut.abf1.Empty);
         end
     end
 

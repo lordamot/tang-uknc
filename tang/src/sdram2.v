@@ -24,9 +24,7 @@ module sdram2(
    
    output            clk_25,
    output            clk_50,
-   output            clk_dac,    // 1,5625 MHz
 
-   output            cpu_clk,    // 6.25 MHz
    input      [18:0] cpu_addr,   // 19 bit address 
    output reg [31:0] cpu_dout,   // data output to cpu
    input      [31:0] cpu_din,    // data input from cpu
@@ -97,8 +95,6 @@ reg  [15:0] vga_adnx = 16'o270;  // address next string
 reg  qutro_reg = 0;
 reg  types_reg = 0;
 reg  vga_curs  = 0;
-reg  scr_data_ll = 0;
-reg  scr_data_hl = 0;
 reg  ppu_ll = 0;
 reg  ppu_hl = 0;
 reg  cpu_vl = 0;
@@ -148,8 +144,6 @@ reg  [ 7:0] red_data   = 0;
 
 
 always @(posedge clkram)begin
-   scr_data_ll <= 1'b0;
-   scr_data_hl <= 1'b0;
    ppu_ll <= 1'b0;
    ppu_hl <= 1'b0;
    cpu_vl <= 1'b0;
@@ -324,7 +318,6 @@ always @(posedge clkram)begin
 // ---------------------------------------------------------------------
 // Get blue data for video data
 // ---------------------------------------------------------------------
-                  scr_data_ll <= 1'b1;
                   pr_blue_data  <= SDRAM_DQr[15:0];
 // ---------------------------------------------------------------------
                   sd_cmd     <= CMD_NOP;
@@ -429,7 +422,6 @@ always @(posedge clkram)begin
 // ---------------------------------------------------------------------
 // Get reg/green data for video data
 // ---------------------------------------------------------------------
-                  scr_data_hl <= 1'b1;
                   pr_green_data  <= SDRAM_DQr[ 7:0];
                   pr_red_data    <= SDRAM_DQr[15:8];
 // ---------------------------------------------------------------------
@@ -686,15 +678,11 @@ wire [ 9:0]x  = horz[10:1];
 wire [ 9:0]xs = visible_x ? horz[10:1] - 10'd8 : 10'd0;
 wire [ 6:0]xx = horz[10:4];
 
+// Clocks off the horizontal counter.  The CPU does not use horz[2]
+// (6.25 MHz); it runs on the PLL's 4.18 MHz output in top.v.
 assign clk_50  = clkram; // 50.0 MHz
 assign clk_25  = horz[0];// 25.0 MHz
-wire   clk_12  = horz[1];// 12.5 MHz
-wire   clk_6   = horz[2];// 6.25 MHz
-wire   clk_3   = horz[3];// 3.12 MHz
-
-assign cpu_clk = horz[2];// 6.25 MHz
 assign ppu_clk = horz[3];// 3.12 MHz
-assign clk_dac = horz[4];// 1,5625 MHz
 //---------------------------------------------------------------------------------------------------------//
 // visible_x должен начинаться с 0, но нам надо получить первый байт строки это 16 тактов/2 для x horz
 //---------------------------------------------------------------------------------------------------------//

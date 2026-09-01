@@ -37,14 +37,14 @@ four 800 KB floppies served out of `.dsk` files on the SD card; two
 AY-3-8910s and a one-bit beeper, out over both HDMI and I²S.
 
 ```
-Logic 44%   Register 25%   BSRAM 48%   PLL 2/2 (100%)  [31 Aug 2026 PnR]
+Logic 44%   Register 25%   BSRAM 48%   PLL 2/2 (100%)  [1 Sep 2026 PnR]
       (47% / 30% / 46% in the run before, which had the diagnostic monitor)
 ```
 
 Key documentation: `.claude/docs/platform.md` (the machine: both address
 maps, the register map, the CPU↔PPU channel, the devices),
 `.claude/docs/fpga.md` (the implementation: what is actually built, the
-clocks, the bus fabric, the pinout, the dead-file list),
+clocks, the bus fabric, the pinout, what was removed and when),
 `.claude/docs/video.md` (the display generator and the SDRAM arbiter, which
 are one file), `.claude/docs/mcu.md` (the BL616 firmware, the SPI protocol,
 the menu, the keyboard table), `.claude/docs/build.md` (both toolchains, the
@@ -55,16 +55,15 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
 
 ## Traps worth remembering
 
-- **`tang/test003.gprj` is the source of truth for what gets built.**  Half
-  the `.v` files under `tang/src/` are not in it - three complete earlier
-  SD stacks, an earlier OSD, a PS/2 keyboard path, a whole VHDL AY line,
-  and files literally named `(Копия)`.  Several share a module name with a
-  live file.  `src/fdd4.v` and `src/fdd/fdd4.v` are *different modules with
-  different ports*, and the live one is the second.  Check the list in
-  `.claude/docs/fpga.md` before editing anything.
-- **`load.v` is in the project and instantiated nowhere.**  It is the older
-  load-the-whole-image-into-RAM scheme.  `fdd/fdd4.v` fetches sectors on
-  demand instead.
+- **`tang/test003.gprj` is the source of truth for what gets built, and
+  since Sep 2026 the tree matches it.**  Until then half the `.v` files
+  under `tang/src/` were not in it - three earlier SD stacks, an earlier
+  OSD, a PS/2 path, a VHDL AY line, files named `(Копия)` - and several
+  shared a module name with a live file; ten more were in the project and
+  instantiated nowhere (`load.v`, `sdram1.v`, `dbg/dbgmon.v`, `ip/dvi_tx`
+  among them).  All of that was removed; `.claude/docs/fpga.md` lists what
+  went and `git log --all -- <path>` finds any of it.  Keep it that way:
+  a new file goes into the `.gprj` or it does not go into `tang/src/`.
 - **The AY chip select is not at the address its comment names.**
   `aberrant.v` still says `// Chipselect 177130/2`; it decodes
   `0177360`-`0177377`, sixteen addresses, with `adr[3]` don't-care and the
@@ -110,14 +109,14 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   sit on the SSPI pins.  `tools/gowin_tcl.py` reads all of that out of the
   `.gprj` and the IDE's `test003_process_config.json` so the two flows
   cannot drift.
-- **Half the clocks are counter bits, not PLL outputs.**  `clk_25`,
-  `clk_3_12` and `clk_dac` are `horz[0]`, `horz[3]`, `horz[4]` from
-  `sdram2.v`.  The tools cannot relate them to the PLL and say so twelve
-  times in `test003.log`.  Both PLLs are already used, so a new clock has
-  to come off that counter too.
-- **`clk_6_25` is dangling.**  `sdram2`'s `cpu_clk` output goes to a wire
-  nothing reads; the CPU runs off the PLL's `clk4` (4.18 MHz) instead of
-  the 6.27 MHz counter bit.  CPU and PPU are on unrelated clocks.
+- **Half the clocks are counter bits, not PLL outputs.**  `clk_25` and
+  `clk_3_12` are `horz[0]` and `horz[3]` from `sdram2.v`.  The tools
+  cannot relate them to the PLL and say so in `test003.log`.  Both PLLs
+  are already used, so a new clock has to come off that counter too.
+- **CPU and PPU are on unrelated clocks.**  The CPU runs off the PLL's
+  `clk4` (4.18 MHz), the PPU off the counter.  `sdram2` used to export a
+  6.27 MHz `cpu_clk` that `top.v` brought to a wire nothing read, and a
+  `clk_dac` into a BUFG nothing read; both ports are gone (Sep 2026).
 - **`menu.c`'s `settings_file[]` is indexed by `core_id`, so its order is
   `sysctrl.h`'s order and not the order the cores were written in.**  It
   used to be off by one with a missing comma, which had this core
@@ -165,9 +164,9 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
 - **HDMI video no longer goes through Gowin's `dvi_tx`.**  That IP is DVI:
   video only, no data islands, so no sound - its own documentation lists
   two options and audio is not one of them.  `src/hdmi/` replaced it in
-  Aug 2026 with a real HDMI encoder that sends audio.  `ip/dvi_tx` is
-  still in the `.gprj` and instantiated nowhere, deliberately: it is the
-  fallback, and putting it back is one instance in `top.v`.  Three traps
+  Aug 2026 with a real HDMI encoder that sends audio.  `ip/dvi_tx` was
+  removed from the tree in Sep 2026; it is in git history, and putting it
+  back is the IP directory, its `.gprj` line and one instance in `top.v`.  Three traps
   in the new code: the scheduler reads `de`/`hs`/`vs` through a 12-deep
   delay line because a preamble has to be announced before the thing it
   announces; the data island lives in the **back porch** and assumes
@@ -212,7 +211,6 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   there.  The serial port moved to 48/55 with it and then straight back to
   69/70; see the next trap.  `mnano/spi.c` is byte-identical to upstream
   and did not change; the FPGA side was always the deviation.
-  `src/test003_lcd.cst` still has the old block and is stale.
 - **Pin 69 is the USB-C serial console, and upstream wants it for
   `spi_irqn`.  You cannot have both.**  MiSTeryNano also drives the Tang's
   own on-board BL616 over 86/13/76/75/69, muxed against the dock by a flop
@@ -224,7 +222,7 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   `uart_tx` is back on 69, `uart_rx` on 70, and 13/48/55/75/76/86 are
   free.  For a fortnight in Aug 2026 the pin carried the **diagnostic
   monitor** rather than the VP-65; that was removed on 31 Aug 2026 and
-  `uart_tx` is `vp65_uart_tx` again - see the `dbgmon` trap below.  Either
+  `uart_tx` is `vp65_uart_tx` again - see the diagnostic monitor trap below.  Either
   way it is one `assign` and it changes none of the above, only which
   module drives the pin.  `git show 36e8c2b` has the removed form.  **The FPGA design never
   affected USB-C programming either way** - that is an FT2232 the on-board
@@ -252,20 +250,18 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   forever, and if that phase is the settling window then every sample is
   wrong, every time.  Anything crossing from the mixer to the encoder gets
   a flop.
-- **The diagnostic monitor exists but is NOT in the build.**
-  `src/dbg/dbgmon.v` prints 18 hex words ten times a second down the USB-C
-  serial line and `tools/dbgmon.py` reads them, and this agent can open the
-  port itself, so measuring a running board is a thing that can be done
-  here - but the instance and its ~160 lines of probe accumulators came out
-  of `top.v` on 31 Aug 2026, and pin 69 is `vp65_uart_tx` again.  The
-  module stays in the `.gprj`, instantiated nowhere, like `ip/dvi_tx`;
-  putting it back is that instance plus a `probes` list, and `git show` the
-  removing commit's parent has the last one.  Remember why it was dropped
-  as an instrument as well: the probes sampled `volume_data_l` on
-  `posedge ppuclk_p`, in the mixer's own domain, so a value wrong only
-  *between* clock edges read as perfect - that is the bug above, and the
-  monitor agreed with the design for three build cycles while the board
-  disagreed with both.
+- **There is no diagnostic monitor in the tree any more.**  For a
+  fortnight in Aug 2026 `src/dbg/dbgmon.v` printed 18 hex words ten times
+  a second down the USB-C serial line and `tools/dbgmon.py` read them, so
+  a running board could be measured from here.  The instance and its ~160
+  lines of probe accumulators came out of `top.v` on 31 Aug 2026 and the
+  module and reader left the tree in Sep 2026; `git log --all --
+  tang/src/dbg` finds the module (the reader was never tracked - `tools/`
+  is gitignored), and `.claude/docs/fpga.md` keeps what was learned.  The main lesson: its probes sampled
+  `volume_data_l` on `posedge ppuclk_p`, in the mixer's own domain, so a
+  value wrong only *between* clock edges read as perfect - that is the
+  bug above, and the monitor agreed with the design for three build cycles
+  while the board disagreed with both.
 - **Flashing the FPGA is replug, flash, power-cycle - in that order.**
   `openFPGALoader -f -r` writes the flash and reports success but does
   **not** reliably reconfigure the chip, so without the power cycle you

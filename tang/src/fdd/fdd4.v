@@ -81,9 +81,8 @@ reg  [ 7:0] no_trk     =   8'd5;
 reg         clk_dsk    =      0;
 reg         clk_dsk_n  =      0;
 reg         clk_dsk_n1 =      0;
-reg         clk_dsk_n2 =      0;
 //---------------------------------------------------------------------------------
-assign valid    = count_clk>10 && count_clk<900 && motor;///clk_dsk_n2 & motor;
+assign valid    = count_clk>10 && count_clk<900 && motor;
 assign led_init = ~motor;
 assign sync     = (word_sectr == 9'h18 || word_sectr == 9'h2F ) && motor;
 assign crc_ok   = (word_sectr == 9'h1C || word_sectr == 9'h131) && motor;
@@ -102,7 +101,6 @@ always @(*)
     default: data_out <= 16'h4E4E;
     endcase
 //---------------------------------------------------------------------------------
-reg         step_old = 1'b0;
 reg         head_old = 1'b1;
 reg  [ 1:0] drive_old= 1'b0;
 
@@ -116,7 +114,6 @@ always @(posedge pin_25mhz_ck)
         clk_dsk    <=  1'b0;
         clk_dsk_n  <=  1'b0;
         clk_dsk_n1 <=  1'b0;
-        clk_dsk_n2 <=  1'b0;
         count_clk  <= 11'd0;
         head_old   <=  head;
         drive_old  <= drive;
@@ -125,7 +122,6 @@ always @(posedge pin_25mhz_ck)
         clk_dsk    <=       1'b0;
         clk_dsk_n  <=    clk_dsk;
         clk_dsk_n1 <=  clk_dsk_n;
-        clk_dsk_n2 <= clk_dsk_n1;
 
         count_clk <= count_clk==1599 ? 11'd0 : count_clk + 1'b1;
         if(!count_clk)begin

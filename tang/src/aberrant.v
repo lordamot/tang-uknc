@@ -12,8 +12,6 @@ module aberrant(
    ppu_wbm_stb_i,
    ppu_wbm_ack_o,
 
-   l_channel,
-   r_channel,
    m_channel
 );
 input        ppu_vm_clk_p;
@@ -29,8 +27,6 @@ input  [ 1:0]ppu_wbm_sel_o;
 input        ppu_wbm_stb_i;
 output       ppu_wbm_ack_o;
 
-output [10:0]l_channel;
-output [10:0]r_channel;
 output [11:0]m_channel;
 
 //---------------------------------------------------------------------------------
@@ -68,8 +64,6 @@ assign ppu_wbm_dat_o = ce0 ? {2{DO_0}}:
 wire ce0 = ceppu && ppu_wbm_adr_i[2:1]==2'b00 && ppu_wbm_stb_i;
 wire ce1 = ceppu && ppu_wbm_adr_i[2:1]==2'b01 && ppu_wbm_stb_i;
 wire ce2 = ceppu && ppu_wbm_adr_i[2:1]==2'b10 && ppu_wbm_stb_i;
-wire bc  = &ppu_wbm_sel_o;
-
 
 wire nwtbt = &ppu_wbm_sel_o;
 
@@ -201,20 +195,16 @@ YM2149 dd3(
     .IOB_out  (                  )
 );
 //---------------------------------------------------------------------------------
-// mixer
+// Mixer.  The real module sums A, B and C of each chip at one level and
+// drives a single output, so this does the same: all nine channels, each
+// 0..255, added with no weighting.  12 bits hold the 2295 maximum.  An
+// ABC-panned stereo pair used to be computed here as well; nothing read it.
 //---------------------------------------------------------------------------------
-reg [10:0]left_channel  = 11'd0;
-reg [10:0]right_channel = 11'd0;
 reg [11:0]mono_channel  = 12'd0;
 
-assign l_channel =  left_channel;
-assign r_channel = right_channel;
 assign m_channel =  mono_channel;
 
-always @(posedge ppu_vm_clk_p)begin
-        left_channel  <= out_a_dd1 + out_a_dd2 + out_a_dd3 + ((out_b_dd1 + out_b_dd2 + out_b_dd3)>>1);
-        right_channel <= out_c_dd1 + out_c_dd2 + out_c_dd3 + ((out_b_dd1 + out_b_dd2 + out_b_dd3)>>1);
+always @(posedge ppu_vm_clk_p)
         mono_channel  <= out_a_dd1 + out_a_dd2 + out_a_dd3 + out_b_dd1 + out_b_dd2 + out_b_dd3 + out_c_dd1 + out_c_dd2 + out_c_dd3;
-    end
 //---------------------------------------------------------------------------------
 endmodule

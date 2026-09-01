@@ -318,23 +318,6 @@ module gowin_sdpb_model #(
         else if (ceb) dout <= mem[adb*WB +: WB];
 endmodule
 
-// memstr - ip/memstr.  .ipc: ram_sdpb, A 8 x 100 (write), B 1 x 800 (read)
-module memstr (
-    output       dout,
-    input        clka, cea, reseta,
-    input        clkb, ceb, resetb, oce,
-    input  [6:0] ada,
-    input  [7:0] din,
-    input  [9:0] adb
-);
-    wire [0:0] d;
-    assign dout = d[0];
-    gowin_sdpb_model #(.WA(8), .DA(100), .WB(1), .DB(800), .AWA(7), .AWB(10)) u (
-        .dout(d), .clka(clka), .cea(cea), .reseta(reseta),
-        .clkb(clkb), .ceb(ceb), .resetb(resetb), .oce(oce),
-        .ada(ada), .din(din), .adb(adb));
-endmodule
-
 // sdbuf_sdpb - ip/sdbuf_sdpb.  .ipc: A 8 x 512 (write), B 32 x 128 (read)
 module sdbuf_sdpb (
     output [31:0] dout,
@@ -345,23 +328,6 @@ module sdbuf_sdpb (
     input  [ 6:0] adb
 );
     gowin_sdpb_model #(.WA(8), .DA(512), .WB(32), .DB(128), .AWA(9), .AWB(7)) u (
-        .dout(dout), .clka(clka), .cea(cea), .reseta(reseta),
-        .clkb(clkb), .ceb(ceb), .resetb(resetb), .oce(oce),
-        .ada(ada), .din(din), .adb(adb));
-endmodule
-
-// buf_sec - fdd/ip/buf_sec.  .ipc: A 8 x 512 (write), B 16 x 256 (read).
-// In the project but not instantiated; modelled so the file list stays
-// the same as the .gprj's.
-module buf_sec (
-    output [15:0] dout,
-    input         clka, cea, reseta,
-    input         clkb, ceb, resetb, oce,
-    input  [ 8:0] ada,
-    input  [ 7:0] din,
-    input  [ 7:0] adb
-);
-    gowin_sdpb_model #(.WA(8), .DA(512), .WB(16), .DB(256), .AWA(9), .AWB(8)) u (
         .dout(dout), .clka(clka), .cea(cea), .reseta(reseta),
         .clkb(clkb), .ceb(ceb), .resetb(resetb), .oce(oce),
         .ada(ada), .din(din), .adb(adb));

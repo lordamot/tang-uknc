@@ -120,7 +120,7 @@ $(BUILD)/mif/uknc_rom.hex: tang/rom/uknc_rom.mif $(TOOLS)/mif.py
 	@mkdir -p $(dir $@)
 	$(PYTHON) $(TOOLS)/mif.py tohex $< $@
 
-$(BUILD)/mif/rawtrk.hex: tang/rom128/rawtrk.mif $(TOOLS)/mif.py
+$(BUILD)/mif/rawtrk.hex: tang/src/fdd/rom128/rawtrk.mif $(TOOLS)/mif.py
 	@mkdir -p $(dir $@)
 	$(PYTHON) $(TOOLS)/mif.py tohex $< $@
 
@@ -269,7 +269,7 @@ flash-mcu:
 ab-test: $(VERILATOR)
 	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
 	  --top-module tb_aberrant -Mdir $(BUILD)/sim/ab -o tb_aberrant \
-	  sim/tb/tb_aberrant.v tang/src/aberrant.v tang/src/ym2149.sv >/dev/null
+	  sim/tb/tb_aberrant.v tang/src/aberrant.v tang/src/ay/ym2149.sv >/dev/null
 	$(BUILD)/sim/ab/tb_aberrant
 
 clean:

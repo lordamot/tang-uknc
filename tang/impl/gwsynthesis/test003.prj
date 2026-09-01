@@ -9,17 +9,13 @@
         <File path="/var/www/own/tang-uknc/tang/src/ay/ym2149.sv" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/cpu.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/fdd/fdd4.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/fdd/ip/buf_sec/buf_sec.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/fdd/ip/rawtr_prom/rawtr_prom.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/dbufsec16/dbufsec16.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/ip/dvi_tx/dvi_tx.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/ip/memstr/memstr.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/rom208/rom208.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/sdbuf_sdpb/sdbuf_sdpb.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/sys_rpll/sys_rpll.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfifo.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/load.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/hdmi/hdmi_packet.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/hdmi/hdmi_serdes.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v" type="verilog"/>
@@ -34,14 +30,10 @@
         <File path="/var/www/own/tang-uknc/tang/src/mister/sysctrl.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/mkcolorreg.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ppu.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/sdram1.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/sdram2.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/top.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/dbg/dbgmon.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/uart/uart_rx.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/uart/uart_rx_path.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/uart/uart_tx.v" type="verilog"/>
-        <File path="/var/www/own/tang-uknc/tang/src/uart/uart_tx_path.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/vp1-128fdd.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/vp1_120.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/vp65.v" type="verilog"/>

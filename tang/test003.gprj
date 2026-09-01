@@ -10,17 +10,13 @@
         <File path="src/ay/ym2149.sv" type="file.verilog" enable="1"/>
         <File path="src/cpu.v" type="file.verilog" enable="1"/>
         <File path="src/fdd/fdd4.v" type="file.verilog" enable="1"/>
-        <File path="src/fdd/ip/buf_sec/buf_sec.v" type="file.verilog" enable="1"/>
         <File path="src/fdd/ip/rawtr_prom/rawtr_prom.v" type="file.verilog" enable="1"/>
         <File path="src/ip/dbufsec16/dbufsec16.v" type="file.verilog" enable="1"/>
-        <File path="src/ip/dvi_tx/dvi_tx.v" type="file.verilog" enable="1"/>
         <File path="src/ip/fifo_audio/fifo_audio.v" type="file.verilog" enable="1"/>
-        <File path="src/ip/memstr/memstr.v" type="file.verilog" enable="1"/>
         <File path="src/ip/rom208/rom208.v" type="file.verilog" enable="1"/>
         <File path="src/ip/sdbuf_sdpb/sdbuf_sdpb.v" type="file.verilog" enable="1"/>
         <File path="src/ip/sys_rpll/sys_rpll.v" type="file.verilog" enable="1"/>
         <File path="src/ip/uartfifo/uartfifo.v" type="file.verilog" enable="1"/>
-        <File path="src/load.v" type="file.verilog" enable="1"/>
         <File path="src/hdmi/hdmi_packet.v" type="file.verilog" enable="1"/>
         <File path="src/hdmi/hdmi_serdes.v" type="file.verilog" enable="1"/>
         <File path="src/hdmi/hdmi_tx.v" type="file.verilog" enable="1"/>
@@ -35,14 +31,10 @@
         <File path="src/mister/sysctrl.v" type="file.verilog" enable="1"/>
         <File path="src/mkcolorreg.v" type="file.verilog" enable="1"/>
         <File path="src/ppu.v" type="file.verilog" enable="1"/>
-        <File path="src/sdram1.v" type="file.verilog" enable="1"/>
         <File path="src/sdram2.v" type="file.verilog" enable="1"/>
         <File path="src/top.v" type="file.verilog" enable="1"/>
-        <File path="src/dbg/dbgmon.v" type="file.verilog" enable="1"/>
         <File path="src/uart/uart_rx.v" type="file.verilog" enable="1"/>
-        <File path="src/uart/uart_rx_path.v" type="file.verilog" enable="1"/>
         <File path="src/uart/uart_tx.v" type="file.verilog" enable="1"/>
-        <File path="src/uart/uart_tx_path.v" type="file.verilog" enable="1"/>
         <File path="src/vp1-128fdd.v" type="file.verilog" enable="1"/>
         <File path="src/vp1_120.v" type="file.verilog" enable="1"/>
         <File path="src/vp65.v" type="file.verilog" enable="1"/>
@@ -52,7 +44,5 @@
         <File path="src/xm2-01.v" type="file.verilog" enable="1"/>
         <File path="src/test003.cst" type="file.cst" enable="1"/>
         <File path="src/test003.sdc" type="file.sdc" enable="1"/>
-        <File path="src/test003_lcd.cst" type="file.cst" enable="0"/>
-        <File path="src/test003.rao" type="file.gao" enable="0"/>
     </FileList>
 </Project>

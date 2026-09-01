@@ -162,9 +162,7 @@ protocol.  It boots.  See `.claude/docs/progress.md` for what it showed.
 There is **no `synth` target**.  Yosys is in the toolchain and was worth a
 try as a second front end, but it segfaults on these sources at
 `read_verilog`; it could never have produced a bitstream anyway, since
-`dvi_tx`, `fifo_audio` and `uartfifo` are encrypted.  (`dvi_tx` is no
-longer instantiated - `src/hdmi/` replaced it - but it is still in the
-project as the fallback.)
+`fifo_audio` and `uartfifo` are encrypted.
 
 None of this replaces a board.  Lint and simulation catch missing modules,
 port and width mismatches, inferred latches and gross protocol errors -
@@ -251,19 +249,15 @@ bus entirely and needs a replug anyway.
 
 ### Reading the board
 
-`tools/dbgmon.py` reads the diagnostic monitor - see
-`.claude/docs/fpga.md`.  **The monitor is out of the build as of 31 Aug
-2026**, so there is nothing on the line until it is instantiated again;
-what follows is how to read it when there is.  It finds the port through
-`/dev/serial/by-id/*if01*` rather than a `ttyUSBn` name, because that
-number changes on every re-enumeration.
-
-```sh
-tools/dbgmon.py            # changed lines only
-tools/dbgmon.py --all      # every line, ten a second
-tools/dbgmon.py --raw      # undecoded, for when the word list moves
-tools/dbgmon.py -t 300 > run.log
-```
+There is nothing to read as of Sep 2026: the diagnostic monitor and
+`tools/dbgmon.py` were removed with the rest of the uninstantiated code
+(`.claude/docs/fpga.md`, **Board diagnostics**, has what was learned and
+where to find the module in history; the reader was never tracked).
+The port is still there - pin 69 is the
+FPGA's `uart_tx` into the on-board BL616, interface B of its FT2232, found
+by `/dev/serial/by-id/*if01*` rather than a `ttyUSBn` name because that
+number changes on every re-enumeration - and it carries the VP-65 serial
+line.
 
 The user needs `plugdev` for the FTDI; that is a udev rule, not `dialout`,
 and it is the same rule openFPGALoader relies on.

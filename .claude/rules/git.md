@@ -33,10 +33,11 @@ document ppu register map
 - `/build/`, `/sim/out/`, `/mnano/build/` - build products
   (those five are the whole of `.gitignore`)
 - New Gowin scratch.  Note that the existing `temp/` directories **are**
-  tracked - 72 files under `tang/impl/temp/` and `tang/src/**/ip/*/temp/`
-  went in with the initial import, so `.gitignore` would not touch them
-  now.  Leave them alone: do not add more, and do not stage the churn when
-  the IDE rewrites them.
+  tracked - 22 files under `tang/impl/temp/` and `tang/src/**/ip/*/temp/`
+  (72 before the Sep 2026 cleanup took the dead IP with its scratch) went
+  in with the initial import, so `.gitignore` would not touch them now.
+  Leave them alone: do not add more, and do not stage the churn when the
+  IDE rewrites them.
 
 ## What *is* committed on purpose
 

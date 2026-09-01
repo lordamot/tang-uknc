@@ -157,7 +157,8 @@ module latches it into `R177702` and raises the key interrupt.  So the
 translation from USB HID to УКНЦ scan code happens **on the MCU**, in
 `mnano/uknc.h` - see `.claude/docs/mcu.md`.
 
-`tang/src/ps2/` is an older PS/2 path and is not in the project.
+An older PS/2 keyboard path (`tang/src/ps2/`) was in the tree, outside
+the project, until Sep 2026.
 
 ## Serial (КР1801ВП1-065, `vp65.v`)
 
@@ -181,10 +182,9 @@ blocks.  Four drives, `mount_dsk[3:0]`.  Write protection comes from the
 OSD through `system_floppy_wprot`.
 
 Image geometry: **819200 bytes = 1600 sectors of 512** - 80 tracks, 2
-sides, 10 sectors of 512.  `load.v` (not instantiated; see
-`.claude/docs/fpga.md`) has the same number as `204800` 32-bit words per
-image and stacks four images back to back in RAM, which is the older
-load-into-RAM scheme.
+sides, 10 sectors of 512.  The older scheme, `load.v`, had the same
+number as `204800` 32-bit words per image and stacked four images back to
+back in RAM; it was never instantiated and left the tree in Sep 2026.
 
 ## Sound (`aberrant.v`)
 

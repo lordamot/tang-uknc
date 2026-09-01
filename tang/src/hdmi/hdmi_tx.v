@@ -395,7 +395,6 @@ always @(posedge I_rgb_clk) begin
 end
 
 wire [8:0] packet_data;
-wire [4:0] packet_cnt;
 
 hdmi_packet pkt (
     .clk_pixel  (   I_rgb_clk),
@@ -404,7 +403,7 @@ hdmi_packet pkt (
     .header     (      hdr_r ),
     .sub        (      sub_r ),
     .packet_data( packet_data),
-    .counter    (  packet_cnt)
+    .counter    (            )
 );
 
 //------------------------------------------------------------------------

@@ -1,56 +1,3 @@
-/*
-IO_LOC "HP_BCK" 71;
-IO_PORT "HP_BCK" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "HP_WS" 72;
-IO_PORT "HP_WS" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "HP_DIN" 73;
-IO_PORT "HP_DIN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "PA_EN" 74;
-IO_PORT "PA_EN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-*/
-/*
-IO_LOC "LCD_B[4]" 27;
-IO_PORT "LCD_B[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_B[3]" 28;
-IO_PORT "LCD_B[3]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_B[2]" 29;
-IO_PORT "LCD_B[2]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_B[1]" 30;
-IO_PORT "LCD_B[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_B[0]" 31;
-IO_PORT "LCD_B[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_G[5]" 32;
-IO_PORT "LCD_G[5]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_G[4]" 33;
-IO_PORT "LCD_G[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_G[3]" 34;
-IO_PORT "LCD_G[3]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_G[2]" 35;
-IO_PORT "LCD_G[2]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_G[1]" 36;
-IO_PORT "LCD_G[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_G[0]" 37;
-IO_PORT "LCD_G[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_R[4]" 38;
-IO_PORT "LCD_R[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_R[3]" 39;
-IO_PORT "LCD_R[3]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_R[2]" 40;
-IO_PORT "LCD_R[2]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_R[1]" 41;
-IO_PORT "LCD_R[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_R[0]" 42;
-IO_PORT "LCD_R[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_DEN" 48;
-IO_PORT "LCD_DEN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_VS" 26;
-IO_PORT "LCD_VS" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_HS" 25;
-IO_PORT "LCD_HS" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC "LCD_CLK" 77;
-IO_PORT "LCD_CLK" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
-*/
-
 module top(
     clk27,
     buts,
@@ -152,28 +99,14 @@ assign leds[0]       = sys_rst_n        ;
 
 always @(posedge clk_25 or negedge n_all_rst) count_rst <= !n_all_rst ? 24'd0 : count_rst + !count_rst[23];
 //------------------------------------------------------------//
-/*reg clk4_sync    = 1'b0;
-reg clk4n_sync   = 1'b1;
-reg clk312_sync  = 1'b0;
-reg clk312n_sync = 1'b1;
-reg clk_dac_sync = 1'b0;
-
-
-always @(posedge clk_25)begin
-        clk4_sync    <=     clk4;
-        clk4n_sync   <=    ~clk4;
-
-        clk312_sync  <= clk_3_12;
-        clk312n_sync <=~clk_3_12;
-
-        clk_dac_sync <=  clk_dac;
-    end*/
-
+// Clocks.  clkram (50 MHz) and clk4 (4.18 MHz, the CPU) come off the PLL;
+// clk_25 and clk_3_12 (the PPU) are bits of sdram2's horizontal counter,
+// which is why the tools cannot relate them to the PLL.  Both edges of
+// each processor clock go through a BUFG.
 wire clk4_sync   ;
 wire clk4n_sync  ;
 wire clk312_sync ;
 wire clk312n_sync;
-wire clk_dac_sync;
 wire clk4n = ~clk4;
 wire clk_3_12n = ~clk_3_12;
 
@@ -183,20 +116,17 @@ wire init   ;
 wire clk_50 ;
 wire clk_25 ;
 wire clk4   ;
-wire clk_dac;
-wire cpuclk_p =    clk4_sync; //clk4;
-wire cpuclk_n =   clk4n_sync; //~clk4;
+wire cpuclk_p =    clk4_sync;
+wire cpuclk_n =   clk4n_sync;
 wire ppuclk_p =  clk312_sync;
 wire ppuclk_n = clk312n_sync;
 
-wire clk_6_25;
 wire clk_3_12;
 
 BUFG t4 (   clk4_sync,clk4     );
 BUFG t4n(  clk4n_sync,clk4n    );
 BUFG t3 ( clk312_sync,clk_3_12 );
 BUFG t3n(clk312n_sync,clk_3_12n);
-BUFG td (clk_dac_sync,clk_dac  );
 
 wire hsync;
 wire vsync;
@@ -222,7 +152,6 @@ wire [31:0]data_cpu_o;
 wire       read_cpu_o;
 wire       wrte_cpu_o;
 wire [ 3:0]mask_cpu_o;
-wire       busy_cpu_i;
 wire       askn_cpu_i;
 
 wire [15:0]addr_ppu_o;
@@ -231,7 +160,6 @@ wire [31:0]data_ppu_o;
 wire       read_ppu_o;
 wire       wrte_ppu_o;
 wire [ 3:0]mask_ppu_o;
-wire       busy_ppu_i;
 wire       askn_ppu_i;
 //------------------------------------------------------------//
 sdram2 ram1(
@@ -261,16 +189,14 @@ sdram2 ram1(
    
    .clk_25    (           clk_25),
    .clk_50    (           clk_50),
-   .clk_dac   (          clk_dac),
-   
-   .cpu_clk   (         clk_6_25),
+
    .cpu_addr  ({3'd0,addr_cpu_o}),
    .cpu_dout  (       data_cpu_i),
    .cpu_din   (       data_cpu_o),
    .cpu_dqm   (       mask_cpu_o),
    .cpu_read  (       read_cpu_o),
    .cpu_wrte  (       wrte_cpu_o),
-   .cpu_busy  (       busy_cpu_i),
+   .cpu_busy  (                 ),
    .cpu_asck  (       askn_cpu_i),
    
    .ppu_clk   (         clk_3_12),
@@ -280,7 +206,7 @@ sdram2 ram1(
    .ppu_dqm   (       mask_ppu_o),
    .ppu_read  (       read_ppu_o),
    .ppu_wrte  (       wrte_ppu_o),
-   .ppu_busy  (       busy_ppu_i),
+   .ppu_busy  (                 ),
    .ppu_asck  (       askn_ppu_i)
 );
 
@@ -316,8 +242,9 @@ always @(posedge clkpix)begin
 
 // Gowin's dvi_tx is DVI, so it has no data islands and can carry no
 // sound.  hdmi_tx is the same job with them, and hdmi_serdes is the part
-// that touches Gowin primitives.  src/ip/dvi_tx is still in the project
-// and uninstantiated; putting it back is this instance and nothing else.
+// that touches Gowin primitives.  The dvi_tx IP was dropped from the tree
+// in Sep 2026; git history has it, and putting it back is this instance
+// and nothing else.
 wire [9:0] tmds_ch0, tmds_ch1, tmds_ch2;
 // The samples come from the volume stage further down; they are picked up
 // through these two wires so that block can stay where the author put it.
@@ -417,8 +344,6 @@ wire        system_video       ;
 wire [1:0]  system_reset       ;
 wire [1:0]  system_volume      ;
 wire [3:0]  system_floppy_wprot;
-wire [23:0] color              ;
-wire [ 1:0] leds_n             ;
 
 sysctrl sctl1(
     .clk                (           mist_clk),
@@ -436,8 +361,8 @@ sysctrl sctl1(
 
     .buttons            (              2'b00), // S0 and S1 buttons on Tang Nano 20k
 
-    .leds               (             leds_n), // two leds can be controlled from the MCU
-    .color              (              color), // a 24bit color to e.g. be used to drive the ws2812
+    .leds               (                   ), // MCU-driven LEDs and the ws2812 colour:
+    .color              (                   ), // nothing on this board to drive
 
   // values that can be configured by the user
     .system_video       (       system_video),
@@ -447,9 +372,7 @@ sysctrl sctl1(
 );
 
 wire [5:0] db9_port = 6'd0;
-wire [7:0] keycode  ;
-wire [5:0] hid_mouse;   // USB/HID mouse with four directions and two buttons
-wire [7:0] hid_joy  ;   // USB/HID joystick with four directions and four buttons
+wire [7:0] keycode  ;   // the UKNC scan code, translated on the MCU
 
 hid hd1(
     .clk           (      mist_clk),
@@ -466,9 +389,9 @@ hid hd1(
     .iack          (    int_ack[1]),
 
 // output HID data received from USB
-    .mouse         (     hid_mouse),
+    .mouse         (              ),   // the UKNC has no mouse or joystick port
     .keyboard      (       keycode),
-    .joystick0     (       hid_joy),
+    .joystick0     (              ),
     .joystick1     (              )
 );
 
@@ -562,11 +485,7 @@ osd_u8g2 osd1(
 //------------------------------------------------------------//
 //  Wishbone PPU
 //------------------------------------------------------------//
-wire       ppu_vm_clk_p;
-
 wire       ppu_vm_init_o;
-wire       ppu_vm_dclo_o;
-wire       ppu_vm_aclo_o;
 
 wire       ppu_vm_virq_i;
 
@@ -596,9 +515,6 @@ wire       pin_tmr_ena_o;
 // vp1-128
 wire [15:0]ppu_wbm_dat_i_128;
 wire       ppu_wbm_ack_i_128;
-
-wire       wite_clk_128;
-wire       motor_on_128;
 //xm2-01
 wire [15:0]ppu_wbm_dat_i_xm2;
 wire       ppu_vm_virq_i_xm2;
@@ -625,8 +541,6 @@ assign ppu_wbm_ack_i = ppu_wbm_ack_i_xm2|ppu_wbm_ack_i_vp|ppu_wbm_ack_i_128|ppu_
 assign ppu_wbi_dat_i = ppu_wbi_ack_i_xm2 ? ppu_wbi_dat_i_xm2 :
                        ppu_wbi_ack_i_vp  ? ppu_wbi_dat_i_vp  : 16'o0;
 assign ppu_wbi_ack_i = ppu_wbi_ack_i_xm2 | ppu_wbi_ack_i_vp;
-
-//assign leds[4] = ~pin_tmr_ena_o;
 //------------------------------------------------------------//
 //  Wishbone CPU
 //------------------------------------------------------------//
@@ -635,7 +549,6 @@ wire [15:0]vp65_wbi_dat_i;
 wire       vp65_vm_virq_i;
 wire       vp65_wbm_ack_i;
 wire       vp65_wbi_ack_i;
-wire       vp65_wbi_stb_i;
 //--------------------------------------------
 wire       cpu_vm_init_o;
 wire       cpu_vm_dclo_i;
@@ -686,8 +599,8 @@ ppu_wb ppu1(
    .askn_ram     (   askn_ppu_i),
 
    .pin_vm_init_o(ppu_vm_init_o),
-   .pin_vm_dclo_o(ppu_vm_dclo_o),
-   .pin_vm_aclo_o(ppu_vm_aclo_o),
+   .pin_vm_dclo_o(             ),   // the PPU's own DCLO/ACLO go nowhere;
+   .pin_vm_aclo_o(             ),   // the CPU's come from xm2_01's R177716
 
    .pin_vm_virq_i(ppu_vm_virq_i),
 
@@ -825,12 +738,7 @@ vp1_128fdd vp128(
     .wrprt_dsk    (system_floppy_wprot)
 );
 //------------------------------------------------------------//
-wire [10:0] left_channel ;
-wire [10:0] right_channel;
-wire [11:0] mono_channel ;   // driven by aberrant, no longer mixed - the
-                             // audio path is stereo now.  Left connected
-                             // because it is what a mono menu option would
-                             // use, not because anything reads it today.
+wire [11:0] mono_channel ;   // all nine AY channels, summed in aberrant
 
 aberrant ay1(
    .ppu_vm_clk_p (         ppuclk_n),
@@ -846,8 +754,6 @@ aberrant ay1(
    .ppu_wbm_stb_i(    ppu_wbm_stb_o),
    .ppu_wbm_ack_o(ppu_wbm_ack_i_abr),
 
-   .l_channel    (     left_channel),
-   .r_channel    (    right_channel),
    .m_channel    (     mono_channel)
 );
 //------------------------------------------------------------//
@@ -886,8 +792,7 @@ cpu_wb cpu1(
    .pin_tmr_ena_i(pin_tmr_ena_o)
 );
 //------------------------------------------------------------//
-wire cpu_wbi_stb_o_vp1; // not use
-wire [7:0] covox;
+wire cpu_wbi_stb_o_vp1;   // the CPU's interrupt-ack chain, on to vp65
 
 vp1_120 vp1
 (
@@ -955,7 +860,7 @@ vp065 dd2(
    .pin_wbi_ack_o(   vp65_wbi_ack_i),
    .pin_wbi_stb_i(cpu_wbi_stb_o_vp1),
 
-   .pin_wbi_stb_o(   vp65_wbi_stb_i),
+   .pin_wbi_stb_o(                 ),
 
    .pin_tx_o     (     vp65_uart_tx),
    .pin_rx_i     (          uart_rx),
@@ -1066,10 +971,10 @@ always @(posedge ppuclk_p)
 assign hdmi_audio_l = volume_data_l;
 assign hdmi_audio_r = volume_data_r;
 
-// Pin 69 is the UKNC's own C2 serial port again.  A diagnostic monitor -
-// src/dbg/dbgmon.v, still in the project and instantiated nowhere - had the
-// line while the audio path was being chased, with about 160 lines of probe
-// accumulators here feeding it.  `git show` this commit's parent for them.
+// Pin 69 is the UKNC's own C2 serial port.  A diagnostic monitor
+// (src/dbg/dbgmon.v, since removed from the tree - `git log --all --
+// tang/src/dbg` finds it) had the line for a fortnight in Aug 2026, with
+// about 160 lines of probe accumulators here feeding it.
 assign uart_tx = vp65_uart_tx;
 
 // A diagnostic 1 kHz tone lived here, gated on buts[1], while the HDMI
@@ -1092,8 +997,6 @@ assign uart_tx = vp65_uart_tx;
 wire [15:0] data_aud_l;
 wire [15:0] data_aud_r;
 wire        isread_aud;
-wire        Empty_aud_l, Full_aud_l;
-wire        Empty_aud_r, Full_aud_r;
 
 fifo_audio abf1(
     .Data (volume_data_l),
@@ -1102,8 +1005,8 @@ fifo_audio abf1(
     .WrEn (         1'b1),
     .RdEn (         1'b1),
     .Q    (   data_aud_l),
-    .Empty(  Empty_aud_l),
-    .Full (   Full_aud_l)
+    .Empty(             ),
+    .Full (             )
 );
 
 fifo_audio abf2(
@@ -1113,8 +1016,8 @@ fifo_audio abf2(
     .WrEn (         1'b1),
     .RdEn (         1'b1),
     .Q    (   data_aud_r),
-    .Empty(  Empty_aud_r),
-    .Full (   Full_aud_r)
+    .Empty(             ),
+    .Full (             )
 );
 
 audio_drive ad1(

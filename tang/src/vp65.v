@@ -147,7 +147,6 @@ always @(posedge pin_vm_clk_p)begin load_tx_old <= load_tx; end
 always @(posedge pin_50MHz_clk)begin ask_tx_old <= ~tx_en_n & ask_tx; tx_data_valid <= rdreq; end
 
 wire [7:0]tx_data;
-wire tx_en;
 wire tx_en_n;
 
 uartfifo txff1(
@@ -160,7 +159,7 @@ uartfifo txff1(
     .Q    (           tx_data), //output [7:0] Q
 
     .Empty(           tx_en_n), //output Empty
-    .Full (             tx_en) //output Full
+    .Full (                  ) //output Full
 	);
 //=============================================================================================================
 uart_tx #(

@@ -1,0 +1,35 @@
+what is current AYs mixing scheme
+
+****
+
+The mix is mono, unipolar, and flat: every source added at one level, then the one sum divided down by the volume setting and sent to both sides.
+
+Stage 1, inside aberrant.v (registered on the PPU clock). The three AY instances each give 8-bit A, B, C outputs, 0 to 255. All nine are summed at equal weight into a 12-bit word, maximum 2295. The old stereo pan is still computed in the same block, A to the left, C to the right, B halved into both, but nothing in top.v reads those two outputs any more.
+
+Stage 2, in top.v (the mixer block around line 965). The nine-channel sum is shifted up by three bits, then the beeper is added as a single bit worth 8192.
+
+Nine AY channels, shifted left 3: 0 to 18360
+Beeper (bit 7 of R177716): 0 or 8192
+Sum: 0 to 26552
+
+Nothing is subtracted, so the sample never goes negative and never reaches 32767. No DC blocker is in the path. The clip function is still there but cannot trigger at these levels.
+
+Stage 3, volume. The sum is registered on the PPU clock through a two-bit menu setting. Zero mutes, one shifts right by two, two shifts right by one, three passes the full sum. Full volume is the unattenuated sum and the other settings only divide it down, so the setting changes loudness and not what you can hear. The same word goes to left and right, and from there to both the HDMI encoder, which resamples it to 48 kHz on its own, and the two I2S FIFOs.
+
+Two things the scheme deliberately leaves out. There is no stereo, on the grounds that the real module sums all nine channels into one output. And there is no DC removal, because the DC blocker was pulled on 31 Aug while the silence was still being blamed on bipolar signals. Now that the subpacket layout is known to be the real cause, the comment in top.v says the blocker should go back once the fixed layout has been heard on a board. The offset is real, roughly +3000 under one chip's music and +9000 under three.
+
+sound now works but is it so channel weight is not equal across A B C?
+
+****
+
+No. In the live path, A, B and C are weighted equally at every stage, and the only unequal weighting in the tree is in dead code.
+
+Inside the YM2149 core (src/ay/ym2149.sv), the three channels are built by three identical lines. Each takes its own tone and noise enable bits from register 7, its own volume register, the same shared envelope, and indexes the same 64-entry table. The MODE input is tied to 1 on all three instances, which selects the AY-8910 half of the table for every channel alike. So a given volume value produces the same 8-bit output on A, B and C.
+
+Inside aberrant.v, the mono sum adds all nine outputs with no shifts or coefficients, one to one to one. That sum is what top.v reads.
+
+The one place B is treated differently is the old stereo pan in the same block, where B is halved into each side. Those left and right outputs are still computed but nothing reads them, so they cannot affect what you hear.
+
+If a channel does sound quieter on the board, the reason is in the program, not the mixer. A song that runs one channel on the envelope, or on noise mixed with tone, or simply at a lower volume register, will do that. The AY-8910 table is also logarithmic, so a difference of one or two volume steps near the top is a much larger amplitude difference than the same steps near the bottom, which can make a channel at volume 13 sound noticeably softer than one at 15.
+
+Since sound now plays on the board, that is the first hardware confirmation of the subpacket layout fix, and the mixer comment in top.v says the DC blocker is worth putting back at that point. Nothing in the tree records the board result yet. I have not changed anything.

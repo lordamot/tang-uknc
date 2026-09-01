@@ -29,7 +29,6 @@ reg  [ 1:0] sel  = 2'b11;
 reg         stb  = 1'b0;
 wire [15:0] dout;
 wire        ack;
-wire [10:0] l_ch, r_ch;
 wire [11:0] m_ch;
 
 aberrant dut (
@@ -37,7 +36,7 @@ aberrant dut (
     .ppu_wbm_adr_i(adr), .ppu_wbm_dat_i(dat), .ppu_wbm_dat_o(dout),
     .ppu_wbm_cyc_i(cyc), .ppu_wbm_wre_i(wre), .ppu_wbm_sel_o(sel),
     .ppu_wbm_stb_i(stb), .ppu_wbm_ack_o(ack),
-    .l_channel(l_ch), .r_channel(r_ch), .m_channel(m_ch));
+    .m_channel(m_ch));
 
 integer errors = 0;
 
@@ -69,7 +68,7 @@ task check_reg(input [255:0] name, input [7:0] got, input [7:0] want);
 endtask
 
 integer i;
-reg [10:0] lmin, lmax;
+reg [11:0] lmin, lmax;
 
 initial begin
     repeat (10) @(posedge clk);
@@ -89,13 +88,13 @@ initial begin
     check_reg("R8",  dut.dd1.ymreg[8],  8'd15);
 
     // Let it run and see whether the output actually moves.
-    lmin = 11'h7FF; lmax = 11'd0;
+    lmin = 12'hFFF; lmax = 12'd0;
     for (i = 0; i < 200000; i = i + 1) begin
         @(posedge clk);
-        if (l_ch < lmin) lmin = l_ch;
-        if (l_ch > lmax) lmax = l_ch;
+        if (m_ch < lmin) lmin = m_ch;
+        if (m_ch > lmax) lmax = m_ch;
     end
-    $display("[tb_aberrant] l_channel over 200k clocks: min=%0d max=%0d", lmin, lmax);
+    $display("[tb_aberrant] m_channel over 200k clocks: min=%0d max=%0d", lmin, lmax);
     if (lmax == lmin) begin
         $display("  FAIL: output never moved - the AY is silent");
         errors = errors + 1;

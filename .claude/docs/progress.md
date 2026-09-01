@@ -4,9 +4,10 @@ Last bitstream: **1 September 2026** (`bin/tang.fs`, 7262008 bytes), built
 here with `make bitstream` and carrying every RTL change in this file -
 the four VM2 core fixes, the AY chipselect, the stereo audio, the first
 timing constraints, the return to stock MiSTeryNano wiring, HDMI audio,
-and the audio subpacket layout fix (defect 11).  It places at Logic 44%,
-Register 25%, BSRAM 48%, 0 setup-violated endpoints and 524 hold (the
-artefact defect 3 describes).  Last MCU firmware: **30 August 2026**
+the audio subpacket layout fix (defect 11) and the September tree cleanup
+(**Repository hygiene** below), which changed no logic and left the
+placement where it was: Logic 44%, Register 25%, BSRAM 48%, 0
+setup-violated endpoints and 524 hold (the artefact defect 3 describes).  Last MCU firmware: **30 August 2026**
 (`bin/bl616.bin`, 430512 bytes), also built here, carrying the
 settings-file fix.  The bitstream of 30 Aug was on hardware and played AY
 music under one or two chips; **this one has not been heard.**  The
@@ -334,10 +335,10 @@ edges of two clocks that are physically the same counter, and analyses the
 crossings between them at worst case.  **Make the generated-clock form
 resolve before reading anything into that 559.**
 
-Two more things learned by running it.  `clk_6_25` cannot be constrained
-at all - it is `sdram2`'s `cpu_clk`, top.v brings it out to a wire nothing
-reads, and synthesis removes it, which is defect 5 below showing up in a
-second place.  And five signals that are flops clocked by data
+Two more things learned by running it.  `clk_6_25` could not be
+constrained at all - it was `sdram2`'s `cpu_clk`, brought out to a wire
+nothing read and removed by synthesis, which was defect 5 below showing up
+in a second place; the port is gone now.  And five signals that are flops clocked by data
 (`ram1/curs_set`, `isread_aud`, `disk_step`, `fdd/clk_dsk`,
 `dd1/timer_clk_4`) were being analysed at the tool's default 100 MHz,
 which is where most of the original 729 setup violations came from; they
@@ -351,9 +352,9 @@ asynchronous.
 
 ### 4. Clocks that the tools cannot reason about
 
-- `clk_25`, `clk_3_12`, `clk_dac` are **bits of a counter**, not PLL
-  outputs, so no clock relationship is derivable and `test003.log` says so
-  twelve times over (`TA1117`).
+- `clk_25` and `clk_3_12` are **bits of a counter**, not PLL outputs, so
+  no clock relationship is derivable and `test003.log` says so (`TA1117`).
+  `clk_dac`, a third such bit that fed a BUFG nothing read, is gone.
 - `sdram2.v` clocks a flop off `curs_set`, a data signal
   (`always @(posedge curs_set or posedge new_scr)`).  Same for the four
   `mount_dsk` flops in `top.v`, clocked off `sd_img_mounted[n]`.
@@ -365,12 +366,13 @@ asynchronous.
 None of this is broken today.  All of it is why the design is fragile
 against re-place-and-route.
 
-### 5. `clk_6_25` goes nowhere
+### 5. `clk_6_25` goes nowhere - REMOVED
 
-`sdram2`'s `cpu_clk` (6.27 MHz) is brought out to a wire in `top.v` that
-nothing reads.  The CPU runs on the PLL's `clk4` (4.18 MHz) instead.  If
+`sdram2`'s `cpu_clk` (6.27 MHz) was brought out to a wire in `top.v` that
+nothing read.  The CPU runs on the PLL's `clk4` (4.18 MHz) instead.  If
 the intent was to run the CPU at twice the PPU rate off one counter, that
-is not what happens.
+is not what happens, and as of Sep 2026 the port and the wire are gone, so
+it is a decision to take rather than a loose end.
 
 ### 6. The MCU link was not wired like MiSTeryNano's - CHANGED
 
@@ -420,8 +422,8 @@ hardware, and this is the one change in this file that can be wrong in a
 way no simulation will show** - it is entirely about which pad a signal
 comes out of.  The internal-BL616 half has never been exercised at all.
 
-`src/test003_lcd.cst` still carries the old five-pin MCU block.  It is
-disabled in the `.gprj` and now names ports that do not exist.
+`src/test003_lcd.cst`, which carried the old five-pin MCU block and named
+ports that no longer existed, was removed in Sep 2026.
 
 ### 7. HDMI carried no sound - ADDED
 
@@ -611,17 +613,21 @@ the blocker should be the next build, not this one.
   should and says why it did not before; the board has not heard it.  If
   it does, put the DC blocker back (defect 10).
 - **Why does the player hang with `Зависание при приеме а.в.п`?**  It is a
-  CPU-PPU channel fault and there are no probes on the channel yet.  Cheap
-  to add now the monitor exists: the counters would go beside the ones in
-  `top.v` and the words into `dbg_probes`.
-- **Why is `sdram1.v` in the build?**  `sdram2` is what `top.v`
-  instantiates; `sdram1` is compiled and appears to be unreferenced from
-  the top-level hierarchy.
+  CPU-PPU channel fault and there are no probes on the channel.  The
+  diagnostic monitor that would have carried them is out of the tree
+  (`.claude/docs/fpga.md`, **Board diagnostics**); bringing it back for
+  this is a `git log --all -- tang/src/dbg` away.
 
 ## Repository hygiene
 
-Roughly half the `.v` files under `tang/src/` are not in
-`tang/test003.gprj`, including three complete earlier SD stacks, an earlier
-OSD, an earlier PS/2 keyboard path, and the whole VHDL AY line.  Several
-share a module name with a live file.  The list is in
-`.claude/docs/fpga.md`; check it before editing anything.
+Cleaned in September 2026: every source under `tang/src/` is now in
+`tang/test003.gprj` and every module in it is instantiated.  Roughly half
+the `.v` files used to be outside the project - three earlier SD stacks,
+an earlier OSD, a PS/2 keyboard path, the VHDL AY line, `(Копия)` files -
+and ten more were inside it but unused.  `.claude/docs/fpga.md` lists
+what went; git history has it.  The dead signals the same pass took out of
+the custom RTL (`top.v`, `aberrant.v`, `sdram2.v`, `fdd4.v`, `vp65.v`,
+`hdmi_tx.v`) were all write-only or undriven; the ABC-panned stereo pair
+in `aberrant.v` went with them, since the mixer is mono by design.
+Verilator `-Wall` over the custom files now reports only unused input bits
+on peripheral ports, which is the bus interface and stays.

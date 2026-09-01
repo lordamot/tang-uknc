@@ -1,0 +1,48 @@
+check the project and docs.
+code comments and collected docs may be not accurate.
+topmost problem: hdmi audio does not play on tv if all 3 AY chips play
+check carefully what happens and fix.
+one note: tang supports flashing into ram to test against tv when my participation
+needed - no reloads needed in such a case
+
+****
+
+Found and fixed: the HDMI audio sample subpacket was packed in the wrong bit layout, and that one error explains the three-chip mute and every earlier "bipolar is silent" observation. The fix is in tang/src/hdmi/hdmi_tx.v, the testbench decodes the correct layout now, lint is clean, simulation is clean, and bin/tang.fs is rebuilt. It has not been heard on a board.
+
+What the encoder was sending
+
+HDMI 1.4b table 5-12 lays an audio sample subpacket out as the two 24-bit samples adjacent, left in bytes 0-2 and right in bytes 3-5, with all eight flag bits collected in byte 6 as PR CR UR VR PL CL UL VL. hdl-util/hdmi, which this encoder derives from and which plays on real sinks, builds exactly that word; I checked its source. On 30 Aug 2026 the word was changed to two 28-bit IEC 60958 subframes end to end, sample then V U C P, twice, and CLAUDE.md gained a trap defending it. The docs said the opposite of the standard.
+
+A sink reading the spec layout takes the left channel's flags from bits 51:48. In the interleaved stream those four bits are the top of the right sample, which is the same mono word, so the sink read sample bit 12 as the left channel's validity bit, bit 14 as its channel-status bit and bit 15, the sign, as its parity bit. A 1 in the channel-status position corrupts the 192-bit block the sink assembles, and a corrupt block reads as non-PCM or a rate change, so the sink mutes.
+
+That single mechanism covers every symptom on record:
+- one AY chip peaks at 6120 and two at 12240, both below 16384, so bit 14 never sets and they play; three peak at 18360 and mute;
+- the beeper at 16384 mutes and at 8192 plays: bit 14 against bit 13;
+- the raw sum minus 512, the DC-blocked bipolar form and the DC-blocked plus 8192 form were all silent: each goes negative or over 16384 at some point, and a negative sample has bits 15:12 all set;
+- the right channel would also have been sixteen times too loud and wrapping past 4096, which is probably what the original "right channel is white noise" observation was.
+
+None of it was the level, the sign or the DC.
+
+What changed
+- tang/src/hdmi/hdmi_tx.v: as_sub0 is now {PR,CR,UR,VR, PL,CL,UL,VL, samp_r, samp_l}. The comments there and in the file header say why.
+- sim/tb/tb_top.v: the decoder reads table 5-12 instead of sharing the encoder's old layout, and +AUDIOTEST now forces full volume, steps the mix through a sample of exactly 16384 and forces a negative word, so the check reaches the bits that mattered.
+- tang/src/top.v: comments only. The mixer is unchanged and still unipolar, on purpose: this build differs from the 30 Aug one in the subpacket layout and nothing else.
+- CLAUDE.md, platform.md, progress.md, fpga.md: the wrong trap is replaced, the "unipolar because bipolar is silent" story is corrected, and defect 11 has the bit-by-bit table.
+
+What was checked, and what was not
+
+make lint: clean. make sim with +AUDIOTEST, 120 ms, decoded through the spec layout: 5855 audio packets, 0 ECC errors, wire min -12345 max 16384, 0 bad parity, 0 flagged invalid; the sign and the bit-14 case both survive. make bitstream: Logic 44%, Register 25%, BSRAM 48%, 0 setup violations, 524 hold (the known artefact). Not heard on a television. Flash bin/tang.fs into SRAM and try three-chip music, the beeper, and both channels; the right channel should now be at the same level as the left.
+
+After the board test
+
+If it plays, the DC blocker removed on 31 Aug (git show f2bb44b^) should come back as the next single change: the offset is real, about +9000 under three chips, and its removal was based on the confounded observations above. If it still mutes, the next candidate is the sink's own DC handling, and the blocker is the test for that too.
+
+Two loose ends I left alone: prompts/10 and prompts/22 are untracked entries from earlier sessions, and sim/tb/tb_mix.v is an untracked testbench for a saturating mixer that does not exist in the committed aberrant.v, so it will not compile; it was a workaround for the same symptom and is superseded. Nothing is committed.
+
+is new bitream in board's ram already and working?
+
+****
+
+It is in SRAM now; whether it works is yours to say. It was not loaded before you asked: I had only built it. The board was attached (FT2232 on /dev/ttyUSB0/1), so I ran make flash-fpga, which is openFPGALoader to SRAM without -f, and it reported Load SRAM 100%, Done. The flash is untouched, so a power cycle brings the 30 Aug bitstream back.
+
+Nothing here can hear the television, so "working" is not a claim I can make. What to listen for: three-chip music playing at all, the beeper at 100% volume, and the right channel at the same level as the left rather than louder and distorted. If it mutes exactly as before, the layout was not the mechanism, and the next single change is the DC blocker.
