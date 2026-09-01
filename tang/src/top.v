@@ -980,47 +980,46 @@ vp065 dd2(
 //
 // Headroom, so nothing ever clips: m_channel is 12 bits and reaches
 // 9 * 255 = 2295, which shifted up three is 18360, and the beeper adds
-// 4096.  The total is 22456, comfortably inside the 32767 a signed sample
+// 8192.  The total is 26552, comfortably inside the 32767 a signed sample
 // allows - so full volume is the unattenuated sum and the quieter settings
 // divide down from it.  No saturation is needed and none is done.
 wire [15:0] ay_mix = {1'd0, mono_channel, 3'd0};   // 0..18360
 wire [15:0] beeper = {2'd0, sound, 13'd0};         // 0 or 8192
-wire [15:0] mix    = ay_mix + beeper;              // 0..34744, clip() catches
-                                                  // the corner where three
-                                                  // chips and the beeper all
-                                                  // peak at once
+wire [15:0] mix    = ay_mix + beeper;              // 0..26552
 
-// The sum goes out unipolar, as it is.  That is measured, not assumed.
+// The sum goes out unipolar, as it is.
 //
 // Every AY channel sits between 0 and 255 and never goes negative, so the
 // sum of nine of them carries a large steady offset, and so does the
 // beeper.  A DC blocker used to take that out here, on the reasoning that
 // a real module has a coupling capacitor in front of its amplifier and
-// this one did not.  Four states went on the board, each one property
-// apart from the working one:
+// this one did not.  It was removed on 31 Aug 2026 because every bipolar
+// form of the signal was silent on the operator's television while the
+// raw sum played, and the reason was written up as unknown.
 //
-//   raw sum, 0..N, quiescent exactly 0        PLAYS
-//   raw sum minus a constant 512              silent - dips below zero
-//   DC blocked, bipolar, quiescent 0          silent - dips below zero
-//   DC blocked plus 8192, never negative      silent - permanent offset
+// It is known now, and it was never the level, the sign or the DC.
+// hdmi_tx.v packed the audio subpacket as two IEC 60958 subframes end to
+// end instead of HDMI's own layout, which put sample bits 15:12 where the
+// sink reads the left channel's V, U, C and P flags.  A negative sample
+// has all four set; a sample at or above 16384 has bit 14, the
+// channel-status bit, set.  Either corrupts the channel status block the
+// sink is reading and the sink mutes.  That is the whole of the table
+// that used to sit here: minus 512 dips negative, DC blocked dips
+// negative, the beeper at 16384 reaches bit 14, and three AY chips at once
+// peak at 18360 and reach it too - while one or two chips, peaking at 6120
+// and 12240, never do.  Fixed 1 Sep 2026 in hdmi_tx.v.
 //
-// The third and fourth have the same AC content and comparable amplitude
-// to the first, so it is not amplitude; the second differs from the first
-// in nothing but the sign of its troughs, so it is not offset either.  No
-// mechanism is known, but this sink takes the raw sum and nothing else,
-// and the hardware being modelled has that capacitor anyway.  The
-// blocker's own motive - the mean steps with the program material - is
-// contained by keeping the beeper at 8192 rather than 16384, which is the
-// level that mutes the sink at full volume.
-//
-// The blocker was carried on S2, so that one bitstream held both answers.
-// That bypass and the blocker behind it are both gone; `git show` this
-// commit's parent for them.  S2 does nothing now.
+// So the raw sum is kept here for now as the one thing known to play,
+// with the layout fix as the only change between builds.  Once the fixed
+// layout has been heard on a board the blocker is worth putting back -
+// the offset is real, +3000 of DC under one chip's music, +9000 under
+// three, and a sink's own AC coupling turns every step in it into a thump.
+// `git show f2bb44b^` has the blocker.
 wire signed [17:0] snd_amp = $signed({2'b00, mix});
 
-// mix reaches 34744 when three chips and the beeper all peak at once,
-// which is past what a signed sample holds, so the corner is clipped
-// rather than allowed to wrap.
+// mix reaches 26552 when three chips and the beeper all peak at once,
+// which fits a signed sample; clip() is kept for the day the beeper or
+// the AY level goes back up, so the corner clips rather than wraps.
 function signed [15:0] clip;
     input signed [17:0] v;
     clip = (v >  18'sd32767) ?  16'sh7FFF :

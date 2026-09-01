@@ -1,0 +1,274 @@
+lets contnue hdmi audio debug. add function to send note into channel A of first AY (in terms of AY chip - full volume note with soem vibrato) - by pressing S2. second press should silence it back. So I'll check whats happening on tv with sound then
+
+****
+
+Done, and building measurement into it turned up something separate: the AY
+plays an octave flat, and it always has.
+
+What S2 does now
+
+Press it and AY1 plays a note on channel A at full amplitude with a 6 Hz
+vibrato; press it again and it stops.  Nothing is forced anywhere - an
+injector in aberrant.v writes the chip's registers the way a program would,
+so what comes out is the AY's own tone generator feeding the same mixer,
+the same FIFOs and the same HDMI encoder that music travels through.  That
+is the point of doing it this way rather than synthesising a tone: if this
+is heard on the television and a PT3 module is not, the fault is above the
+mixer; if this is not heard either, it is at or below it.
+
+The mechanism, in two files.  top.v debounces the button over 2^20 cycles
+of clk_25 - about 42 ms, toggling on the press - and hands aberrant.v a
+level.  A sequencer there writes four address/data pairs, one bus cycle
+each: R7 = 0x3E (tone A on, everything else off), R8 = 0x0F (channel A at
+full amplitude, envelope off), R0 = the tone period, R1 = 0x00.  While the
+note is on that burst repeats about every 10 ms, which is what carries the
+vibrato; switching it off writes R7 = 0x3F and R8 = 0x00 once and then
+leaves the chip alone.
+
+Two costs, both written into the source.  The injector overrides BDIR, BC
+and DI on the cycles it writes, so a program's write to AY1 can be lost
+while the note plays, and those four registers are left holding silence
+afterwards rather than what the program had put there.  And the level is
+modest - one channel at amplitude 15 is 255, which is 2040 after the
+mixer's shift, about -24 dBFS at full volume against the 18360 that nine
+channels can reach.  Turn the menu volume up before concluding anything.
+
+The octave
+
+Writing the note meant picking a tone period, which meant checking what
+period gives what pitch, which is where this fell out.  ym2149.sv reloads
+its prescaler with {SEL, 3'b111} and toggles the tone output every TP ticks
+of it, so the pitch is CE/(32*TP) with SEL tied 1 - half the
+f = f_AY/(16*TP) that every AY note table is written against.  Measured:
+the note at TP = 252 came out at 225 Hz, not 440, and the same module
+simulated with SEL = 0 gives 450.
+
+The 1.773364 MHz clock enable above it is right; SEL = 1 is the pairing for
+a core fed CE at twice the chip's master clock, and this design cannot make
+3.5468 MHz - CE is an enable on a 3.13 MHz clock.  So SEL = 0 is the only
+fix and it is one bit.  I have not made it, because it moves the pitch of
+everything the machine plays and that is your call rather than something to
+slip in beside a debug button.  It is written up as defect 11 in
+progress.md.  The test note itself is set to TP = 126 so that it is a true
+440 Hz on the build as it stands; if SEL is ever changed it becomes 880 Hz
+and stays perfectly audible.
+
+What was checked
+
+make lint: clean, no new warnings.
+
+The injector on its own, against the chip, in a throwaway Verilator
+testbench: silent at rest, 0..255 on channel A while the note is on, silent
+again after, and the frequency counted by edges - that is where the 225 and
+450 Hz numbers came from.
+
+make sim with a new +S2NOTE plusarg, which presses the button at 60 ms so
+the note plays from about 102 ms: 300 ms of the whole machine gives 6211
+HDMI audio samples with sound peaking at 510 - the default volume setting -
+with 0 parity errors, 0 flagged not-PCM and no FIFO overflow, and 12734 I2S
+frames with sound.  The read-after-write check is unchanged from HEAD, one
+wrong out of 272418, which is pre-existing.
+
+make bitstream: builds.  Logic 44 to 45 percent, registers 25, BSRAM
+unchanged at 48; 329 LUTs and 60 flops for the whole thing.  0 setup
+violations, hold 591 to 544, which is noise inside the clk_25/clk_3_12
+artefact rather than a change.
+
+Not checked: the board.  Nothing here has been run on hardware, and the one
+thing this is for - whether a television plays it - is exactly what only you
+can do.
+
+CLAUDE.md, fpga.md, platform.md and progress.md are updated, including the
+"S2 does nothing now" trap, which is no longer true.
+
+replugged, flash it
+
+****
+
+Flashed - erase and write both reported Done.
+
+Now power-cycle the board.  openFPGALoader -f -r writes the flash but does
+not reliably reconfigure the chip, so until the power is unplugged and
+replugged you are still running the previous bitstream.
+
+Then, on the running machine: turn the menu volume up first, because one AY
+channel is about -24 dBFS even at 100% and at 33% it will be near-inaudible
+whether or not the path works.  Press S2 - the non-reset button, pin 87 -
+and hold it a moment, since the debounce needs the level steady for about
+42 ms; it toggles on the press.  You should get a steady 440 Hz with an
+obvious slow wobble about six times a second, and pressing again silences
+it.
+
+What each outcome would mean.  Heard on the television: the encoder, the
+packet cadence and the sink are all fine and the fault is above the mixer,
+in what feeds the AY.  Nothing on the television but audible on the
+headphone jack: the fault is in the HDMI encoder or the sink's acceptance
+of it.  Nothing on either: the mixer or the volume stage.  The vibrato is
+there so a generated note cannot be confused with a stuck level or the
+television's own tone.
+
+sound works for all vol setting levels. now extend button behavior to send same note into second AY channel A also
+
+****
+
+Done - the same burst now goes into dd1 and dd2 together.
+
+And that result is worth writing down plainly, because it is the first
+sound this port is known to have made through HDMI, and it closes a row of
+open questions at once.  The signal was a real tone generator's output
+travelling the whole path with nothing forced and no software involved, so
+the encoder, the 48 kHz ratio, the subpacket layout, the General Control
+Packet and this sink's willingness to play the result are all measured now
+rather than argued.  Anything that stays silent from here is a fault above
+the mixer - in what writes the AY, not in what carries what the AY makes.
+
+What changed
+
+Three lines.  dd2's BDIR, BC and DI now come through the same override dd1
+has, so both chips get the identical burst on the identical clock.  dd3 is
+untouched.
+
+One consequence to be clear about rather than let you discover by ear: both
+chips share CE and RESET and now receive the same writes at the same
+instant, so their tone generators are in phase and stay there.  The output
+is exactly twice one chip's - 510 rather than 255 - not two voices you can
+pick apart.  So level is the whole observable here: it answers whether the
+second chip reaches the mixer, and nothing about what it sounds like.  If
+you ever want them distinguishable by ear, one count of detune on dd2's R0
+would beat audibly; I left it out because a doubled amplitude is the
+cleaner test of the thing you actually asked about.
+
+What was checked
+
+make lint clean.  The injector against both chips in the standalone bench:
+silent at rest, 0..510 while the note is on - exactly double, which is the
+in-phase behaviour predicted above - silent again after, same 440 Hz.
+
+make sim +S2NOTE, the whole machine: HDMI audio peak 1020 against 510
+before, same 6211 samples with sound, 0 parity errors, 0 flagged not-PCM,
+no FIFO overflow.  Read-after-write unchanged.
+
+make bitstream: builds.  Logic 44%, registers 25%, BSRAM 48%, 0 setup
+violations, hold 537.  The logic figure came out lower than the one-chip
+run - 8943 against 9252 - which is synthesis moving things about rather
+than the feature getting cheaper; the honest figure for the whole
+instrument against the 31 Aug baseline is 60 flops and 20 LUTs.
+
+Not flashed.  bin/tang.fs is rebuilt and waiting.
+
+Docs updated: the board result is defect 10b in progress.md, the test note
+section in fpga.md now describes both chips and says it works on hardware,
+and the CLAUDE.md trap and resource line follow.
+
+vol 33 works, vol 66 works, vol 100 works but quieter that first two. ok, lets add so that S2 sends same tone to 3rd AY channel A also - so all 3 of them
+
+****
+
+Done - dd3 joins dd1 and dd2, same burst, same clock.
+
+But the observation you just made is the more interesting half, and it is
+now written up rather than left in the terminal.
+
+100% quieter than 66% is the sink, not the design
+
+It is the same offset-dependent attenuation the beeper trips at 16384,
+arriving earlier because two chips at full volume put 4080 into the sample
+rather than the beeper's 8192, and because the volume stage scales a
+unipolar sum - a louder setting raises the mean along with the swing, and
+this television responds to the mean.  What makes it worth recording is the
+shape: the loudest setting is not the loudest sound, and nothing goes fully
+silent at any setting.  So the mute is a gradient with a knee, not a
+threshold, and 100% is already past the top of it.
+
+Two things follow.  "Quieter at 100%" is the sink and not a fault in
+whatever is playing, which is the sort of thing that otherwise costs a
+build cycle to rediscover.  And the note is now a level ladder - 255 with
+one chip, 510 with two, 765 with three - which is the cheapest probe there
+is of where that knee sits.  Adding the third chip raises the peak from
+4080 to 6120 at full volume, so expect 100% to get worse, not better.  That
+is the measurement working, not the change failing.
+
+What was checked
+
+make lint clean.  Standalone bench: 0..765 while the note is on, exactly
+three times one chip, silent before and after, 425 Hz measured over a 20 ms
+window.
+
+make sim +S2NOTE: HDMI audio peak 1530 against 1020 for two chips and 510
+for one, 6211 samples with sound, 0 parity errors, 0 flagged not-PCM, no
+FIFO overflow.  Read-after-write unchanged.
+
+make bitstream: builds.  Logic 44%, registers 25%, BSRAM 48%, 0 setup
+violations, hold 523.  The logic figure has gone 9252, 8943, 9074 across
+the one-, two- and three-chip runs, so the run-to-run spread is wider than
+the feature; against the 31 Aug baseline the whole instrument is 60 flops
+and about 150 LUTs.
+
+Not flashed.  bin/tang.fs is rebuilt and waiting on a replug.
+
+Docs: the volume finding is in defect 10 in progress.md, 10b now says all
+three chips reach the mixer, fpga.md describes the ladder, and CLAUDE.md
+has a trap saying full volume is not the loudest setting.
+
+vol 33 plays, vol 66 plays quieter than vol 33, vol 100 very short sound and silence. ok, last experiment and I'll explain what we should do. As for now - add another tone lets say 540 Hz with 6 Hz wobble to channel B of all 3 AYs - so pressing S2 will play A,B channel on each of those
+
+****
+
+Done - A at 440 Hz and B at 540 Hz, both wobbling at 6 Hz, on all three
+chips.  Six generators, peak 1530.
+
+But that result of yours is the best evidence we have had about this sink,
+and it has changed what the defect says.
+
+Three rungs of the ladder now, and the shape is the finding
+
+peak 510, sample 1020/2040/4080: plays, plays, plays but quieter than 66%.
+peak 765, sample 1530/3060/6120: plays, quieter than 33%, brief sound then
+silence.
+
+Three things fall out of that shape rather than out of any single reading.
+
+The loudest setting stops being the loudest sound well below full scale -
+6120 is -14.6 dBFS, less than a fifth of what a sample can hold.
+
+It is not a threshold.  The attenuation comes on gradually across the rungs
+and only the top one goes fully silent, so the sink is riding the level
+rather than comparing it against a limit.
+
+And the mute takes a moment to engage - 100% at peak 765 sounded and then
+stopped, rather than never starting.  That is the behaviour of something
+integrating the signal, and it is the strongest hint yet at the mechanism:
+what it integrates is the mean, and the volume stage scales a unipolar sum,
+so a louder setting raises the mean along with the swing.  That is why
+every DC-blocked form of this signal was silent and the raw sum is not, and
+it is the first account of that we have had that predicts anything.
+
+The rung this bitstream carries is 1530 - sample 3060/6120/12240 - so
+expect it to be worse again at the top: 12240 is where 6120 already went
+silent, doubled.  33% at 3060 is the one to listen to.  That is the
+measurement working, not the change failing.
+
+What was checked
+
+make lint clean.  Standalone bench, probing each chip's channel outputs
+separately rather than the sum: channel A 445 Hz, channel B 545 Hz over a
+100 ms window, peak 1530 exactly, silent before and after.  The small
+excess over 440 and 540 is the vibrato, which only sweeps upward from the
+nominal period.
+
+make sim +S2NOTE: HDMI audio peak 3060 at the default volume setting, 9252
+samples with sound against 6211 with one tone, 0 parity errors, 0 flagged
+not-PCM, no FIFO overflow.  Read-after-write unchanged.
+
+make bitstream: builds.  Logic 44%, registers 25%, BSRAM 48%, 0 setup
+violations, hold 512.  Across the four runs of this instrument the logic
+figure has been 9252, 8943, 9074 and 9048, so the run-to-run spread is
+wider than the feature; the honest cost against the 31 Aug baseline is 61
+flops and about 125 LUTs.
+
+Not flashed.  bin/tang.fs is rebuilt and waiting on a replug.
+
+Docs: defect 10 in progress.md now carries the whole ladder as a table with
+what the television did at each rung, fpga.md has the same table in the
+test note section, and the CLAUDE.md trap says loud is quiet and the knee
+is low.

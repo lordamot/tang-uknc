@@ -1,0 +1,334 @@
+Rework the audio mixing so that the output level is bounded by construction
+rather than by summing, and so that the peak sample is 2040 whatever is
+playing.
+
+Why, so the numbers are not arbitrary.  Measured on the operator's
+television, 1 Sep 2026, by walking a test tone up a level ladder and
+listening at each volume setting.  The sample values are what reached the
+HDMI encoder:
+
+  2040   plays cleanly  (seen twice, from two different sources)
+  3060   plays
+  4080   plays but audibly attenuated
+  6120   sounds briefly, then silence  (seen twice, two different sources)
+ 12240   sounds briefly, then silence
+
+The knee is a property of the sink, it is absolute rather than relative to
+the content, and it is repeatable across different combinations of sources
+producing the same level.  2040 is therefore chosen as the ceiling: it is
+the highest level that played cleanly every time it was tried.  The
+attenuation is believed to track the mean of a unipolar signal, which the
+volume stage scales along with the swing, so a louder setting moves toward
+the failure rather than away from it.
+
+WHAT TO BUILD
+
+1.  Beeper level becomes 0 or 510, replacing 0 or 8192.
+
+2.  Inside aberrant.v, the three channels of each AY are combined by a
+    composite that saturates, not by a sum, and the three chips are then
+    combined the same way.  Every one of aberrant's outputs - m_channel,
+    l_channel and r_channel - carries that same composite.  The panning is
+    gone; mono to both sides is what the real module does.
+
+3.  In top.v, the AY composite and the beeper are combined by the same
+    composite.
+
+4.  The volume shift stays exactly as it is - mute, >>2, >>1, none - and is
+    applied to the composite.  2040 at 100% therefore becomes 510 at 33%.
+
+DEFINITION OF THE COMPOSITE
+
+Let FS = 2040 be full scale.  For two sources a and b, each in 0..FS:
+
+    composite(a, b) = a + b - (a * b) / FS
+
+Properties that must hold, and that the tests below must check:
+
+  composite(0, 0)   = 0
+  composite(a, 0)   = a        a source alone passes through at its own level
+  composite(FS, FS) = FS       everything at once is still full scale
+  commutative and associative, so the order of the tree does not matter
+
+Consequences that are the point of the exercise:
+
+  one AY channel at amplitude 15         2040
+  two AY channels at amplitude 15        2040
+  three AY channels at amplitude 15      2040
+  all nine channels of all three chips   2040
+  beeper alone                            510
+  beeper plus everything else            2040
+
+Implementation is open, but two notes.  The multiply can be done in the
+AY's native 0..255 domain and scaled by 8 at the end, which is much cheaper
+than nine 12x12 multiplies in the 0..2040 domain.  And the beeper stage
+needs no multiplier at all: 510/2040 is exactly 1/4, so
+
+    composite(ay, beeper on) = ay - (ay >> 2) + 510
+
+is exact at both ends.  Whatever is chosen, state the rounding error: the
+corners above must be exact, and a lone source must pass through within
+1 LSB.
+
+CONSTRAINTS
+
+- The composite must be REGISTERED before hdmi_tx latches it.  The sample
+  register feeding volume_data_l/volume_data_r and hdmi_audio_l/r exists
+  because a combinational mixer was being sampled at an instant unrelated
+  to the mixer's clock, and the encoder sent carry-chain intermediates as
+  samples - the audio path read as dead for three build cycles.  Adding a
+  multiply tree in front of that register is the same hazard, larger.  Put
+  a flop after the composite, and pipeline the tree if the depth warrants
+  it; there are ~65 PPU clocks per 48 kHz sample, so latency is free.
+
+- The ceiling must be enforced by the composite, not by clip().  clip()
+  becomes unreachable at these levels; keep it as a guard and say so, but
+  nothing may depend on it firing.
+
+- No new clock domain.  PRIMARY and LW clock resources are both 8/8.
+
+- Any new .v file must go into tang/test003.gprj.  A sim-only testbench
+  goes under sim/ and must NOT go into the .gprj.
+
+- Do not touch S2, and do not add any test-tone injector.  The machine's
+  own sound is the only thing that should reach the mixer.
+
+- Octal stays octal where the sources use it; existing Russian comments
+  stay as they are.
+
+- Fix the arithmetic in the comments around the mixer while you are in
+  there.  top.v currently carries three different beeper levels in
+  adjacent comments - 4096 ("the total is 22456"), 8192 (the code), and
+  16384 ("0..34744") - none of them consistent with each other.  After
+  this change the only correct statement is that the output is 0..2040.
+
+VERIFICATION
+
+There is no way to make the machine produce sound in simulation on its own,
+so write a standalone testbench under sim/ that drives aberrant.v over its
+wishbone port the way the PPU does - a word write latches the AY register
+address, a byte write writes the value - and checks the composite
+numerically.  It must cover, as exact values:
+
+  silence                                    0
+  channel A alone at amplitude 15         2040
+  channels A and B at amplitude 15        2040
+  channels A, B and C at amplitude 15     2040
+  one chip versus three chips             2040 in both cases
+  amplitude below maximum passes through proportionally
+
+and a check at top level, or by reasoning stated explicitly if the
+testbench cannot reach it, that beeper alone is 510 and beeper plus a
+saturated AY is 2040.
+
+Then: make lint clean, make sim with the read-after-write check still
+passing, make fw if anything on the MCU side changed, and make bitstream.
+Report the resource change against the current place and route - Logic
+9048/20736, Register 3934/15915, BSRAM 22/46 - and say how many multipliers
+were used and whether they landed in DSP or LUTs.  Report setup and hold
+violation counts; setup must stay at 0.
+
+State plainly what was not checked.  Nothing here can be run on a board
+from this host, so "builds", "lints", "simulates" and "meets timing" are
+four different claims and none of them is "works".
+
+TWO THINGS TO FLAG BACK, NOT TO SILENTLY ACCEPT
+
+- The beeper loses about 24 dB.  It peaks at 8192 today and 510 after this
+  change, which is 127 at 33% volume; the beeper at 2048 was already
+  recorded as inaudible at that setting.  Programs whose only sound is the
+  beeper may go silent.  Make the beeper level and full scale localparams
+  so the ratio can be retuned without touching the structure, and say what
+  the beeper's level is in dBFS at each volume setting.
+
+- Full scale becomes -24 dBFS.  That is deliberate for this television, but
+  it makes the machine very quiet on any sink that does not have the same
+  knee.  Say so in the docs rather than leaving 2040 to look like a natural
+  constant.
+
+Update .claude/docs/platform.md, .claude/docs/fpga.md, .claude/docs/
+progress.md and CLAUDE.md to match, and append this exchange to prompts/
+in the form .claude/rules/guideline.md describes.
+
+****
+
+Built, linted, simulated and placed.  Not run on a board.
+
+THE COMPOSITE
+
+aberrant.v combines its nine channels in the AY's own 0..255 domain, four
+stages deep, one flop per stage, then scales by 8 - 255 * 8 = 2040 exactly.
+Eight 8x8 multiplies rather than eight 12x12.  Stage 1 is A o B per chip
+with C delayed to match, stage 2 is o C per chip, stage 3 is chip1 o chip2
+with chip3 delayed, stage 4 is o chip3, stage 5 is the output register.
+
+a*b/255 is rounded to nearest by t = p + 128; (t + (t >> 8)) >> 8.  I
+checked that identity against round(p/255) for every p in 0..65025 and
+against the composite over all 65536 input pairs:
+
+  composite(a, 0) = a           exact, all 256 values
+  composite(255, 255) = 255     exact
+  never exceeds 255             checked exhaustively, so the 11-bit
+                                l_channel and r_channel ports still fit
+  error against the real-valued composite   at most 0.5 LSB
+  associativity                 holds to within 1 LSB, not exactly
+
+So the corners the specification names are exact and a lone source passes
+through with no error at all, not merely within 1 LSB.
+
+The beeper stage in top.v is ay - (ay >> 2) + 510, written as a multiply by
+a Q16 constant so that retuning BEEP_LEVEL retunes the composite with it;
+at 510/2040 that constant is 16384 and the synthesiser reduces it to a
+shift, so the stage costs no multiplier.  Its error is not merely small, it
+is zero: floor(ay * 510 / 2040) equals ay >> 2 for every one of the 2041
+values the tree can produce, which the testbench checks one by one.
+
+AUDIO_FS = 2040 and BEEP_LEVEL = 510 are localparams in top.v.  At any
+ratio other than FS/4 the beeper stage costs one 12x16 multiply and is
+accurate to 1 LSB.
+
+REGISTERING
+
+Five flops in aberrant and one more in top.v - mix_r on posedge ppuclk_p -
+between the composite and the volume stage, which is itself the existing
+sample register.  So what hdmi_tx latches is three registers behind the
+last multiply - mono_channel, mix_r, volume_data_l - and nothing it can
+reach is settling.  Seven clocks end to end against about 65 PPU clocks per
+48 kHz sample: 2.2 us, and it costs nothing.
+
+clip() is kept and is now unreachable: mix_r is 0..2040 by construction and
+the volume stage only shifts down.  The comment says so.
+
+WHAT THE TESTBENCH CHECKS
+
+sim/tb/tb_mix.v, run by make mix-test.  Not in test003.gprj.  It drives
+aberrant.v over the wishbone port the way ppu.v does - word write latches a
+register number, byte write sends data - and programs R7 = 077 so tone and
+noise are off and the channels hold a steady level instead of oscillating.
+
+  silence                                       0
+  A alone at amplitude 15                    2040
+  A and B at amplitude 15                    2040
+  A, B and C at amplitude 15                 2040
+  one chip saturated                         2040
+  three chips, nine channels                 2040
+  l_channel follows                          2040
+  r_channel follows                          2040
+  A alone at amplitude 8                      320
+  A alone at amplitude 12                    1152
+  A and B at amplitude 8                      592
+  A at 12, B at 8                            1288
+  the same two levels, two chips             1288
+  beeper stage vs definition, mismatches        0
+  beeper alone                                510
+  beeper plus saturated AY                   2040
+
+The expected values are computed inside the testbench from the AY's own
+volume table and from the definition of the composite with a real integer
+divide, not from the shift-and-add the RTL uses, so the testbench and the
+design cannot agree by sharing a mistake.  That is the lesson from the
+SDRAM model and from the audio subframe layout, both of which agreed with
+the thing they were testing.
+
+The last line but two matters on its own: the same two levels give 1288
+whether they are on one chip or spread across two, which is associativity
+holding through the tree.
+
+THE ONE THING NOT CHECKED IN RTL, AND WHY
+
+The beeper stage lives in top.v, which the testbench cannot instantiate
+without the whole machine.  So it is covered the other way round: the exact
+composite is evaluated over all 2041 possible AY levels and compared with
+the arithmetic top.v performs, which gives 0 mismatches and never exceeds
+2040.  That checks the arithmetic.  The claim that top.v computes that
+arithmetic is a code-reading claim, and I am stating it as one rather than
+letting a passing test imply more than it covers.
+
+RESOURCES
+
+The place-and-route numbers in the prompt - Logic 9048, Register 3934 - are
+not the ones in the repository.  The committed report, git show
+HEAD:tang/impl/pnr/test003.rpt.txt, says 8923 and 3873, and that is the
+only baseline this host can verify, so the delta is measured against it.
+
+                     before        after
+  Logic          8923/20736    9213/20736    44% -> 45%
+    LUT / ALU      8264/575      8362/779
+  Register       3873/15915    3949/15915    25% -> 25%
+  BSRAM              22/46         22/46     48%, unchanged
+  DSP                 0/24          2/24     8 x MULT9X9
+  setup violations        0             0
+  hold violations       559           557
+
++290 logic cells and +76 registers, and the eight multiplies cost none of
+them: all eight went into two DSP macros, the first use this design has
+made of DSP at all.  There are 24.  The extra ALU is the composite's adds
+and subtracts, the extra registers are the pipeline.
+
+Setup violations stay at 0.  The 557 hold violations are the standing
+artefact - clk_25 and clk_3_12 have to be declared as independent clocks
+because the SDC parser will not take create_generated_clock with a PLL-pin
+source, so the tool cannot relate two clocks that are the same counter.
+The number means nothing until that is fixed.
+
+LEVELS, AND THE TWO THINGS TO FLAG
+
+Full scale 2040 is -24.1 dBFS against a 16-bit sample.
+
+                    full scale            beeper
+  volume 100%    2040, -24.1 dBFS     510, -36.1 dBFS
+  volume 66%     1020, -30.1 dBFS     255, -42.2 dBFS
+  volume 33%      510, -36.2 dBFS     127, -48.2 dBFS
+
+The beeper loses 24.1 dB exactly - 8192 to 510.  At 33% it is 127, and the
+beeper at 2048 was already recorded as inaudible at that setting, so a
+program whose only sound is the beeper is likely to be silent at the lower
+two settings and marginal at the top one.  That is a real regression and it
+is not hidden anywhere: BEEP_LEVEL is a localparam, the dBFS table is in
+platform.md and in progress.md defect 11, and raising it is one edit.
+
+Full scale at -24 dBFS makes the machine very quiet on any sink without
+this television's knee.  platform.md says that in those words rather than
+leaving 2040 looking like a natural constant, and AUDIO_FS is the localparam
+to change.
+
+WHAT WAS BUILT AND WHAT WAS NOT CHECKED
+
+  make lint       clean.  The two warnings it prints are pre-existing and
+                  in sim/stubs and top.v:529.
+  make mix-test   16 checks, 0 errors.
+  make ab-test    still passes; l_channel now swings 0..2040.
+  make sim        300 ms, 15 frames, memory read-after-write 213592
+                  checked with 1 wrong - the same single long-standing
+                  mismatch progress.md already records, not a new one.
+                  The HDMI decoder reports 14609 audio samples, 0 with
+                  sound, which is correct: nothing in that run plays
+                  anything.
+  make fw         not run.  Nothing on the MCU side changed.
+  make bitstream  builds, bin/tang.fs rewritten.
+
+Not checked: any of it on hardware.  The DSP inference in particular is new
+ground for this design - the multiplies are in hard macros now, and no
+board has confirmed that.  The 2040 ceiling is derived from the operator's
+measurements and is not itself re-measured here.  And "the peak sample is
+2040" is a claim about the mixer's output, which is where the ladder was
+measured; whether the sink likes it is the thing only the board can say.
+
+Builds, lints, simulates and meets its setup constraints.  None of those is
+"works".
+
+FILES
+
+  tang/src/aberrant.v      composite tree replaces the panned sum
+  tang/src/top.v           beeper composite, localparams, mix_r flop,
+                           the three inconsistent beeper comments gone
+  sim/tb/tb_mix.v          new, sim-only, not in the .gprj
+  Makefile                 make mix-test, and it is in make help
+  .claude/docs/platform.md the mixer section rewritten: composite, the
+                           measured ladder, the dBFS tables
+  .claude/docs/fpga.md     new "The mixer" section, resource budget updated
+  .claude/docs/progress.md defect 11 added, 2d marked superseded, 10 amended
+  CLAUDE.md                new trap, resource line, beeper level corrected
+
+No .v file was added to tang/src, so test003.gprj is unchanged.  S2 is
+untouched and there is no test-tone injector.

@@ -254,14 +254,13 @@ module tb_top;
         // "with L != R" is therefore expected to be zero now; it was a
         // stereo check back when the AYs were panned ABC.
         //
-        // It has to be a SQUARE WAVE, not a constant.  top.v now blocks DC
-        // the way the real module's coupling capacitor does, so a held
-        // value decays to nothing within about 50 ms - correctly, since a
-        // steady level is not a sound.  Forcing one would test silence.
+        // It steps rather than holds, so that it still means something if
+        // the DC blocker (removed 31 Aug 2026) comes back: a held value
+        // would decay to nothing through it within about 50 ms.
         if ($test$plusargs("AUDIOTEST")) begin
             audiotest = 1'b1;
-            $display("[tb] %0t audio test: m_channel squared between %o and %o",
-                     $time, 12'o1234, 12'o0400);
+            $display("[tb] %0t audio test: m_channel stepped %o, %o, %o",
+                     $time, 12'o1234, 12'o0400, 12'o4000);
         end
 
         #(run_ms * 1000000);
@@ -402,11 +401,29 @@ module tb_top;
         end
     end
 
-    // The +AUDIOTEST square wave: 1 kHz onto the AY mix, which survives
-    // the DC blocker where a constant would not.
+    // The +AUDIOTEST wave onto the AY mix.  Three levels, not two: 12'o4000
+    // is 2048, which the mixer shifts to a sample of exactly 16384 - bit 14
+    // set - the level at which the old subpacket layout put a 1 into the
+    // sink's channel-status position and every real sink muted.  With the
+    // spec layout the decoder above must report it as an ordinary sample
+    // with good parity and V clear; with the old one it reported the same,
+    // because it shared the layout.  A square between two small values
+    // would never reach that bit and would prove nothing about it.
+    // The volume is forced to 100% for it, because the stand-in BL616
+    // configures 33% and that divides 16384 to 4096 before the wire ever
+    // sees bit 14.  A fourth step forces the post-volume registers to a
+    // negative word - the mixer itself cannot go negative - so that the
+    // sign path through the spec layout is exercised as well, and the
+    // "AUDIO SIGN LOST" check above has something to check.
     always begin
-        #500000; if (audiotest) force uut.mono_channel = 12'o1234;
+        #500000; if (audiotest) begin force uut.system_volume = 2'b11;
+                                     force uut.mono_channel = 12'o1234;
+                                     release uut.volume_data_l;
+                                     release uut.volume_data_r; end
         #500000; if (audiotest) force uut.mono_channel = 12'o0400;
+        #500000; if (audiotest) force uut.mono_channel = 12'o4000;
+        #500000; if (audiotest) begin force uut.volume_data_l = -16'sd12345;
+                                     force uut.volume_data_r = -16'sd12345; end
     end
 
     //--------------------------------------------------------------------
@@ -717,17 +734,20 @@ module tb_top;
                            if(pk_sub[0][4]) rx_gcp_clrmute = rx_gcp_clrmute + 1;
                        end
                 8'h02: begin
-                           // IEC 60958 subframes, 28 bits each: 24 sample
-                           // bits then V, U, C, P.  Decoded here the way a
-                           // sink decodes it and NOT the way hdmi_tx.v
-                           // packs it - the two agreeing on a layout of
-                           // their own is exactly how the right channel
-                           // went out as noise while this said stereo.
+                           // HDMI 1.4b table 5-12, decoded the way a sink
+                           // decodes it: the two 24-bit samples adjacent
+                           // in bits 47:0, left first, and the eight flags
+                           // in bits 55:48 as {PR,CR,UR,VR,PL,CL,UL,VL}.
+                           // Until 1 Sep 2026 this decoded two 28-bit
+                           // subframes end to end, the same wrong layout
+                           // the encoder packed, and so said "stereo, 0
+                           // bad parity" of a stream that put the sample's
+                           // own bits into the sink's flag positions.
                            rx_audio = rx_audio + 1;
-                           sf_l = pk_sub[0][27: 0];
-                           sf_r = pk_sub[0][55:28];
-                           l = sf_l[23:0];
-                           r = sf_r[23:0];
+                           l = pk_sub[0][23: 0];
+                           r = pk_sub[0][47:24];
+                           sf_l = {pk_sub[0][51:48], l};   // {P,C,U,V,sample}
+                           sf_r = {pk_sub[0][55:52], r};
                            if (l !== 24'd0 || r !== 24'd0)
                                rx_aud_nonzero = rx_aud_nonzero + 1;
                            if (l !== r) rx_aud_stereo = rx_aud_stereo + 1;

@@ -1,15 +1,18 @@
 # State of the port
 
-Last bitstream: **30 August 2026** (`bin/tang.fs`, 7262008 bytes), built
-here with `make bitstream` and carrying every RTL change in this file - the
-four VM2 core fixes, the AY chipselect, the stereo audio, the first timing
-constraints, the return to stock MiSTeryNano wiring, and HDMI audio.  Last MCU
-firmware: **30 August 2026** (`bin/bl616.bin`, 430512 bytes), also built
-here, carrying the settings-file fix; the wiring change needed nothing
-from it.  **Neither has been on hardware, and the pinout changed - a board
-wired for any earlier bitstream must be rewired.**  The machine runs: both
-processors, screen over HDMI, USB keyboard through the BL616, four floppies
-off the SD card, AY sound and the beeper, and the OSD menu.
+Last bitstream: **1 September 2026** (`bin/tang.fs`, 7262008 bytes), built
+here with `make bitstream` and carrying every RTL change in this file -
+the four VM2 core fixes, the AY chipselect, the stereo audio, the first
+timing constraints, the return to stock MiSTeryNano wiring, HDMI audio,
+and the audio subpacket layout fix (defect 11).  It places at Logic 44%,
+Register 25%, BSRAM 48%, 0 setup-violated endpoints and 524 hold (the
+artefact defect 3 describes).  Last MCU firmware: **30 August 2026**
+(`bin/bl616.bin`, 430512 bytes), also built here, carrying the
+settings-file fix.  The bitstream of 30 Aug was on hardware and played AY
+music under one or two chips; **this one has not been heard.**  The
+machine runs: both processors, screen over HDMI, USB keyboard through the
+BL616, four floppies off the SD card, AY sound and the beeper, and the OSD
+menu.
 
 This file is the running record.  Everything below was established by
 reading the sources in August 2026 and, from the end of that month, by
@@ -527,27 +530,68 @@ assumption and both were wrong together, after the SDRAM model and the
 audio subframe layout.  When the board and the probe disagree, suspect the
 probe earlier than I did - it took three build cycles.
 
-### 10. The DC blocker is out of the signal path - DECIDED, NOT FIXED
+### 10. The DC blocker is out of the signal path - EXPLAINED BY 11
 
 The offset it was written for is real: measured on the board, one AY chip's
-music sits on **+3000 of DC** with the blocker bypassed, and a large enough
-one mutes the sink - the beeper at 16384 does it at full volume, at 8192 it
-does not.  But every DC-blocked form of the signal is silent on the
-operator's television and the raw unipolar sum is not.  The table is in
-`.claude/docs/platform.md`; the short version is that bipolar is silent,
-DC-blocked-plus-offset is silent at the same AC amplitude that plays from
-the raw path, and no mechanism for that is known.
+music sits on **+3000 of DC** with the blocker bypassed.  But every
+DC-blocked form of the signal was silent on the operator's television and
+the raw unipolar sum was not, and on 31 Aug 2026 the blocker and its S2
+bypass were removed with the cause written up as unknown.  The cause is
+defect 11: every silent form set sample bit 15 or 14, and the encoder was
+sending those bits where the sink reads its flags.  The raw sum stays for
+one build so that the layout fix is the only change; then the blocker
+(`git show f2bb44b^`) should return, beeper level and all.
 
-So the raw sum is the design and the beeper stays at 8192.  `S2` selected
-the blocker for anyone who wanted to try it on another display; on 31 Aug
-2026 the bypass and the blocker behind it were both removed, along with the
-diagnostic monitor, to take everything experimental back out of the audio
-path.  This is a decision made on measurement with the cause not
-understood, which is worth flagging as such rather than filing as fixed.
+### 11. The audio subpacket was packed as two subframes - FIXED, NOT HEARD
 
-Working as a result: **AY at 33/66/100, beeper at 66/100.**  Not working:
-the beeper at 33% is -24 dBFS and inaudible, and the beeper's mean still
-steps with the program material.
+`hdmi_tx.v`, `as_sub0`.  HDMI 1.4b table 5-12 lays an audio sample
+subpacket out as the two 24-bit samples adjacent, left in bytes 0-2, right
+in 3-5, and all eight flags in byte 6 as `{PR,CR,UR,VR,PL,CL,UL,VL}`.
+hdl-util/hdmi's `audio_sample_packet.sv`, which this encoder is derived
+from and which plays on real sinks, builds exactly that word.  On 30 Aug
+2026 the word was changed to two 28-bit IEC 60958 subframes end to end -
+`{P,C,U,V,sample}` twice - and `CLAUDE.md` gained a trap defending it.
+
+On a sink reading the spec layout, that stream is:
+
+```
+sink reads          gets                          meaning
+L    bits 23:0      samp_l                        correct
+R    bits 47:24     {samp_r[19:0], PL, CL, 0, 0}  right sample x16, wraps past 4096
+VL   bit 48         samp_r[20] = sample bit 12
+UL   bit 49         samp_r[21] = sample bit 13
+CL   bit 50         samp_r[22] = sample bit 14    channel status corrupted when set
+PL   bit 51         samp_r[23] = sample bit 15    the sign
+```
+
+Left and right carry the same mono word, so the left channel's channel
+status bit is sample bit 14 and its parity bit is the sign.  A negative
+sample has both set; a sample of 16384 or more has bit 14.  Either writes
+a 1 into the 192-bit channel status block the sink is assembling, and a
+block with the wrong bit set means non-PCM, a different rate or a
+different format - the sink mutes.  That explains, one symptom each:
+
+- the raw sum plays: never negative, and under two chips never 16384;
+- minus 512, DC-blocked, DC-blocked-plus-offset: negative or over the
+  line at some point, silent (defect 10's whole table);
+- the beeper at 16384 mutes, at 8192 plays: bit 14 against bit 13;
+- **three AY chips playing at once mute where one or two play**: peaks of
+  18360 against 6120 and 12240.  This is the report that found it.
+
+The right channel would also have been sixteen times too loud and
+wrapping, which the earlier "right channel is white noise" observation
+may have been - that observation was what motivated the change, and it
+was made before the combinational mixer (defect 9) was found, so it had
+more than one candidate.
+
+Reverted to table 5-12 on 1 Sep 2026.  `sim/tb/tb_top.v` decoded with the
+same wrong layout and had reported "stereo, 0 bad parity" throughout; it
+now decodes the spec layout and checks P and V there.  Lint clean;
+simulation with `+AUDIOTEST` decodes stereo samples with 0 bad parity and
+0 flagged invalid through the new decoder.  **Not heard on a board.**  The
+expected result is three chips and the beeper at any level, both channels
+at the same level, and no reason left for the unipolar sum - which is why
+the blocker should be the next build, not this one.
 
 ## Open questions
 
@@ -563,11 +607,9 @@ steps with the program material.
 - **Why does the PPU end up in a trap loop in simulation?**  See above.
   Find the first divergence, not the symptom; an SD card model is probably
   the prerequisite for going any further.
-- **Why will this television not play a bipolar sample stream?**  Defect 10.
-  The wire carries correct two's complement - the testbench decodes 4664
-  negative samples back exactly as sent - and the sink ignores it, while
-  playing the same AC content unipolar.  Untested on any other display,
-  which is the obvious next move and needs no code.
+- **Will the fixed subpacket layout play bipolar?**  Defect 11 says it
+  should and says why it did not before; the board has not heard it.  If
+  it does, put the DC blocker back (defect 10).
 - **Why does the player hang with `Зависание при приеме а.в.п`?**  It is a
   CPU-PPU channel fault and there are no probes on the channel yet.  Cheap
   to add now the monitor exists: the counters would go beside the ones in

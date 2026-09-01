@@ -228,6 +228,17 @@ Four things worth knowing before touching it:
   and a sink powers up unmuted.  The GCP still does the job it was added
   for, which is stating the colour depth.
 
+  **The audio sample subpacket is packed as HDMI 1.4b table 5-12** - the
+  two 24-bit samples adjacent in bits 47:0, left first, and the eight
+  flags in bits 55:48 as `{PR,CR,UR,VR,PL,CL,UL,VL}` - and not as two
+  IEC 60958 subframes end to end.  It was the latter from 30 Aug to 1 Sep
+  2026, which put sample bits 15:12 into the sink's flag positions for the
+  left channel; every "bipolar is silent" and "three chips mute"
+  observation of that period is that.  `.claude/docs/progress.md` defect
+  11 has the bit-by-bit table.  `sim/tb/tb_top.v` decodes the spec layout
+  and checks P and V, and `+AUDIOTEST` now drives the mix through a sample
+  of exactly 16384 so that the check reaches the bit that mattered.
+
 The AVI InfoFrame carries **VIC 0**, because 1280x600 at 50.7 Hz is not a
 CEA mode and there is no code for it.  Whether a sink will accept audio on
 a mode it does not recognise used to be an open question; as of Aug 2026 it

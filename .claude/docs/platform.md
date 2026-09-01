@@ -224,13 +224,12 @@ only divides that down; it must never scale up, which is what it did until
 Aug 2026, when 100% multiplied by four and clamped, so the volume setting
 changed which parts of the mix were audible rather than how loud they were.
 
-The sum stays **unipolar** - 0 upwards, quiescent at exactly zero - because
-that is what plays.  A DC blocker was written for it in Aug 2026, on the
-sound reasoning that nine unipolar channels carry an offset that the volume
-control then scales; the offset is real and was measured at +3000 under one
-chip's music.  But every DC-blocked form of the signal is silent on the
-operator's television, and the raw sum is not.  Four states, each differing
-from the working one in a single property:
+The sum is still **unipolar** - 0 upwards, quiescent at exactly zero -
+and until 1 Sep 2026 that was justified by measurement alone.  A DC
+blocker was written for it in Aug 2026, on the sound reasoning that nine
+unipolar channels carry an offset that the volume control then scales;
+the offset is real and was measured at +3000 under one chip's music.  But
+on the operator's television only the raw sum played:
 
 | samples | quiescent | result |
 |---|---|---|
@@ -239,20 +238,16 @@ from the working one in a single property:
 | DC blocked, bipolar | 0, dips negative | silent |
 | DC blocked plus 8192, never negative | 8192 | silent |
 
-The third and fourth have the same AC content and comparable amplitude as
-the first - the wire carried a clean 8192 +/- 580 that the sink ignored
-while it played 510 +/- 510 from the raw path - so it is not amplitude, and
-the second rules out the sign on its own.  No mechanism for this is known.
-What it does match is the hardware: a real MC0511 drives a unipolar sum
-through a coupling capacitor, and a television has one too, so blocking the
-DC digitally was doing the capacitor's job in front of a sink that will not
-take the result.  The blocker was carried in `top.v` on **S2** for a
-fortnight in case another display disagreed; both it and the S2 bypass were
-removed on 31 Aug 2026, so the raw sum is the only path there is.  `git
-show` the removing commit's parent for the code.
+and the blocker was removed on 31 Aug 2026 with the cause written up as
+unknown.  The cause was `hdmi_tx.v`'s audio subpacket layout, which put
+sample bits 15:12 where a sink reads the left channel's V, U, C and P
+flags (see `.claude/docs/fpga.md` and the trap in `CLAUDE.md`).  Every
+silent row has bit 15 or bit 14 set at some point and the playing row
+never does; nor does one chip (peak 6120) or two (12240), while three at
+once (18360) reach bit 14 and mute, which was the symptom that found it.
+The beeper's "16384 mutes, 8192 does not" is the same bit.
 
-The one defect that comes back with that decision is the blocker's original
-motive: the mean steps with the program material, so a loud enough beeper
-mutes the sink.  It is contained by level - the beeper at 16384 trips it at
-full volume, at 8192 it is clean at 66% and 100%.  At 33% the beeper is
--24 dBFS and inaudible.
+So the raw sum is kept for one more build as the known-playing form, with
+the layout fix the only change; then the blocker (`git show f2bb44b^`)
+should go back, because its motive was never wrong.  The beeper stays at
+8192 until then.  At 33% the beeper is -24 dBFS and inaudible.

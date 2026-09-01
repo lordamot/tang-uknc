@@ -25,12 +25,11 @@
 // active period at all - vertical blanking - the islands still happen,
 // which is what keeps the audio flowing across the frame boundary.
 //
-// The audio is sampled here at pixel_clock/1024, and NOT taken from the
-// I2S path: at 50.143 MHz that is 48.968 kHz, an exact ratio, which is
-// what makes N and CTS below constants rather than a measurement.  The
-// sink regenerates its audio clock from them, so it plays at the rate the
-// machine really produces; the "48 kHz" in the channel status is the
-// nearest declarable value and is informational only.
+// The audio is resampled here to exactly 48 kHz by a phase accumulator
+// and NOT taken from the I2S path; see the ACR section below.  The audio
+// sample subpacket is packed as HDMI table 5-12 lays it out - both
+// samples adjacent, the eight flags in the top byte - and not as two
+// IEC 60958 subframes; see as_sub0 for what the other layout did.
 //========================================================================
 module hdmi_tx (
     input             I_rst_n      ,
@@ -227,16 +226,33 @@ wire [23:0] samp_r = {aud_r_head, 8'd0};
 wire par_l = ^{cs_bit_l, 1'b0, 1'b0, samp_l};   // user = 0, valid = 0
 wire par_r = ^{cs_bit_r, 1'b0, 1'b0, samp_r};
 
-// The subpacket is two IEC 60958 subframes end to end, 28 bits each: the
-// 24 sample bits, then V, U, C and P.  The flags belong to the sample
-// they follow and have to stay interleaved with it - collecting them into
-// one field at the top puts the right channel's sample four bits high, so
-// its two top bits become the left channel's parity and channel status,
-// and the parity bit flips every sample.  That is heard as white noise on
-// the right channel and nothing else, because the left one happens to
-// stay in place at bits 23:0.
-wire [55:0] as_sub0 = {par_r, cs_bit_r, 1'b0, 1'b0, samp_r,
-                       par_l, cs_bit_l, 1'b0, 1'b0, samp_l};
+// Audio Sample Subpacket, HDMI 1.4b table 5-12: the two 24-bit samples
+// ADJACENT in bytes 0-5, left first, and all eight flag bits collected in
+// byte 6 as {PR, CR, UR, VR, PL, CL, UL, VL}, bit 7 down to bit 0.  The
+// IEC 60958 subframes are NOT sent end to end with their own V/U/C/P
+// behind each one; that is how the wire carries them at 3 MHz over
+// S/PDIF, and HDMI repacks it.  hdl-util/hdmi, which plays on real sinks,
+// builds exactly this word.
+//
+// This was interleaved - {P, C, U, V, sample} twice - from 30 Aug 2026 to
+// 1 Sep 2026, on the reasoning that a subpacket is two subframes, and
+// every audio symptom of that fortnight follows from it.  A sink reading
+// the spec layout took the right sample from bits 47:24, which held
+// samp_r[19:0] over the left flags - the right channel 16 times too loud
+// and wrapping past 4096 - and took the LEFT channel's flags from bits
+// 51:48, which held samp_r[23:20]: the top four bits of a 16-bit sample
+// shifted up by eight, i.e. sample bits 15:12.  So the left channel's
+// validity bit was sample bit 12, its channel-status bit was sample bit
+// 14 and its parity bit the sign.  Any sample at or above 16384, and any
+// negative one, put a 1 into the channel status block the sink was
+// reading, and a corrupt block is non-PCM or a rate change: mute.  That
+// is why one AY chip (peak 6120) played, two (12240) played, three
+// (18360) did not, the beeper at 16384 did not and at 8192 did, and why
+// every bipolar form of the signal was silent while the unipolar one
+// played.  None of that was the level, the sign or the DC.
+wire [55:0] as_sub0 = {par_r, cs_bit_r, 1'b0, 1'b0,      // PR CR UR VR
+                       par_l, cs_bit_l, 1'b0, 1'b0,      // PL CL UL VL
+                       samp_r, samp_l};
 
 // HB1[3:0] say which of the four subpackets carry a sample - one here.
 // HB2[7:4] flag the sample that starts a channel status block.

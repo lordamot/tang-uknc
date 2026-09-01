@@ -182,18 +182,26 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   sent now, asserting **neither** mute flag (`SB0 = 8'h00`) - the file
   used to send `8'h10` on a bit order that contradicts HDMI 1.4b table
   5-8, and the experiment behind it was confounded.
-- **An audio subpacket is two IEC 60958 subframes, and V/U/C/P belong
-  inside each one.**  `as_sub0` in `hdmi_tx.v` had the two samples
-  adjacent with all eight flag bits collected above them, so the sink read
-  the right channel four bits high with the left channel's parity as its
-  sign bit - parity flips every sample, so the right channel was
-  full-scale white noise while the left one, which happens to sit at bits
-  23:0 either way, was correct.  Fixed Aug 2026.  `sim/tb/tb_top.v`
-  decoded with the same wrong layout and so reported "stereo, 0 ecc
-  errors" throughout; it now decodes the way a sink does and checks the
-  parity and validity bits, which is the only reason that check is worth
-  anything.  **A testbench that shares the encoder's assumption tests
-  nothing** - the same lesson as the SDRAM model further down.
+- **An audio subpacket is NOT two IEC 60958 subframes end to end.**  HDMI
+  1.4b table 5-12 puts the two 24-bit samples adjacent in bytes 0-5, left
+  first, and all eight flags in byte 6 as `{PR,CR,UR,VR,PL,CL,UL,VL}`;
+  hdl-util/hdmi, which plays on real sinks, builds exactly that word.
+  `as_sub0` in `hdmi_tx.v` was changed on 30 Aug 2026 to the interleaved
+  form - `{P,C,U,V,sample}` twice - on the reasoning that a subpacket is
+  two subframes, and a trap here defended it.  On a sink that reads the
+  spec layout that put **sample bits 15:12 into the left channel's V, U, C
+  and P positions**: any negative sample, and any sample at or above
+  16384, wrote a 1 into the channel status block the sink was reading, and
+  a corrupt block is non-PCM or a rate change, so the sink muted.  That is
+  the entire "unipolar plays, bipolar is silent" table, the beeper muting
+  at 16384 and not at 8192, and three AY chips (peak 18360) muting where
+  one or two (6120, 12240) played.  Reverted to the spec layout on 1 Sep
+  2026; `sim/tb/tb_top.v` decoded with the same wrong layout and said
+  "stereo, 0 bad parity" throughout, and now decodes table 5-12.  **A
+  testbench that shares the encoder's assumption tests nothing** - the
+  same lesson as the SDRAM model further down, and this time the shared
+  assumption was written into this file as a trap.  Check a packet layout
+  against the standard or a known-good encoder, never against a symptom.
 - **The README's pinout IS the stock MiSTeryNano wiring, as of Aug 2026.**
   It was not before - Alexey had it on FPGA 71→io12, 72→io13, 73→io10,
   74→io11, 75→io14 - so anything written earlier says the opposite.  Now
@@ -268,20 +276,20 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   clears it, and `--skip-reset` does not help because the reset is inside
   the device open.  Do **not** reach for a `USBDEVFS_RESET` ioctl: it
   drops the device off the bus entirely and needs the replug anyway.
-- **The sound is a unipolar sum on purpose, and the reason is measured,
-  not understood.**  Four states went on the board, each one property
-  apart: the raw sum (quiescent 0) plays; the raw sum minus a constant 512
-  is silent; DC-blocked and bipolar is silent; DC-blocked plus an offset,
-  never negative, same AC amplitude, is silent.  So it is not sign, not
-  amplitude and not offset, and no mechanism is known - but a real MC0511
-  drives a unipolar sum through a coupling capacitor and so does a
-  television, so the digital blocker was doing that capacitor's job in
-  front of a sink that will not take the result.  The blocker was carried
-  on **S2** for anyone with another display; on 31 Aug 2026 that bypass and
-  the blocker behind it were removed, so **S2 does nothing now** and the
-  raw sum is the only path.  Its motive is still real: the mean steps with
-  the program material, which is why the beeper is 8192 and not 16384 - at
-  16384 it mutes the sink at full volume.
+- **The sound is still a unipolar sum, and the reason it had to be is now
+  known and is not the sum.**  Four states went on the board in Aug 2026:
+  the raw sum plays; minus a constant 512, DC-blocked bipolar, and
+  DC-blocked plus an offset are all silent.  That was read as a sink that
+  will not take a bipolar stream and no mechanism was known.  The
+  mechanism was the subpacket layout above: every silent form put a 1
+  into sample bit 15 or bit 14, which the sink read as the left channel's
+  parity and channel-status bits.  The DC blocker that was removed on 31
+  Aug 2026 (`git show f2bb44b^`) was never the problem and is worth
+  putting back once the fixed layout has been heard on a board - the mean
+  really does step with the program material, +3000 under one chip and
+  +9000 under three, and a sink's own AC coupling turns each step into a
+  thump.  The layout fix went out alone on purpose, one variable at a
+  time; **S2 still does nothing**.
 - **Real software never sets the beeper tone bits.**  `R177716[12:8]`
   selects among 8 kHz/1 kHz/500/250/60, and over 234 seconds of a running
   machine the register took four values - `100000`, `100020`, `100200`,
