@@ -350,21 +350,58 @@ constrains the inside of the chip only), the same for TMDS, and the
 question of whether `clk4` and `clk_3_12` can honestly be declared
 asynchronous.
 
-### 4. Clocks that the tools cannot reason about
+### 4. Clocks that the tools cannot reason about - MOSTLY FIXED
 
-- `clk_25` and `clk_3_12` are **bits of a counter**, not PLL outputs, so
-  no clock relationship is derivable and `test003.log` says so (`TA1117`).
-  `clk_dac`, a third such bit that fed a BUFG nothing read, is gone.
-- `sdram2.v` clocks a flop off `curs_set`, a data signal
-  (`always @(posedge curs_set or posedge new_scr)`).  Same for the four
-  `mount_dsk` flops in `top.v`, clocked off `sd_img_mounted[n]`.
-- `top.v` warned twice at PnR that `spi_io_clk_d` and `clk27_d` were
-  routed on general fabric rather than a clock tree (`PR1014`).  Since the
-  MCU link became a mux of two sources (defect 6) only `clk27_d` is left;
-  the SPI clock is no longer a pin the tool can name.
+What this was: a timing tool checks every path from a clock edge to the
+next clock edge, and it can only do that for nets it knows are clocks.
+Where a design clocks a flop from a data signal, or from a clock the tool
+cannot relate to the others, that path is either unchecked or checked
+against a made-up number.  Unchecked paths are not wrong; they are
+untested, and each place-and-route routes them differently, so a build
+works or does not by luck.  That is what "the start screen stopped
+appearing with an SD card present" after a re-layout was.
 
-None of this is broken today.  All of it is why the design is fragile
-against re-place-and-route.
+- **Flops clocked by data signals - FIXED, Sep 2026.**  `fdd4.v` clocked
+  `no_trk` off `step` (a PPU register bit), `sd_rd`/`_trk`/`_sek`/`_data`
+  and the track ROM off `clk_dsk_n`, `count_word` off `clk_dsk`, and
+  `read_sd` off `sd_rd` with an asynchronous clear; `top.v` clocked the
+  four `mount_dsk` flops off `sd_img_mounted[n]`; `sdram2.v` clocked
+  `vga_curs` off `curs_set`.  All of it now runs on the clock the signal
+  belongs to, with the pulse as an enable and `step` through two flops and
+  an edge detector.  `step` was the worst of them: it changes on the PPU
+  clock, which is the same counter as `clk_25`, so it moved at the very
+  edge of the 25 MHz flop it clocked, and a routing change could move it
+  to either side.  `sim/tb/tb_fdd4.v` (`make fdd-test`) runs the old
+  module out of git beside the new one and compares the words the PPU
+  reads, the sectors requested and the head position across a spin,
+  stepping past track 0, an empty drive and a motor restart - all agree,
+  status lines never differ for more than two 25 MHz cycles.  Full-machine
+  simulation boots identically (15 frames at 300 ms, the same single
+  read-after-write miss at 177 ms as the unmodified tree - see the open
+  question).  The `curs_set`, `disk_step` and `clk_dsk` clocks are gone
+  from the SDC and `sd_img_mounted[0..3]` no longer appear in the report
+  as tool-invented 100 MHz clocks.
+- **The MCU's SPI link - NOW CONSTRAINED.**  `m0s[3]` is the BL616's
+  20 MHz SPI clock on a general I/O pin (`PR1014` says it is routed on
+  fabric).  It was not declared, so the MISO path - clock in through
+  fabric, the flop in `mcu_spi.v`, the pad - against the MCU's sampling
+  edge 25 ns later was never checked, and it is the path the power-on
+  handshake and every SD mount goes through.  `test003.sdc` now declares
+  `spi_clk` at 50 ns with input and output delays against the falling
+  edge and puts it in its own asynchronous group; the report analyses it
+  (Fmax 31.6 MHz against the 20 MHz needed).  The delays are bounds, not
+  measurements of the BL616.
+- **Still open:** `clk_25` and `clk_3_12` are bits of a counter, not PLL
+  outputs, so their relationship to the PLL is not derivable and the hold
+  count (593 this build, 524 the one before; it moves with placement) is
+  the artefact of that.  `clk27_d` is still routed on fabric.  `xm2-01.v`
+  still clocks the PPU timer from `timer_clk_4`, a mux of counter bits,
+  and the beeper divider from `clk8kHz`; `audio.v` clocks the I2S FIFO
+  read from `isread_aud`.  All three are inside the PPU domain and slow,
+  and none of them is on the boot or floppy path.
+
+Resource use after the change: Logic 44%, Register 25%, BSRAM 48%, 0
+setup violations.  **Not run on a board.**
 
 ### 5. `clk_6_25` goes nowhere - REMOVED
 
@@ -640,6 +677,12 @@ change after this one is heard.
 - **Is the "Disk prot." menu value an index or a bitmask?**  The menu
   offers six choices onto `system_floppy_wprot[3:0]`; `menu.c` decides and
   the FPGA just takes four bits.  Not traced.
+- **One read-after-write miss at 177 ms.**  `make sim` at 300 ms reports
+  `cpu bank1 read 166575 at 014701, wrote 146175` - bits 13 and 8 - on
+  the unmodified tree as much as after the Sep 2026 re-clocking, so it is
+  not that change; the 900 ms baseline above recorded 0.  Either the
+  PPU wrote that word through the shared window (the shadow is per port
+  and would not know) or the SDRAM model dropped a write.  Not traced.
 - **Why does the PPU end up in a trap loop in simulation?**  See above.
   Find the first divergence, not the symptom; an SD card model is probably
   the prerequisite for going any further.

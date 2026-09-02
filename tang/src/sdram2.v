@@ -102,7 +102,18 @@ reg  curs_set = 1'b0;
 reg [31:0] vga_regi;        // vga register isobr
 reg [31:0] vga_regc;        // vga register color
 
-always @(posedge curs_set or posedge new_scr)vga_curs <= new_scr ? 1'b0 : ~vga_curs;
+// The cursor blink flop.  It toggles on each rising edge of curs_set and
+// clears at the frame boundary.  Until Sep 2026 it was written as
+// `always @(posedge curs_set or posedge new_scr)` - a flop clocked by one
+// register bit and reset by a compare, both of them clkram-domain
+// signals, so the "clock" was a general-routing net the tool could only
+// be told was a 1 us clock.  Same behaviour, one clkram later.
+reg  curs_set_d = 1'b0;
+always @(posedge clkram)begin
+    curs_set_d <= curs_set;
+    if(new_scr)                       vga_curs <= 1'b0;
+    else if(curs_set && !curs_set_d)  vga_curs <= ~vga_curs;
+end
 
 wire refresh  = xx == 83;
 wire get_regs = xx == 80;

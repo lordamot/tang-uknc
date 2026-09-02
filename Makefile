@@ -272,5 +272,15 @@ ab-test: $(VERILATOR)
 	  sim/tb/tb_aberrant.v tang/src/aberrant.v tang/src/ay/ym2149.sv >/dev/null
 	$(BUILD)/sim/ab/tb_aberrant
 
+# The floppy controller before and after its re-clocking (Sep 2026): the
+# old module comes out of git as fdd4_old and runs beside the new one.
+fdd-test: $(VERILATOR) mif
+	@mkdir -p $(BUILD)/sim/fdd
+	git show 9cf04ca:tang/src/fdd/fdd4.v | sed 's/^module fdd4(/module fdd4_old(/' > $(BUILD)/sim/fdd/fdd4_old.v
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_fdd4 -Mdir $(BUILD)/sim/fdd -o tb_fdd4 \
+	  sim/tb/tb_fdd4.v tang/src/fdd/fdd4.v $(BUILD)/sim/fdd/fdd4_old.v $(STUBS) >/dev/null
+	$(BUILD)/sim/fdd/tb_fdd4
+
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out

@@ -78,9 +78,36 @@ reg  [10:0] count_clk  =      0;
 reg  [ 8:0] word_sectr =      0;
 reg  [ 3:0] no_sec     =   4'd8;
 reg  [ 7:0] no_trk     =   8'd5;
-reg         clk_dsk    =      0;
-reg         clk_dsk_n  =      0;
+reg         clk_dsk    =      0;   // one 25 MHz cycle high per word - an ENABLE, not a clock
+reg         clk_dsk_n  =      0;   // the same, one cycle later
 reg         clk_dsk_n1 =      0;
+//---------------------------------------------------------------------------------
+// Everything in this module is clocked by pin_25mhz_ck and nothing else.
+//
+// Until Sep 2026 five flops here were clocked by data: no_trk by `step`, a
+// PPU register bit; sd_rd/_trk/_sek/_data and the track ROM by clk_dsk_n;
+// count_word by clk_dsk; read_sd by sd_rd with is_clean as an asynchronous
+// reset.  clk_dsk and clk_dsk_n are one-cycle pulses out of a flop, so as
+// clocks they travelled on general routing with whatever skew that
+// placement gave them, and `step` changes on the PPU clock, which is the
+// same counter as this clock (horz[3] against horz[0]) - so it changed
+// right at this clock's edge and the flop it clocked won or lost a race
+// that no tool could see.  test003.sdc could only name these as clocks
+// with an invented 1 us period.  Each re-place-and-route re-rolled the
+// dice on all of it, and the SD and floppy path is what broke when the
+// dice came up wrong.
+//
+// Now the pulses are clock enables on the one clock, `step` goes through
+// two flops and an edge detector, and the two asynchronous resets are
+// synchronous.  The behaviour is the same to within one or two 25 MHz
+// cycles - 40-80 ns against a 64 us word - and every path is on a clock
+// the tool knows.  sim/tb/tb_fdd4.v runs the old module beside this one
+// and compares what the PPU would see.
+//---------------------------------------------------------------------------------
+reg  [1:0]  step_s     = 2'b00;
+always @(posedge pin_25mhz_ck) step_s <= {step_s[0], step};
+wire        step_r     = step_s[0];              // step, synchronised
+wire        step_rise  = step_s[0] & ~step_s[1]; // its rising edge
 //---------------------------------------------------------------------------------
 assign valid    = count_clk>10 && count_clk<900 && motor;
 assign led_init = ~motor;
@@ -105,10 +132,11 @@ reg         head_old = 1'b1;
 reg  [ 1:0] drive_old= 1'b0;
 
 
-always @(posedge step)no_trk <= dir ? no_trk + 1'b1 : (no_trk ? no_trk - 1'b1 : 8'd0);
+always @(posedge pin_25mhz_ck)
+    if(step_rise)no_trk <= dir ? no_trk + 1'b1 : (no_trk ? no_trk - 1'b1 : 8'd0);
 
 always @(posedge pin_25mhz_ck)
-    if(!motor || step || head_old!=head || drive_old!=drive)begin
+    if(!motor || step_r || head_old!=head || drive_old!=drive)begin
         //no_sec     <=  4'h8;
         word_sectr <=  9'h0;
         clk_dsk    <=  1'b0;
@@ -140,9 +168,9 @@ always @(posedge pin_25mhz_ck)
 wire [15:0] data_raw;
 rawtr_prom romtr1(
         .dout (     data_raw), //output [15:0] dout
-        .clk  (    clk_dsk_n), //input clk
+        .clk  (pin_25mhz_ck), //input clk
         .oce  (         1'b0), //input oce
-        .ce   (        motor), //input ce
+        .ce   (clk_dsk_n && motor), //input ce - reads once a word, as it did when clk_dsk_n was its clock
         .reset(ppu_vm_init_i), //input reset
         .ad   (   word_sectr)  //input [8:0] ad
     );
@@ -157,13 +185,13 @@ reg  _sek  = 1'b0;
 reg  _data = 1'b0;
 //reg  reset_fifo = 1'b0;
 
-always @(posedge clk_dsk_n or negedge motor)
+always @(posedge pin_25mhz_ck)
     if(!motor)begin
         sd_rd <= 1'b0;
         _trk  <= 1'b0;
         _sek  <= 1'b0;
         _data <= 1'b0;
-    end else begin
+    end else if(clk_dsk_n)begin
         sd_rd      <= word_sectr == 9'h1C ? 1'b1 : 1'b0;
         _trk       <= word_sectr == 9'h1A ? 1'b1 : 1'b0;
         _sek       <= word_sectr == 9'h1B ? 1'b1 : 1'b0;
@@ -180,14 +208,22 @@ assign wstart  = {3'b000,write_sd}<<drive;
 
 wire is_clean = ~motor|rbusy;
 
-always @(posedge sd_rd or posedge is_clean)read_sd <= is_clean ? 1'b0 : disk_insert;
+// read_sd rises on sd_rd's rising edge and falls as soon as the reader is
+// busy or the motor stops; sd_card.v sees it in this same clock domain.
+reg  sd_rd_d  = 1'b0;
+always @(posedge pin_25mhz_ck)begin
+    sd_rd_d <= sd_rd;
+    if(is_clean)               read_sd <= 1'b0;
+    else if(sd_rd && !sd_rd_d) read_sd <= disk_insert;
+end
 //---------------------------------------------------------------------------------
 //wire reset_fifo = word_sectr == 9'h13 || !motor; //3
 
 wire [15:0] data_sec;
 reg  [ 7:0] count_word = 8'd0;
 
-always @(posedge clk_dsk)count_word <= _data ? count_word + 1'b1 : 8'd0;
+always @(posedge pin_25mhz_ck)
+    if(clk_dsk)count_word <= _data ? count_word + 1'b1 : 8'd0;
 
 dbufsec16 bffsd(
     .clka  (pin_25mhz_ck), //input clka

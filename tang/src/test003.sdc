@@ -125,28 +125,60 @@ create_clock -name clk_3_12 -period 319.086 [get_nets {clk_3_12}]
 //------------------------------------------------------------------------
 // Flops clocked by data, which is not a thing a timing tool can analyse.
 //
-//   sdram2.v : always @(posedge curs_set or posedge new_scr)
-//   top.v    : always @(posedge sd_img_mounted[n])   x4
-//   fdd4.v   : disk_step, clk_dsk
-//   xm2-01.v : timer_clk_4
+// As of Sep 2026 the SD and floppy path is clear of them: fdd4.v runs
+// entirely on clk_25 with clk_dsk/clk_dsk_n as enables and `step` through
+// a synchroniser, top.v samples sd_img_mounted on mist_clk, and sdram2.v's
+// cursor flop runs on clkram.  The `curs_set`, `disk_step` and `clk_dsk`
+// clocks that used to be declared here at an invented 1 us no longer
+// exist as clocks.  What is left:
+//
+//   xm2-01.v : timer_clk_4 - the PPU timer's prescaler pick, a mux of
+//              counter bits used as a clock; and clk8kHz, the beeper
+//              divider
 //   audio.v  : the FIFO read strobe, isread_aud
 //
-// Left undeclared, each of these is analysed against the tool's default
-// 100 MHz, which is nonsense - they are event signals that change a few
-// hundred thousand times a second at most, and that default is where the
-// bulk of the reported setup violations come from.  Declared at a period
-// that reflects what they actually are, the analysis becomes honest.
-//
-// These periods are BOUNDS, not measurements: 1 us is far slower than any
-// of them runs, chosen so the paths from them are not the thing hiding a
-// real violation elsewhere.  The proper fix is to re-clock every one of
-// them onto a real clock with an enable, at which point all of this goes.
+// Both are inside the PPU's own domain and slow.  Left undeclared they
+// are analysed against the tool's default 100 MHz, which is nonsense and
+// is where spurious setup violations come from; declared at a period that
+// is a BOUND rather than a measurement - 1 us is far slower than either
+// runs - the paths from them are not the thing hiding a real violation
+// elsewhere.  The proper fix is the same as was done for the floppy: an
+// enable on a real clock, after which these two lines go.
 //------------------------------------------------------------------------
-create_clock -name curs_set     -period 1000 [get_nets {ram1/curs_set}]
 create_clock -name isread_aud   -period 1000 [get_nets {isread_aud}]
-create_clock -name disk_step    -period 1000 [get_nets {disk_step}]
-create_clock -name clk_dsk      -period 1000 [get_nets {fdd/clk_dsk}]
 create_clock -name timer_clk_4  -period 1000 [get_nets {dd1/timer_clk_4}]
+
+//------------------------------------------------------------------------
+// The MCU's SPI link.  m0s[3] is the BL616's SPI clock, 20 MHz
+// (mnano/spi.c), driven into a general I/O pin, so it reaches
+// mcu_spi.v's flops over general routing - PR1014 in the log says so.
+// Mode 1: the MCU sets up MOSI and reads MISO on the FALLING edge, the
+// FPGA shifts MOSI in on the falling edge and drives MISO on the rising
+// one.  So the MISO path is clock-in through fabric, a flop, and the pad,
+// all inside the 25 ns to the next falling edge - and until Sep 2026 that
+// was not constrained at all, so each placement met it or did not by
+// luck.  Whether it did is the difference between the MCU's power-on
+// handshake completing and the machine sitting in cold reset with no
+// start screen; with an SD card present the mount traffic on the same
+// link is more chances to get it wrong.
+//
+// The delays are the BL616's, not measured: 5 ns for its output valid
+// after its own edge and 5 ns of setup at its input, plus 2 ns of cable
+// each way.  They are bounds, and generous ones for this cable.
+//------------------------------------------------------------------------
+create_clock -name spi_clk -period 50 -waveform {0 25} [get_ports {m0s[3]}]
+set_input_delay  -clock spi_clk -clock_fall -max 7 [get_ports {m0s[1] m0s[2]}]
+set_input_delay  -clock spi_clk -clock_fall -min 1 [get_ports {m0s[1] m0s[2]}]
+set_output_delay -clock spi_clk -clock_fall -max 7 [get_ports {m0s[0]}]
+set_output_delay -clock spi_clk -clock_fall -min -1 [get_ports {m0s[0]}]
+
+// The SPI domain is asynchronous to every clock on the board and the
+// crossing in mcu_spi.v is a handshake: spi_data_in is written on the
+// SPI edge that raises spi_data_in_ready, and mist_clk reads it two flops
+// after seeing that flag, by which time it has been stable for three SPI
+// bit times.  Every path between the groups goes through that flag, so
+// declaring the groups asynchronous hides nothing that was analysable.
+set_clock_groups -asynchronous -group [get_clocks {spi_clk}] -group [get_clocks {clk27 clk_25 clk_3_12}]
 
 //------------------------------------------------------------------------
 // Left deliberately undone, in the order worth doing:

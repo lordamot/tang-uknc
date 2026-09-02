@@ -22,3 +22,51 @@ flash it onto flash
 ****
 
 Written. make flash-fpga-flash (openFPGALoader -f -r) erased and wrote bin/tang.fs to the Tang's SPI flash to 100% and reported Done. Power-cycle the board now - the tool does not reliably reconfigure the chip, so without the power cycle you are still listening to the old bitstream. If the next flash fails with ftdi_usb_reset failed, replug the USB cable first.
+
+what are remaining problems listed?
+
+****
+
+From progress.md, as it stands.
+
+Known defects still open (of twelve, the other eight are marked fixed):
+- 4. Clocks the tools cannot reason about. clk_25 and clk_3_12 are counter bits, so timing between them and the PLL is unanalysed; sdram2.v clocks a flop off curs_set and top.v clocks four mount_dsk flops off sd_img_mounted, both data signals; clk27_d is routed on general fabric. Not broken today, but it is why every re-place-and-route is a gamble.
+- 10. The DC blocker is out of the signal path. The +3000 to +9000 DC offset under music is real and a sink's AC coupling turns each step into a thump. It is to go back (git show f2bb44b^) once the current build is heard.
+- 11. Subpacket layout fix - marked not heard. Stale: you confirmed sound on 1 Sep.
+- 12. AY octave (today's) - built and flashed, not yet heard.
+
+Open questions:
+- Which bitstream is the shipped one - stale now, bin/tang.fs is built here and is what was just flashed.
+- What made tang/rom/uknc_rom.mif (16384 words from a 32256-byte .bin, no converter in the repo).
+- What bin2mif's arguments are - binary only, no source.
+- Whether the "Disk prot." menu value is an index or a bitmask - never traced through menu.c.
+- Why the PPU ends up in a trap loop in simulation - needs an SD card model to go further.
+- Will the fixed layout play bipolar - stale, same as defect 11; the answer is now to do defect 10.
+- Why the player hangs with "Зависание при приеме а.в.п." - a CPU-PPU channel fault with no probes on the channel; the removed diagnostic monitor would be the tool.
+
+Also outside that list: hold violations (524 this build) are a constraint artefact that nobody has resolved at the source, and S2 does nothing.
+
+Three entries are stale and progress.md should be updated to say sound was heard on 1 Sep; I have not touched it, since this was a question.
+
+what meant by p.4? can you do something so that relayout wont break uknc main screen load from time to time and do not affect floppy load as a result?
+
+****
+
+What defect 4 means. A timing tool checks every path from one clock edge to the next, and it can only do that for nets it knows are clocks. This design had flops clocked by things that are not clocks: a PPU register bit (step), one-cycle pulses out of other flops (clk_dsk, clk_dsk_n, sd_rd, sd_img_mounted), a compare (curs_set). Such a "clock" travels on general routing with whatever delay the placement gives it, the SDC could only call it a made-up 1 us clock, and nothing checked it. The paths were not wrong, they were untested, and each place-and-route re-rolled them. On top of that the MCU's 20 MHz SPI clock on m0s[3] was not declared at all, so the MISO path - the one the power-on handshake and every SD mount goes through - was never analysed either. Those two together are why a re-layout could take the start screen with an SD card in: if the handshake fails the MCU never releases cold reset, and no start screen means no floppy.
+
+Done:
+- fdd4.v runs entirely on the 25 MHz clock now. clk_dsk and clk_dsk_n are enables, the track ROM is clocked by clk_25 with the pulse as its chip enable, read_sd's asynchronous clear is synchronous, and step goes through two flops and an edge detector. step was the worst one: it changes on the PPU clock, which is the same counter as clk_25, so it moved at the very edge of the flop it clocked.
+- top.v samples sd_img_mounted[n] on mist_clk instead of using it as a clock. sdram2.v's cursor flop runs on clkram.
+- test003.sdc drops the three invented clocks and declares spi_clk at 50 ns with input and output delays against the MCU's sampling edge, in its own asynchronous group. The report now analyses it: Fmax 31.6 MHz against the 20 MHz needed.
+
+Verified: make fdd-test, a new bench that pulls the old fdd4 out of git and runs it beside the new one - the words the PPU reads, the sectors requested and the head position agree across a spin, stepping past track 0, an empty drive and a motor restart. make lint clean. make sim boots identically to the unmodified tree, 15 frames at 300 ms; the one read-after-write miss it reports is present on the unmodified tree too, at the same time and address, and is noted as an open question. make bitstream: 0 setup violations, 44% logic, 48% BSRAM; the timing report's clock table no longer contains any data-signal clock. Not run on a board - bin/tang.fs is the new build but the board still has this morning's; flashing it is make flash-fpga-flash and a power cycle.
+
+Still open under defect 4: clk_25 and clk_3_12 being counter bits (the hold count, 593 this build, is that artefact), and the PPU timer, beeper divider and I2S FIFO strobe still clocked by data inside the PPU domain - slow, and not on the boot or floppy path. The first parse of the new SDC failed - set_clock_groups needs [get_clocks {...}] - which is now in the gw_sh trap.
+
+Docs: progress.md defect 4, fpga.md, video.md, build.md, a CLAUDE.md trap. Nothing committed.
+
+flash it onto flash
+
+****
+
+Written - twice, by my mistake: the command ran a second time in the same call, and both erase-and-write passes reported 100% and Done, the second without a replug. The SPI flash holds the re-clocked build. Power-cycle the board; the flash tool does not reliably reconfigure the chip. What to watch for over the next few power-ups with the SD card in: the start screen every time, the floppies mounting and loading as before, and the AY still an octave up from where it was.

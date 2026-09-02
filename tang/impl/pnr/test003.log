@@ -7,48 +7,15 @@ Running placement......
 [10%] Placement Phase 0 completed
 [20%] Placement Phase 1 completed
 [30%] Placement Phase 2 completed
-WARN  (TA1132) :  'm0s[3]' was determined to be a clock but was not created.
-WARN  (TA1132) :  'sd_img_mounted[0]' was determined to be a clock but was not created.
-WARN  (TA1132) :  'sd_img_mounted[1]' was determined to be a clock but was not created.
-WARN  (TA1132) :  'sd_img_mounted[2]' was determined to be a clock but was not created.
-WARN  (TA1132) :  'sd_img_mounted[3]' was determined to be a clock but was not created.
 WARN  (TA1132) :  'clk8kHz' was determined to be a clock but was not created.
-WARN  (TA1132) :  'fdd/clk_dsk_n' was determined to be a clock but was not created.
-WARN  (TA1132) :  'fdd/sd_rd' was determined to be a clock but was not created.
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "curs_set" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[0]"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[1]"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[2]"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "sd_img_mounted[3]"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "spi_clk" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "clk_3_12"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "curs_set"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "curs_set"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "curs_set"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "m0s[3]" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "m0s[3]"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "fdd/sd_rd" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "disk_step" and "clk_25"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "timer_clk_4" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "timer_clk_4"
 WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "disk_step"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_dsk" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "fdd/clk_dsk_n"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "fdd/clk_dsk_n"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "fdd/sd_rd"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "fdd/sd_rd"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "fdd/clk_dsk_n" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "disk_step" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[0]" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[1]" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[2]" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "sd_img_mounted[3]" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "isread_aud"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "isread_aud" and "clk_3_12"
+WARN  (TA1117) : Can't calculate clocks' relationship between: "spi_clk" and "pl1/rpll_inst/CLKOUTD.default_gen_clk"
 [50%] Placement Phase 3 completed
 Running routing......
 [60%] Routing Phase 0 completed
@@ -69,5 +36,5 @@ Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.pin.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.txt" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.tr.html" completed
-Wed Sep  2 08:35:51 2026
+Wed Sep  2 09:02:36 2026
 

@@ -70,12 +70,17 @@ colour: bits 2/1/0 are R/G/B and bit 3 is bright.  It blinks off
 `vga_curs`, toggled by:
 
 ```verilog
-always @(posedge curs_set or posedge new_scr) vga_curs <= new_scr ? 1'b0 : ~vga_curs;
+always @(posedge clkram) begin
+    curs_set_d <= curs_set;
+    if (new_scr)                      vga_curs <= 1'b0;
+    else if (curs_set && !curs_set_d) vga_curs <= ~vga_curs;
+end
 ```
 
-which is a **data signal used as a clock**, and is one of the things the
-timing analyser complains about in `test003.log`.  It works; it is not a
-pattern to copy.
+Until Sep 2026 this was `always @(posedge curs_set or posedge new_scr)` -
+a **data signal used as a clock**, which the timing analyser could only be
+told was a 1 us clock.  Same toggle-on-rise, clear-at-frame behaviour, one
+`clkram` later.
 
 ## Line control words
 

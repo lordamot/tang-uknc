@@ -30,6 +30,8 @@ make toolchain   fetch the toolchain into tools/  (~8 GB, once)
 make bitstream   build the FPGA bitstream -> bin/tang.fs
 make lint        Verilator over the whole design - the fast check
 make sim         run the machine, boot and all
+make ab-test     the Aberrant sound module alone: registers, tone, pitch
+make fdd-test    the floppy controller before and after its re-clocking
 make wave        the same, dumping a VCD, then open it (WAVE_MS=2)
 make frames      the same, writing video frames as .ppm (needs 45 ms+)
 make fw          build the BL616 firmware -> build/fw/bl616.bin

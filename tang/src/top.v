@@ -449,11 +449,19 @@ sd_card #(
     .outbyte(       sd_rd_data)    // a byte of sector content
 );
 
+// sd_img_mounted[n] is a one-cycle pulse in the mist_clk domain, raised
+// by sd_card.v on the same edge that completes image_size.  These four
+// used to be clocked BY that pulse - a flop clock on general routing, one
+// per drive - and were what the SDC could only describe as a 1 us clock.
+// Sampled on the clock the pulse belongs to, the value is the same and
+// the path is one the tool can see.
 reg [3:0]mount_dsk = 4'b0000;
-always @(posedge sd_img_mounted[0])mount_dsk[0]<= !sd_img_size ? 1'b0 : 1'b1;
-always @(posedge sd_img_mounted[1])mount_dsk[1]<= !sd_img_size ? 1'b0 : 1'b1;
-always @(posedge sd_img_mounted[2])mount_dsk[2]<= !sd_img_size ? 1'b0 : 1'b1;
-always @(posedge sd_img_mounted[3])mount_dsk[3]<= !sd_img_size ? 1'b0 : 1'b1;
+always @(posedge mist_clk)begin
+    if(sd_img_mounted[0])mount_dsk[0] <= |sd_img_size;
+    if(sd_img_mounted[1])mount_dsk[1] <= |sd_img_size;
+    if(sd_img_mounted[2])mount_dsk[2] <= |sd_img_size;
+    if(sd_img_mounted[3])mount_dsk[3] <= |sd_img_size;
+end
 
 assign leds[4] = ~mount_dsk[0];
 

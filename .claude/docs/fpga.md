@@ -84,10 +84,21 @@ Two things to know before touching any of this:
   (524 as of Sep 2026) is an artefact of `clk_25` and `clk_3_12` having to
   be declared as independent clocks - see `progress.md`.
 
-`test003.log` also carries a dozen `TA1117` warnings - the tool cannot
-relate the PLL output to `clk_25`, `clk_3_12` and `ram1/curs_set`, because
-`clk_25` and friends are counter bits and `curs_set` is a data signal used
-as a clock (`always @(posedge curs_set ...)` in `sdram2.v`).
+`test003.log` also carries a handful of `TA1117` warnings - the tool cannot
+relate the PLL output to `clk_25` and `clk_3_12`, because those are
+counter bits, nor `spi_clk` to anything, because it is the BL616's.
+
+**Flops clocked by data signals** - `curs_set` in `sdram2.v`, `step`,
+`clk_dsk`, `clk_dsk_n` and `sd_rd` in `fdd4.v`, `sd_img_mounted[n]` in
+`top.v` - were re-clocked onto real clocks with enables in Sep 2026, after
+a re-place-and-route had broken the start screen with an SD card present.
+A flop clock that is a data net travels on general routing with whatever
+skew the placement gives it, and `step` in particular changed on the PPU
+clock, which is the same counter as `clk_25`, so it moved at the very
+edge of the flop it clocked.  `make fdd-test` runs the old floppy module
+beside the new one.  What is still clocked by data: `timer_clk_4` and
+`clk8kHz` in `xm2-01.v`, and `isread_aud` in `audio.v` - all inside the
+PPU domain and slow, declared at 1 us in the SDC.
 
 ## Bus fabric
 

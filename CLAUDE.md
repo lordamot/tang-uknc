@@ -103,8 +103,22 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   and `QT_QPA_PLATFORM=offscreen` around `gw_sh`.  Without all of that it
   dies with a `GLIBCXX` error, then a fontconfig one, then "Cannot mix
   incompatible Qt library".  Do not undo it.
+- **A flop clocked by a data signal is a die roll per placement.**  Until
+  Sep 2026 `fdd4.v`, `top.v` and `sdram2.v` clocked flops off `step`,
+  `clk_dsk`, `sd_rd`, `sd_img_mounted[n]` and `curs_set`; the SDC could
+  only call those 1 us clocks, the tool routed them on general fabric,
+  and a re-place-and-route broke the start screen with an SD card in.
+  They are enables on real clocks now, `step` through a synchroniser (it
+  changes on the PPU clock, the same counter as `clk_25`, so it moved AT
+  the edge of the flop it clocked).  Do not write `always @(posedge
+  <something that is not a clock>)`; `make fdd-test` shows how to prove
+  the rewrite equivalent.  The SPI clock from the BL616 is declared as
+  `spi_clk` in the SDC and its MISO path is analysed - keep it that way.
 - **`gw_sh` is not the IDE.**  Its SDC parser takes no backslash
-  continuations, calls `ram_rw_check` `rw_check_on_ram`, and needs
+  continuations, calls `ram_rw_check` `rw_check_on_ram`, takes
+  `set_clock_groups` only with `[get_clocks {...}]` (bare braces are a
+  syntax error that aborts PnR - and `make bitstream` then fails, so read
+  its exit status rather than the last log line), and needs
   `-use_sspi_as_gpio 1` or placement fails outright, because HP_BCK/WS/DIN
   sit on the SSPI pins.  `tools/gowin_tcl.py` reads all of that out of the
   `.gprj` and the IDE's `test003_process_config.json` so the two flows
