@@ -425,6 +425,27 @@ appearing with an SD card present" after a re-layout was.
   paths as the tightest in the design at 6.6 ns of slack, the false hold
   lines gone, 0 setup violations, 20 hold of which 19 are the `ram1`
   artefact and one is a video register reset at -0.085 ns.
+
+  **And clk4's phase is a lottery.**  clk4 is the PLL's own /12 and
+  `horz` starts at lock, so whether clk4's edges land on odd or even
+  clkram edges - on a clk_25 rising edge (hold race) or 20 ns from one
+  (setup window) - is decided at each power-up.  One `-edges` cannot
+  say "either", so clk4 is defined on the coincident edge (`{3 15 27}`)
+  for hold and `set_max_delay 15` caps every path between clk4 and the
+  clk_25 and clk_3_12 domains for the other case.  That cap immediately
+  failed on the CPU's DCLO/ACLO/HALT, which fanned out from `R177716`
+  straight into dozens of enables in the CPU core; those three now go
+  through two flops on the CPU clock in `top.v`.  clk_3_12 is written
+  on the BUFG output `t3/O` with the inverted clock made from that
+  output, but the tool resolves the target back to horz[3]'s Q, so the
+  false hold lines from horz[0] and horz[3] into the SDRAM state machine
+  remain - 15 in the 10:43 build, all inside `ram1`, all really
+  clkram -> clkram.  The gate allows exactly that pattern, plus one
+  named exception: the OSD enable onto a video register's reset pin,
+  bounded at -0.2 ns.  The 10:43 build: 0 setup violations, tightest
+  real paths the PPU- and CPU-to-channel ones at 4.2 ns of slack under
+  the 15 ns cap, `make timing` green.  **Built and gated, not run on
+  the board** - the board has the 10:22 build.
 - **Still open:** `clk27_d` on fabric; `xm2-01.v` clocks the PPU timer
   from `timer_clk_4`, a mux of counter bits (the beeper divider was
   re-clocked on 2 Sep 2026); `audio.v` clocks the I2S FIFO read from
@@ -814,7 +835,8 @@ edges, so a placement can no longer roll them.
   before that day had analysed, so every placement rolled it.  Whether
   the 10:22 build's placement, which analyses it, has cleared it for good
   is the board's to say - and on 2 Sep 2026 it said yes: the 10:22 build
-  loads floppies.
+  loads floppies.  The gate in `tools/timing_check.py` (`make timing`,
+  run by `make bitstream`) is what keeps the next layout honest on it.
 
 ## Repository hygiene
 

@@ -51,7 +51,9 @@ the menu, the keyboard table), `.claude/docs/build.md` (both toolchains, the
 Makefile, what lint and simulation do and do not cover, flashing),
 `.claude/docs/tools.md` (`tools/`, `bin2mif` and the ROM data),
 `.claude/docs/progress.md` (state of the port, known defects, open
-questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
+questions).  Follow `.claude/rules/guideline.md`, `.claude/rules/git.md`
+and `.claude/rules/timing.md` - the last one is what keeps a re-layout
+from breaking the start screen or the floppy again.
 
 ## Traps worth remembering
 

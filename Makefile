@@ -12,6 +12,8 @@
 #   make wave        the same, dumping a VCD, then open it (WAVE_MS=2)
 #   make frames      the same, writing video frames as .ppm (needs 45 ms+)
 #   make bitstream   build the FPGA bitstream with Gowin -> bin/tang.fs
+#                    (refuses a layout that fails the timing gate)
+#   make timing      the timing gate alone, on the last PnR report
 #   make fw          build the BL616 firmware -> build/fw/
 #   make mif         ROM images -> build/mif/*.hex for the sim models
 #   make flash-fpga  openFPGALoader the shipped bitstream to SRAM
@@ -190,6 +192,9 @@ bitstream:
 	  echo "gowin missing - run: make toolchain" >&2; exit 1; }
 	$(PYTHON) $(TOOLS)/gowin_tcl.py > tang/build.tcl
 	cd tang && $(GWENV) $(GWSH) build.tcl
+	@$(PYTHON) $(TOOLS)/timing_check.py || { \
+	  echo "bitstream NOT copied to bin/: the layout fails the timing gate" >&2; \
+	  echo "(.claude/rules/timing.md; make timing to see it again)" >&2; exit 1; }
 	@cp tang/impl/pnr/test003.fs bin/tang.fs
 	@echo
 	@echo "bitstream: bin/tang.fs"
@@ -281,6 +286,10 @@ fdd-test: $(VERILATOR) mif
 	  --top-module tb_fdd4 -Mdir $(BUILD)/sim/fdd -o tb_fdd4 \
 	  sim/tb/tb_fdd4.v tang/src/fdd/fdd4.v $(BUILD)/sim/fdd/fdd4_old.v $(STUBS) >/dev/null
 	$(BUILD)/sim/fdd/tb_fdd4
+
+# The timing gate on its own.  What it checks is in .claude/rules/timing.md.
+timing:
+	$(PYTHON) $(TOOLS)/timing_check.py
 
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out

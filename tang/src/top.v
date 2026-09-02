@@ -108,7 +108,6 @@ wire clk4n_sync  ;
 wire clk312_sync ;
 wire clk312n_sync;
 wire clk4n = ~clk4;
-wire clk_3_12n = ~clk_3_12;
 
 wire locked ;
 wire clkram ;
@@ -126,6 +125,11 @@ wire clk_3_12;
 BUFG t4 (   clk4_sync,clk4     );
 BUFG t4n(  clk4n_sync,clk4n    );
 BUFG t3 ( clk312_sync,clk_3_12 );
+// The inverted PPU clock is made from the BUFG output, not from the raw
+// counter bit, so that everything the PPU side clocks is downstream of
+// one point the SDC names (t3/O; the tool resolves it to horz[3]'s Q,
+// but the inverter and t3n are then on its network either way).  Sep 2026.
+wire clk_3_12n = ~clk312_sync;
 BUFG t3n(clk312n_sync,clk_3_12n);
 
 wire hsync;
@@ -674,6 +678,24 @@ xm2_01 dd1(
 );
 
 assign leds[3:2] = {cpu_vm_dclo_i,cpu_vm_aclo_i};
+
+// The CPU's DCLO, ACLO and HALT are bits of R177716, written in the PPU
+// domain, and each fans out to dozens of enables inside the CPU core.
+// They used to go in raw, so the fan-out sat on a clk_3_12 -> clk4
+// crossing that no constraint could bound - the 15 ns cap on that
+// crossing (test003.sdc) failed on exactly these nets.  Two flops on the
+// CPU clock make each of them one short cross-domain path and a local
+// fan-out; the cost is two clk4 periods, 480 ns, on a reset the PPU's
+// firmware holds for milliseconds.  DCLO and ACLO start asserted so the
+// core is held from configuration.  Sep 2026.
+reg [1:0] cpu_dclo_s = 2'b11;
+reg [1:0] cpu_aclo_s = 2'b11;
+reg [1:0] cpu_halt_s = 2'b00;
+always @(posedge cpuclk_p)begin
+    cpu_dclo_s <= {cpu_dclo_s[0], cpu_vm_dclo_i};
+    cpu_aclo_s <= {cpu_aclo_s[0], cpu_vm_aclo_i};
+    cpu_halt_s <= {cpu_halt_s[0], pin_vm_halt_i};
+end
 //--------------------------------------------
 wire [15:0] disk_data_out;
 wire [15:0] disk_data_in ;
@@ -789,9 +811,9 @@ cpu_wb cpu1(
    .askn_ram     (   askn_cpu_i),
 
    .pin_vm_init_o(cpu_vm_init_o),
-   .pin_vm_dclo_i(cpu_vm_dclo_i),
-   .pin_vm_aclo_i(cpu_vm_aclo_i),
-   .pin_vm_halt_i(pin_vm_halt_i),
+   .pin_vm_dclo_i(cpu_dclo_s[1]),
+   .pin_vm_aclo_i(cpu_aclo_s[1]),
+   .pin_vm_halt_i(cpu_halt_s[1]),
 
    .pin_vm_virq_i(cpu_vm_virq_i),
 

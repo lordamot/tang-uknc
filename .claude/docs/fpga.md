@@ -88,8 +88,13 @@ As of 2 Sep 2026 `test003.log` carries no `TA1117` at all: `clkram` is
 declared on the PLL pin and `clk4`, `clk_25`, `clk_3_12` are generated
 clocks off it with their true phase - the PPU clock's edges sit on
 clk_25's falling edges - so the tool relates the PLL and the counter
-bits; `spi_clk` is in its own asynchronous group.  `test003.sdc` has the
-form, the two forms that do not parse, and why the phase matters.
+bits; `spi_clk` is in its own asynchronous group.  clk4's alignment
+against the counter is a power-up lottery, so it is defined on the
+coincident edge and `set_max_delay 15` bounds its crossings both ways.
+`test003.sdc` has the form, the two forms that do not parse, and why the
+phase matters; `tools/timing_check.py` (`make timing`) refuses a layout
+that breaks any of it, and `.claude/rules/timing.md` says what a new
+piece of hardware owes it.
 
 **Flops clocked by data signals** - `curs_set` in `sdram2.v`, `step`,
 `clk_dsk`, `clk_dsk_n` and `sd_rd` in `fdd4.v`, `sd_img_mounted[n]` in

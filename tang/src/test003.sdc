@@ -123,7 +123,18 @@ create_clock -name clk27 -period 37.037 -waveform {0 18.518} [get_ports {clk27}]
 // at all (TA1117), and a placement decided whether the CPU's channel to
 // the PPU worked.
 create_clock -name clkram -period 19.943 -waveform {0 9.972} [get_pins {pl1/rpll_inst/CLKOUT}]
-create_generated_clock -name clk4     -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -divide_by 12 [get_pins {pl1/rpll_inst/CLKOUTD}]
+// clk4 is the PLL's own /12 and horz starts counting at lock, so which
+// clkram edge clk4's edges fall on relative to horz - odd or even k - is
+// decided at every power-up and is not knowable here.  Odd k puts a clk4
+// edge ON a clk_25 rising edge (a hold race on every capture in
+// vp1_120, the CPU-PPU channel); even k puts it 20 ns away (a setup
+// window of 20 ns).  One definition cannot say "either", so this one
+// takes the odd case - rising at k=1, edge 3, coincident with clk_25 -
+// so that hold is fixed for the race, and the set_max_delay lines below
+// cap every path between the two domains at 15 ns so that the even case's
+// 20 ns window is met as well.  Both cases are then covered whichever
+// the power-up hands out; with -divide_by alone only one of them was.
+create_generated_clock -name clk4     -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {3 15 27} [get_pins {pl1/rpll_inst/CLKOUTD}]
 // PHASE.  horz counts clkram edges from lock, so with k the edge number:
 // horz[0] rises on odd k; horz[3] toggles when horz[2:0] wraps 7 -> 0,
 // which is an EVEN k - the same edge on which horz[0] falls.  So every
@@ -139,23 +150,21 @@ create_generated_clock -name clk4     -source [get_pins {pl1/rpll_inst/CLKOUT}] 
 // при приеме А.В.Р.").  Master edges are numbered from 1, rising odd,
 // falling even, so clk_25 rising at k=1,3,.. is edges 3,7,..:
 create_generated_clock -name clk_25   -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {3 5 7} [get_pins {ram1/horz_0_s0/Q}]
-// clk_25 and clk_3_12 are defined on the counter flops' Q pins.  That has
-// a cost: horz[3:0] is also the SDRAM state machine's phase (`q`), and a
-// clock defined on a Q pin makes every path from it look clock-launched,
-// so the report carries a handful of false hold violations on the
-// counter's own increment and on sdram2's use of q - all of them
-// clk_3_12/clk_25 -> clkram inside ram1, all of them really clkram ->
-// clkram.  Defining clk_3_12 on the BUFG output t3/O instead was tried
-// (Sep 2026) and the parser took it, but the inverted twin on t3n/O was
-// refused (TA2003), and a clock on t3/O alone would leave the PPU's
-// negedge flops unconstrained - the inverter feeds off the raw net, not
-// off t3/O.  So the Q pin it is: from there the network reaches both
-// BUFGs and the inverter.  Read the ram1-internal hold lines as the
-// artefact they are; anything between two different modules is real.
+// A generated clock on a flop's Q pin makes every path from that Q look
+// clock-launched, and the tool resolves a BUFG-output target back to the
+// Q anyway, so the report carries ~15 false hold lines inside ram1 from
+// horz[0] and horz[3] into the SDRAM state machine.  They are the one
+// artefact the gate allows by pattern; see clk_3_12 below.
 // clk_3_12 rising at k=8 (edge 17), falling at k=16 (edge 33): its edges
-// on even k, as above.  Polarity matters here because vp1_128fdd and
-// aberrant run on the inverted BUFG, and the tool follows the inverter.
-create_generated_clock -name clk_3_12 -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {17 33 49} [get_pins {ram1/horz_3_s0/Q}]
+// on even k, as above.  Written on the BUFG output t3/O; the tool resolves
+// that back to the flop's Q (the report lists ram1/horz_3_s0/Q as the
+// object), so the false hold lines from that Q into the SDRAM state
+// machine - horz[3:0] is its phase bit `q` - remain, 15 of them, all
+// clk_3_12/clk_25 -> clkram inside ram1 and all really clkram -> clkram.
+// tools/timing_check.py allows exactly those and nothing else.  top.v
+// makes the inverted PPU clock from t3's output rather than the raw bit,
+// which keeps every negedge flop downstream of one point either way.
+create_generated_clock -name clk_3_12 -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {17 33 49} [get_pins {t3/O}]
 
 //------------------------------------------------------------------------
 // Flops clocked by data, which is not a thing a timing tool can analyse.
@@ -206,6 +215,16 @@ set_input_delay  -clock spi_clk -clock_fall -max 7 [get_ports {m0s[1] m0s[2]}]
 set_input_delay  -clock spi_clk -clock_fall -min 1 [get_ports {m0s[1] m0s[2]}]
 set_output_delay -clock spi_clk -clock_fall -max 7 [get_ports {m0s[0]}]
 set_output_delay -clock spi_clk -clock_fall -min -1 [get_ports {m0s[0]}]
+
+// The CPU's phase against the counter is a power-up lottery (see clk4
+// above): these cap every path between the CPU and the clk_25 and PPU
+// domains at 15 ns, which is the 20 ns window of the unlucky alignment
+// less margin.  They are bounds, not a measurement; a path that cannot
+// meet them is a path that has to be re-registered in RTL.
+set_max_delay -from [get_clocks {clk4}]     -to [get_clocks {clk_25}]   15
+set_max_delay -from [get_clocks {clk_25}]   -to [get_clocks {clk4}]     15
+set_max_delay -from [get_clocks {clk4}]     -to [get_clocks {clk_3_12}] 15
+set_max_delay -from [get_clocks {clk_3_12}] -to [get_clocks {clk4}]     15
 
 // The SPI domain is asynchronous to every clock on the board and the
 // crossing in mcu_spi.v is a handshake: spi_data_in is written on the

@@ -74,10 +74,14 @@ to a board nobody here can watch.  What there is, in the order it costs:
   replace this: two peripherals acking one address is silent.
 - Check `tang/impl/pnr/test003.rpt.txt` for the resource budget the change
   has to fit in (BSRAM is the tight one, at 46%).
-- State what was not checked.  Timing is never checked - there are no
-  constraints at all.  "This compiles in my head" is not a claim worth
-  making, and neither is "it simulates" about anything analogue, anything
-  timed, or anything involving the real card.
+- **`make timing`** - the timing gate over the last place-and-route, which
+  `make bitstream` runs itself and refuses to ship past.  What it checks
+  and why is `.claude/rules/timing.md`; it is what stands between a new
+  layout and the 2 Sep 2026 boot and floppy failures.
+- State what was not checked.  The SDRAM pads are still unconstrained;
+  so is anything analogue, anything timed, and the real card.  "This
+  compiles in my head" is not a claim worth making, and neither is "it
+  simulates" about any of those.
 
 ## The prompts/ folder
 
