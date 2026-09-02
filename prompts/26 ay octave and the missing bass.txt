@@ -121,3 +121,11 @@ Fixed with -edges {3 5 7} on clk_25 and {17 33 49} on clk_3_12, which put the ed
 The 10:22 build is in the flash - one variable, the phase. Power-cycle, then load a floppy. If it still hangs, the next step is a synchroniser stage on that status word inside vp1_128fdd, which takes the 20 ns window out of the design rather than out of the placement.
 
 Docs: progress.md defect 4 and 13, the open question about this very message now points at the answer, CLAUDE.md's constraints trap carries the phase. Nothing committed.
+
+all works now - main screen, floppy load, AY play!
+
+****
+
+Recorded. progress.md now marks defect 12 (AY octave) and defect 13 (the boot) as heard on the board, the open question about the floppy hang points at its answer, and the memory note carries the confirmation. The day's evidence in one line: the 09:22 build failed on the CPU-to-channel crossing's new placement, the 09:51 build related the clocks and reached the screen but had the phase wrong and hung the floppy, the 10:22 build has the phase right and does everything - so what fixed it is that the crossings between the processors and the clk_25 peripherals are analysed with the right edges, and a placement can no longer roll them.
+
+You have already committed the work as 195d9be; what is left uncommitted is only this confirmation in progress.md and this file. Say the word and I will commit those two. The DC blocker from git show f2bb44b^ is the next audio change, now that the fixed layout and the right octave have both been heard.

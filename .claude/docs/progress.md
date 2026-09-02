@@ -662,7 +662,7 @@ expected result is three chips and the beeper at any level, both channels
 at the same level, and no reason left for the unipolar sum - which is why
 the blocker should be the next build, not this one.
 
-### 12. Every AY tone was an octave low - FIXED, NOT HEARD
+### 12. Every AY tone was an octave low - FIXED, HEARD
 
 `aberrant.v` tied the three cores' `SEL` pins high.  In `ym2149.sv` the
 prescaler reloads with `{SEL, 3'b111}`: `SEL=0` divides the clock enable
@@ -691,12 +691,12 @@ just was not the last one.
 Fixed 2 Sep 2026: `SEL` low on all three instances.  `tb_aberrant` now
 counts the output edges over a simulated second and fails outside 2% of
 880, so a wrong prescaler cannot get past `make ab-test` again.  Lint
-clean, bitstream builds.  **Not heard on a board.**  Expected: the whole
-piece up an octave to where the composer put it, the bass audible, tempo
-of envelope effects doubled.  Defect 10's blocker is still the next
+clean, bitstream builds.  **Heard on the board, 2 Sep 2026**: the
+operator reports the AYs playing, after the bass had been reported as
+"filtered out" on the octave-low build.  Defect 10's blocker is still the next
 change after this one is heard.
 
-### 13. The start screen appears on only some power cycles - THREE CAUSES REMOVED, NOT HEARD
+### 13. The start screen appears on only some power cycles - FIXED, HEARD
 
 Reported 2 Sep 2026: from a power cycle the machine sometimes does not
 reach its start screen, and needed three power cycles once; when it does
@@ -770,8 +770,19 @@ clocks and **reached the start screen every time** - so it was the
 crossing - but hung loading a floppy, because that build's clock phase
 was wrong by one clkram period (defect 4, "the phase has to be right")
 and the floppy status path into the PPU had gone unoptimised.  The
-10:22 build corrects the phase and is flashed; **floppy load not yet
-confirmed**.  The PPU hold (item 3) stays in.
+10:22 build corrects the phase, and **the operator confirms it on the
+board: start screen, floppy load and AY playback all work.**  The PPU
+hold (item 3) stays in.
+
+So the whole of the day's board evidence, in order: the intermittent
+start screen was one or more of items 1-4 plus the unanalysed
+CPU-to-channel crossing; the 09:22 build (items 1-4, old SDC) failed
+every time on that crossing's new placement; the 09:51 build (clocks
+related) reached the screen every time and hung the floppy on the wrong
+phase; the 10:22 build (phase right) does everything.  What made the
+difference is not any one RTL change but that the crossings between the
+processors and the clk_25 peripherals are now analysed with the right
+edges, so a placement can no longer roll them.
 
 ## Open questions
 
@@ -802,7 +813,8 @@ confirmed**.  The PPU hold (item 3) stays in.
   the floppy status word into `vp1_128fdd` - a 20 ns path that no build
   before that day had analysed, so every placement rolled it.  Whether
   the 10:22 build's placement, which analyses it, has cleared it for good
-  is the board's to say.
+  is the board's to say - and on 2 Sep 2026 it said yes: the 10:22 build
+  loads floppies.
 
 ## Repository hygiene
 
