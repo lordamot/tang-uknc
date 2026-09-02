@@ -116,6 +116,83 @@ void kbd_tx(spi_t *spi, unsigned char byte) {
   spi_end(spi);
 }
 
+// The УКНЦ's keyboard is a scanned 16-row x 8-column matrix and its
+// controller reports rows, not keys: a scan code is {column, row}, a
+// press is reported only for the first key to go down in a row, and the
+// release code is 0x80 | row, sent once the whole row is up again
+// (UKNCBTL, Board.cpp, the keyboard scanner in SystemFrame).  The
+// machine's firmware is written to that - one press, then one release,
+// per row, and its autorepeat runs until the releases balance the
+// presses - and both Shift keys (0105) share row 5 with the numeric
+// keypad.  Forwarding every USB press and release as its own code broke
+// it: a second key going down in a held row was a second press, its
+// release said the row was up while the first key was still down, and
+// the first key's release then arrived as the very same byte, which
+// xm2-01.v took as no change at all.  Shift plus a key of the same row
+// so left the firmware with a row it believed still held, and it
+// autorepeated that key until another Shift press and release put the
+// row right (Sep 2026).  So the matrix is tracked here, and the machine
+// is handed a legal stream.  Not the machine's own, quite: on its
+// keyboard the next key down in a held row is simply never reported,
+// and a PC typist rolls from A to Backspace (both row 10) all day - so
+// rollover inside a row is sent as a release of the row and a new
+// press, and the older keys of that row are forgotten - the machine now
+// believes the row is the new key, and would autorepeat it until the
+// older ones were up if their releases were waited for.  Two keys with
+// one code (the Shifts) are one key held twice: the row is released when
+// the second is up.
+// A press the OSD ate, or a key the machine lacks (MISS), is not
+// tracked, so its release is dropped here rather than sent for a row
+// that was never pressed; a release of a tracked key is sent even while
+// the OSD is up, since the core heard the press.
+static void kbd_tx_uknc_byte(spi_t *spi, unsigned char byte) {
+  // hid.v holds one byte with no strobe and xm2-01.v takes a change of
+  // it; consecutive bytes are kept 2 ms apart so that each is seen -
+  // xm2-01.v queues them since Sep 2026, an older bitstream does not.
+  static TickType_t last_tx;
+  TickType_t gap = pdMS_TO_TICKS(2) ? pdMS_TO_TICKS(2) : 1;
+  if(xTaskGetTickCount() - last_tx < gap) vTaskDelay(gap);
+  kbd_tx(spi, byte);
+  last_tx = xTaskGetTickCount();
+}
+
+static void kbd_tx_uknc(spi_t *spi, unsigned char hid, unsigned char code, char pressed) {
+  static unsigned char held[32];     // HID usages forwarded as pressed (modifiers as 0xe0..0xe7)
+  static unsigned char rows[16];     // keys the machine believes down, per matrix row
+  static unsigned char code_of[16];  // the code it believes the row is held by
+  static unsigned char gen[16];      // bumped when a rollover makes it forget the row's older keys
+  static unsigned char key_gen[256]; // the row's generation when each key was forwarded
+  unsigned char row = code & 0x0f;
+
+  if(pressed) {
+    if(osd_is_visible(usb_config.osd) || !code) return;
+    if(held[hid >> 3] & (1 << (hid & 7))) return;
+    held[hid >> 3] |= 1 << (hid & 7);
+    if(rows[row] && code != code_of[row]) {   // rollover within the row: the machine gets a
+      kbd_tx_uknc_byte(spi, 0x80 | row);      // release and a new press, and the older keys
+      gen[row]++;                             // are forgotten - their releases mean nothing now
+      rows[row] = 0;
+    }
+    if(!rows[row]) {                          // a second Shift is the same code: counted, not sent
+      kbd_tx_uknc_byte(spi, code);
+      code_of[row] = code;
+    }
+    rows[row]++;
+    key_gen[hid] = gen[row];
+  } else {
+    if(!(held[hid >> 3] & (1 << (hid & 7)))) return;
+    held[hid >> 3] &= ~(1 << (hid & 7));
+    if(key_gen[hid] != gen[row]) return;      // forgotten in a rollover
+    if(--rows[row] == 0) kbd_tx_uknc_byte(spi, 0x80 | row);
+  }
+}
+
+// one key event - a modifier bit or a key slot of the report - to the core
+static void kbd_key(spi_t *spi, unsigned char hid, unsigned char code, char pressed) {
+  if(core_id == CORE_ID_UKNC) kbd_tx_uknc(spi, hid, code, pressed);
+  else                        kbd_tx(spi, pressed ? code : (0x80 | code));
+}
+
 // the c64 core can use the numerical pad on the keyboard to
 // emulate a joystick
 void kbd_num2joy(spi_t *spi, char state, unsigned char code) {
@@ -169,15 +246,18 @@ void kbd_parse(spi_t *spi, hid_report_t *report, struct hid_kbd_state_S *state,
   if(nbytes != 8) return;
   
   // check if modifier have changed
-  if((buffer[0] != state->last_report[0]) && !osd_is_visible(usb_config.osd)) {
+  // (the UKNC path sees modifier changes under the OSD too: it drops the
+  // presses itself and needs the releases, see kbd_tx_uknc)
+  if((buffer[0] != state->last_report[0]) &&
+     (!osd_is_visible(usb_config.osd) || core_id == CORE_ID_UKNC)) {
     for(int i=0;i<8;i++) {
       if(modifier[core_id][i]) {      
 	// modifier released?
 	if((state->last_report[0] & (1<<i)) && !(buffer[0] & (1<<i)))
-	  kbd_tx(spi, 0x80 | modifier[core_id][i]);
+	  kbd_key(spi, 0xe0 + i, modifier[core_id][i], 0);
 	// modifier pressed?
 	if(!(state->last_report[0] & (1<<i)) && (buffer[0] & (1<<i)))
-	  kbd_tx(spi, modifier[core_id][i]);
+	  kbd_key(spi, 0xe0 + i, modifier[core_id][i], 1);
       }
     }
   }
@@ -192,8 +272,9 @@ void kbd_parse(spi_t *spi, hid_report_t *report, struct hid_kbd_state_S *state,
     
     if(buffer[2+i] != state->last_report[2+i]) {
       // key released?
-      if(state->last_report[2+i] && !osd_is_visible(usb_config.osd))
-	kbd_tx(spi, 0x80 | keymap[core_id][state->last_report[2+i]]);
+      if(state->last_report[2+i] &&
+	 (!osd_is_visible(usb_config.osd) || core_id == CORE_ID_UKNC))
+	kbd_key(spi, state->last_report[2+i], keymap[core_id][state->last_report[2+i]], 0);
       
       // key pressed?
       if(buffer[2+i])  {
@@ -211,7 +292,7 @@ void kbd_parse(spi_t *spi, hid_report_t *report, struct hid_kbd_state_S *state,
 	  msg = osd_is_visible(usb_config.osd)?MENU_EVENT_HIDE:MENU_EVENT_SHOW;
 	else {
 	  if(!osd_is_visible(usb_config.osd))
-	    kbd_tx(spi, keymap[core_id][buffer[2+i]]);
+	    kbd_key(spi, buffer[2+i], keymap[core_id][buffer[2+i]], 1);
 	  else {
 	    // check if cursor up/down or space has been pressed
 	    if(buffer[2+i] == 0x51) msg = MENU_EVENT_DOWN;      

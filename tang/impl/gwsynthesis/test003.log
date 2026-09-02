@@ -90,6 +90,7 @@ Compiling module 'vm2_plb'("/var/www/own/tang-uknc/tang/src/wm2wb/vm2_plm.v":689
 Compiling module 'mkcolorg'("/var/www/own/tang-uknc/tang/src/mkcolorreg.v":1)
 Compiling module 'rd_plan'("/var/www/own/tang-uknc/tang/src/mkcolorreg.v":85)
 Compiling module 'xm2_01'("/var/www/own/tang-uknc/tang/src/xm2-01.v":1)
+Extracting RAM for identifier 'kbd_q'("/var/www/own/tang-uknc/tang/src/xm2-01.v":78)
 Compiling module 'fdd4'("/var/www/own/tang-uknc/tang/src/fdd/fdd4.v":1)
 WARN  (EX3780) : Using initial value of 'write_sd' since it is never assigned("/var/www/own/tang-uknc/tang/src/fdd/fdd4.v":204)
 Compiling module 'rawtr_prom'("/var/www/own/tang-uknc/tang/src/fdd/ip/rawtr_prom/rawtr_prom.v":10)

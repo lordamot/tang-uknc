@@ -288,6 +288,14 @@ ab-test: $(VERILATOR)
 	  sim/tb/tb_aberrant.v tang/src/aberrant.v tang/src/ay/ym2149.sv >/dev/null
 	$(BUILD)/sim/ab/tb_aberrant
 
+# The keyboard byte queue in xm2-01.v: a burst of bytes at SPI speed
+# against a PPU that reads slowly must come out complete and in order.
+kbd-test: $(VERILATOR)
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_kbd -Mdir $(BUILD)/sim/kbd -o tb_kbd \
+	  sim/tb/tb_kbd.v tang/src/xm2-01.v >/dev/null
+	$(BUILD)/sim/kbd/tb_kbd
+
 # The floppy controller before and after its re-clocking (Sep 2026): the
 # old module comes out of git as fdd4_old and runs beside the new one.
 fdd-test: $(VERILATOR) mif

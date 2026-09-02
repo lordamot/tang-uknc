@@ -121,8 +121,9 @@ Disk images are `.dsk`, 819200 bytes (see `.claude/docs/platform.md`).
 
 `mnano/uknc.h` is a USB HID usage code → УКНЦ scan code table, one entry
 per HID code, `MISS` (0) for keys the machine does not have.  The scan
-codes are octal and go straight into `R177702` in `xm2-01.v`; there is no
-matrix scan anywhere in the FPGA.
+codes are octal and go into `R177702` in `xm2-01.v`; there is no matrix
+scan anywhere in the FPGA.  UKNCBTL's `qkeyboardview.cpp` is the
+reference for which code is which key.
 
 The function-key row is where the machine's own keys live:
 
@@ -132,11 +133,85 @@ F8  ИСП (exec)          F9  СБРОС (reset) F10 СТОП
 ```
 
 `modifier_uknc[]` maps the USB modifier bits: ctrl → УПР (046), shift →
-0105, left alt → АЛФ (0106), right alt → ГРАФ (0172).  Both ctrls and both
-shifts map to the same code.
+0105, left alt → АЛФ (0106), right alt → ГРАФ (066; it was 0172, which is
+ПОМ, until Sep 2026).  Both ctrls and both shifts map to the same code.
 
-To change a key binding, this file is the only place to edit - and it means
-rebuilding and reflashing the BL616, not the FPGA.
+### The matrix rows
+
+The real keyboard is a scanned 16-row × 8-column matrix and the machine
+never sees keys, only rows: a scan code is `{column[6:4], row[3:0]}`, a
+press is reported for the first key to go down in a row and for no other
+key in that row until the whole row is up, and the release code is
+`0200 | row`, sent once when it is.  UKNCBTL's scanner in `Board.cpp`
+(`SystemFrame`, the `m_kbd_matrix[].processed` flag) is the model, and
+the ROM's keyboard driver is written to it: one press, then one release,
+per row, and its autorepeat runs until the releases balance the presses.
+
+Until Sep 2026 `usb_host.c` forwarded every USB press and release as its
+own code (`hid.v` truncates a release to `0200 | row`, so the release
+side already looked right).  Two keys of one row broke it: the second
+key was a second press, its release said the row was up while the first
+was still held, and the first key's release then arrived as the same
+byte, which `xm2-01.v` takes as no change and never latches.  Both
+Shifts are 0105, row 5, and PC `'` was mapped to 05 - the numeric-keypad
+comma, row 5 - so Shift+`'` typed `,` and left the ROM one release
+short, and it repeated the comma until another Shift press and release
+put the count right.  Shift with `-` (025, keypad minus, row 5) did the
+same with `/`.  Reproduced against the real ROM: `.claude/docs/progress.md`
+defect 15 has the byte streams.
+
+`kbd_tx_uknc()` in `usb_host.c` now keeps the matrix - which HID usages
+it has forwarded as pressed, how many of them are down in each row, and
+which code the machine believes each row is held by - and sends only
+row transitions.  It ignores a press while the OSD is up and a press of
+a `MISS` key, and then ignores their releases too, rather than
+announcing a row the core never heard go down; a release of a key it did
+forward goes out even while the OSD is up, because the core is waiting
+for it.  Two Shifts held are one code held twice, and the row is
+released when the second one goes up.
+
+One deliberate departure from the machine's own keyboard: **rollover
+inside a row**.  On the real matrix the next key down in a held row is
+never reported, and a PC typist rolls from A to Backspace (both row 10,
+with K, M and 3) all day - so the filter sends the machine a release of
+the row and a new press, and forgets the older keys of that row (their
+releases now mean nothing; a per-row generation counter tells the two
+apart).  Shift plus a keypad key becomes "Shift up, key" the same way
+- `7` rather than nothing.  Consecutive bytes are kept 2 ms apart
+(`kbd_tx_uknc_byte()`), because `hid.v` holds one byte with no strobe
+and an older bitstream's `xm2-01.v` took only a change of it.
+
+Row 5 is Shift plus the keypad (05, 025, 0125, 0145, 0165), so PC `-`
+was moved from the keypad minus to the machine's `- =` key (0175, row
+13) and Shift+`-` gives `=`.  PC `'` is now 0155, the key with Э on it.
+0110 (`Ч ^`) is still not reachable from a PC keyboard.
+
+The FPGA side has a queue since the same day: `xm2-01.v` holds up to
+seven bytes and loads `R177702` from it only after the PPU has read the
+previous one, as the real controller does with its ready bit (UKNCBTL,
+`m_Port177700 & 0200`).  `make kbd-test` runs `sim/tb/tb_kbd.v` against
+it: bursts 1.5 us apart against a PPU that looks every 40 or 400 us, all
+bytes out in order.
+
+To change a key binding, `uknc.h` is the only place to edit - and it
+means rebuilding and reflashing the BL616, not the FPGA.
+
+### Testing a key sequence without a board
+
+The ROM's reaction to a byte stream can be measured: the headless
+UKNCBTL runner in the neighbouring `mc0511-dicewars/tools/uknc-headless`
+builds against `ukncbtl-qt`'s `emubase`, and one added script command
+that writes `m_Port177702`, sets bit 7 of `m_Port177700` and raises VIRQ
+0300 injects a byte exactly as `xm2-01.v` presents one (the members are
+`protected`; a `#define protected public` around the include reaches
+them).  An RT-11 prompt that echoes is `mc0511test/toolchain/rt11.dsk`,
+booted with `press 030`, `press 153`, then АР2 (`press 06`) out of the
+music player it autostarts; `build/moutst.dsk` (not in git) comes up at
+the prompt directly, with `SET TT NOSCOPE`, in which RT-11 echoes a
+rubout as `\` and the deleted characters rather than erasing them - that
+is RT-11, not the keyboard.  That is how the streams above were checked,
+and the fixed firmware's own `kbd_tx_uknc()` was compiled on the host
+around a stub `kbd_tx()` to generate them.
 
 ## Building it
 

@@ -930,6 +930,77 @@ byte selected are ignored; whether the original WD image
 (`build/WDC170inv_P.img`) boots now that identify is right has not been
 retried.
 
+### 15. Shift plus a same-row key typed the key forever - FIXED, WORKS ON THE BOARD
+
+Reported 2 Sep 2026: RShift + the PC `'` key (the one with Э on it)
+printed `,` and kept printing it until another RShift press and
+release.  Three things stacked:
+
+1. **`uknc.h` mapped `'` to 05**, which is not the Э key (0155) but the
+   numeric keypad's comma - hence the `,`.  UKNCBTL's `qkeyboardview.cpp`
+   is the layout; the table also had right Alt on 0172 (ПОМ) with a
+   comment saying ГРАФ (066).
+2. **The machine's keyboard is a scanned matrix and the ROM counts
+   rows, not keys.**  A press is reported once per row, the release is
+   `0200 | row` once the row is empty, and the ROM's autorepeat runs
+   until releases balance presses.  Shift (0105) and the keypad share
+   row 5.  The MCU forwarded every USB event, so Shift+`'` was two
+   presses in row 5; `hid.v` truncates a release to its row, so both
+   releases were 0205.
+3. **`xm2-01.v` latches `but_data` only when it changes**, so the second
+   0205 never happened.  Two presses, one release: the ROM repeated.
+
+Reproduced against the real ROM in the headless UKNCBTL (see
+`.claude/docs/mcu.md`, "Testing a key sequence without a board"), at an
+RT-11 prompt, five seconds after each stream:
+
+```
+0105 005 0205           the board's stream       a line of ,,,,, and on
+0105 005 0205 0205      with the lost release    one , and stop
+Shift + keypad-comma    through the real matrix  nothing typed at all
+0105 025 0205           Shift + PC minus         a line of ///// and on
+0105 0155 0215 0205     the fixed stream, Shift+Э   what the matrix does
+0105 0175 0215 0205     the fixed stream, Shift+-   =
+```
+
+The fix is in `usb_host.c`: `kbd_tx_uknc()` tracks which HID keys it
+has forwarded and how many are down per row, and sends only the row's
+first press and last release; presses eaten by the OSD or mapped to
+`MISS` are not tracked, so their releases are dropped rather than sent
+for a row the core never saw.  `'` → 0155, PC `-` → 0175 (the `- =`
+key, row 13, so Shift+`-` is `=` rather than nothing), right Alt → 066.
+The firmware's own function was compiled on the host to produce the
+streams that were then replayed, so the emulator saw the code that
+ships.  No FPGA change; `hid.v`'s truncation is now a no-op on what it
+receives.  The board confirmed the repeat gone the same afternoon.
+
+Second round the same day, after the board confirmed the repeat gone:
+Backspace "printed something instead of deleting".  Two findings.  The
+faithful matrix rule swallows the next key down in a held row, and
+Backspace shares row 10 with A, K, M and 3 - a PC typist rolls into it
+from those constantly, and the real keyboard's users never could.  The
+filter now sends rollover inside a row as a release of the row and a new
+press, forgetting the row's older keys; Shift held twice is one code and
+releases when the second is up.  And `build/moutst.dsk` does `SET TT
+NOSCOPE` at startup, in which RT-11 echoes a rubout as `\` plus the
+deleted characters: that is what the emulator shows for a Backspace
+through UKNCBTL's own matrix too, so it is RT-11's hardcopy echo and
+`SET TT SCOPE` at the prompt is the cure, not the firmware.  Verified in
+the emulator with the shipped function: A then Backspace rolled in
+either order, K rolled into A, both Shifts either order then `1` giving
+`!`, releases under the OSD - all as expected.
+
+`xm2-01.v` has a queue now (same day): `but_data` is change-detected on
+every clock, up to seven bytes wait, and `R177702` is loaded only after
+the PPU has read the previous one, which is the real controller's ready
+handshake.  `make kbd-test` (`sim/tb/tb_kbd.v`) sends bursts 1.5 us
+apart against a PPU polling every 40 or 400 us and checks every byte out
+in order; the firmware also spaces its bytes 2 ms apart for a board
+still on the older bitstream.  Builds, lints, passes the gate with 0
+setup and 0 hold violations, and the resource line did not move
+(47% / 26% / 64%).  Both flashed on 2 Sep 2026 and confirmed at the
+keyboard: chords, rolled Backspace, no repeat - "all works".
+
 ## Open questions
 
 - **Which bitstream is the shipped one?**  `bin/tang.fs` and

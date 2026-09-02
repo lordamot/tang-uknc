@@ -67,6 +67,19 @@ reg  [15:0]wbm_dat_o     = 0;
 reg  [15:0]R177716       = 16'o40;
 reg        R177700       = 1'b0;
 reg  [ 7:0]R177702       = 8'd0;
+// Keyboard bytes from the MCU (hid.v).  hid.v holds only the latest byte
+// and has no strobe, so a new byte is a change of but_data.  The real
+// keyboard controller holds its next code until the PPU has read the last
+// one (UKNCBTL, m_Port177700 & 0200); until Sep 2026 this module did not,
+// and a second byte a few microseconds behind the first - two events in
+// one USB report - replaced it unread.  Bytes now queue here, and R177702
+// is loaded from the queue only once the previous one has been read.
+reg  [ 7:0]kbd_last      = 8'hff;   // hid.v resets its byte to 8'hff
+reg  [ 7:0]kbd_q [0:7];
+reg  [ 2:0]kbd_wr        = 3'd0;
+reg  [ 2:0]kbd_rd        = 3'd0;
+wire       kbd_empty     = kbd_wr == kbd_rd;
+wire       kbd_full      = (kbd_wr + 3'd1) == kbd_rd;
 reg  [ 7:0]R177710       = 8'd0;
 reg  [11:0]R177712       = 12'd0;
 reg  [11:0]R177714       = 12'd0;
@@ -159,15 +172,24 @@ always @(posedge pin_vm_clk_p)
         enVIRQtm      <= 1'b1;
         enVIRQbt      <= 1'b1;
         zero_tmr_old  <= 1'b0;
+        kbd_last      <= but_data;
+        kbd_wr        <= 3'd0;
+        kbd_rd        <= 3'd0;
     end else begin
         ce_old <= ce;
+        kbd_last <= but_data;
+        if(but_data != kbd_last && !kbd_full)begin kbd_q[kbd_wr] <= but_data; kbd_wr <= kbd_wr + 3'd1; end
         zero_tmr_old <= zero_tmr;
         if(!zero_tmr_old && zero_tmr)begin R177710[3] <= R177710[7]; R177710[7] <= 1'b1;end
         R177714 <= R177710[7] ? R177714 : count_tmr;
         if(!pin_wbm_stb_i)begin
             wbm_dat_o    <= 16'o0;
             ask          <= 1'b0;
-            if(R177702!=but_data)begin press_btn <= but_data!=0 ? 1'b1 : 1'b0; R177702 <= but_data; end
+            if(!press_btn && !kbd_empty)begin
+                press_btn <= |kbd_q[kbd_rd];
+                R177702   <= kbd_q[kbd_rd];
+                kbd_rd    <= kbd_rd + 3'd1;
+            end
         end else
         if(~ce_old & ce)begin
             case({pin_wbm_wre_i, pin_wbm_adr_i[5:1]})

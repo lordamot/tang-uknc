@@ -3,6 +3,13 @@
 //
 // USB HID to UKNC translation table
 //
+// A scan code is {column[6:4], row[3:0]} of the machine's keyboard matrix,
+// and the firmware sees ROWS: one press per row until the row is released,
+// then 0x80 | row.  usb_host.c's kbd_tx_uknc keeps that up; what matters
+// here is that keys meant to be chorded must not share a row - both
+// Shifts are 0105, row 5, which is otherwise the numeric keypad (05, 025,
+// 0125, 0145, 0165).  UKNCBTL's qkeyboardview.cpp is the reference layout.
+//
 
 #define MISS          (0)
 #define MATRIX(a,b)   (b*16+a)
@@ -60,14 +67,15 @@ static const unsigned char keymap_uknc[] = {
   026 , // 2b: tab
   0113, // 2c: space
 
-  025 , // 2d: -
+  0175, // 2d: -  (the machine's '- =' key; row 13, so Shift+- gives '=')
   0175, // 2e: =
   036 , // 2f: [
   037 , // 30: ]
   0136, // 31: backslash
   077 , // 32: EUR-1
   07  , // 33: ;
-  05  , // 34: '
+  0155, // 34: ' - the key with Э on it (was 05, the keypad comma: row 5,
+        //         Shift's row, and never the character the key shows)
   077 , // 35: `(~)
   0117, // 36: ,
   0135, // 37: .
@@ -138,6 +146,6 @@ static const unsigned char modifier_uknc[] = {
   MISS,
   046 , // ctrl (right)
   0105, // rshift
-  0172, // alt (right) - GRAF
+  066 , // alt (right) - GRAF (was 0172, which is ПОМ/HELP, already F6)
   MISS
 };

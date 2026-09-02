@@ -39,7 +39,7 @@ IDE hard disk cartridge (Oleg H.'s, with its WD ROM) served out of a
 AY-3-8910s and a one-bit beeper, out over both HDMI and I²S.
 
 ```
-Logic 47%   Register 26%   BSRAM 64%   PLL 2/2 (100%)  [2 Sep 2026 PnR, with the IDE cartridge]
+Logic 47%   Register 26%   BSRAM 64%   PLL 2/2 (100%)  [2 Sep 2026 PnR, with the IDE cartridge and the key queue]
       (44% / 25% / 48% before the cartridge; its 24 KB ROM is the BSRAM step)
 ```
 
@@ -182,10 +182,27 @@ from breaking the start screen or the floppy again.
   no password, no relogin, and it works from here.  That is how the Aug
   2026 flash was done.  `openFPGALoader` is unaffected - the Tang's FTDI
   is `plugdev`.
-- **The keyboard has no matrix scan in the FPGA.**  USB HID → УКНЦ scan
-  code happens on the MCU in `mnano/uknc.h`, and the byte arrives over SPI
-  straight into `R177702`.  Changing a key binding means reflashing the
-  BL616, not the FPGA.
+- **The keyboard has no matrix scan in the FPGA, but the machine only
+  understands rows.**  USB HID → УКНЦ scan code happens on the MCU in
+  `mnano/uknc.h`, and the byte arrives over SPI straight into `R177702`.
+  Changing a key binding means reflashing the BL616, not the FPGA.  The
+  real keyboard is a scanned matrix, a scan code is `{column, row}`, the
+  release code is `0200 | row` for the whole row, and a second key going
+  down in a held row is never reported (UKNCBTL `Board.cpp`); the ROM's
+  autorepeat runs until releases balance presses.  `hid.v` holds one
+  byte with no strobe, so `xm2-01.v` sees a byte only as a change of
+  `but_data`: two identical releases in a row are one.  Until Sep 2026
+  every USB event was forwarded, PC `'` was 05 - the keypad comma, in
+  Shift's row 5 - and Shift+`'` typed `,` forever.  `kbd_tx_uknc()` in
+  `usb_host.c` keeps the matrix now and sends only row transitions,
+  with rollover inside a row (A then Backspace, both row 10) sent as
+  release-and-press because the faithful rule swallows the second key;
+  `xm2-01.v` queues bytes until the PPU has read the last (`make
+  kbd-test`).  Keep new bindings out of row 5 unless they are keypad
+  keys, and check a chord's byte stream against the real ROM with the
+  headless UKNCBTL in `../mc0511-dicewars/tools/uknc-headless`
+  (`.claude/docs/mcu.md`).  A Backspace that "prints `\A`" is RT-11 in
+  `SET TT NOSCOPE`, which `build/moutst.dsk` sets at startup.
 - **The vendor IP under `tang/src/ip/` is generated.**  `.ipc` in, `.v`
   out.  Never hand-edit the `.v`; say which `.ipc` field to change and let
   the operator regenerate it in the IP Core Generator.  The one exception
