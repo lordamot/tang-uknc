@@ -10,6 +10,9 @@
         <File path="/var/www/own/tang-uknc/tang/src/cpu.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/fdd/fdd4.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/fdd/ip/rawtr_prom/rawtr_prom.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/ide/ide.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/ide/ide_rom.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/ide/sd_arbiter.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/dbufsec16/dbufsec16.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ip/rom208/rom208.v" type="verilog"/>

@@ -32,6 +32,9 @@ make lint        Verilator over the whole design - the fast check
 make sim         run the machine, boot and all
 make ab-test     the Aberrant sound module alone: registers, tone, pitch
 make fdd-test    the floppy controller before and after its re-clocking
+make ide-test    the IDE cartridge against a stand-in card
+make sdarb-test  the SD path arbiter between floppies and cartridge
+make ide-rom     regenerate src/ide/ide_rom.v from tang/rom/ide_wdromv0110.bin
 make wave        the same, dumping a VCD, then open it (WAVE_MS=2)
 make frames      the same, writing video frames as .ppm (needs 45 ms+)
 make fw          build the BL616 firmware -> build/fw/bl616.bin

@@ -82,6 +82,12 @@ def main():
         for key, opt in dual:
             if cfg.get(key) is True:
                 out.append(f"set_option -{opt} 1")
+        # The IDE's process config also asks the router to fix hold
+        # violations; say so here too, or the headless flow leaves the
+        # coincident-edge crossings (clk4/clk_25, clkram/clk_25) a tenth
+        # of a nanosecond short.  Sep 2026.
+        if cfg.get("Correct_Hold_Violation") is True:
+            out.append("set_option -correct_hold_violation 1")
     else:
         print(f"gowin_tcl.py: no {cfgp}, dual-purpose pins left alone",
               file=sys.stderr)

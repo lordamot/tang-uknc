@@ -717,8 +717,30 @@ wire [ 6:0]xx = horz[10:4];
 // Clocks off the horizontal counter.  The CPU does not use horz[2]
 // (6.25 MHz); it runs on the PLL's 4.18 MHz output in top.v.
 assign clk_50  = clkram; // 50.0 MHz
-assign clk_25  = horz[0];// 25.0 MHz
-assign ppu_clk = horz[3];// 3.12 MHz
+// clk_25 and ppu_clk are horz[0] and horz[3] - but from flops of their
+// own, kept in lockstep with the counter bits and preserved through
+// synthesis, rather than from the counter bits themselves.  horz[3:0]
+// is also this controller's phase (`q`), and with the generated clocks
+// in test003.sdc defined on the counter's Q pins every path from those
+// pins into the state machine was reported as a hold violation from the
+// clock (25 to 64 of them, moving with placement), which hid real ones
+// and blinded the timing gate.  A clock flop that feeds nothing but the
+// clock network has no such paths.  clk25_q is ~horz[0] delayed one
+// clock, which IS horz[0]; clk312_q toggles where horz[3] toggles, on
+// horz[2:0] wrapping, including at the line wrap (1599 -> 0 carries the
+// same low bits).  Sep 2026.
+reg clk25_q  = 1'b0 /* synthesis syn_preserve=1 */;
+reg clk312_q = 1'b0 /* synthesis syn_preserve=1 */;
+always @(posedge clkram)
+   if(!lockclk)begin
+      clk25_q  <= 1'b0;
+      clk312_q <= 1'b0;
+   end else begin
+      clk25_q  <= ~horz[0];
+      clk312_q <= horz[3] ^ (&horz[2:0]);
+   end
+assign clk_25  = clk25_q; // 25.0 MHz
+assign ppu_clk = clk312_q;// 3.12 MHz
 //---------------------------------------------------------------------------------------------------------//
 // visible_x должен начинаться с 0, но нам надо получить первый байт строки это 16 тактов/2 для x horz
 //---------------------------------------------------------------------------------------------------------//
@@ -753,10 +775,19 @@ wire [ 2:0]tx  = vga_regi[21:20] == 0 ? xs[2:0] :
 
 reg  [ 2:0]tripl = 0;
 
-always @(posedge clk_25)begin
-        tripl[0] = blue_data [tx];
-        tripl[1] = green_data[tx];
-        tripl[2] = red_data  [tx];
+// The pixel sampler.  Until Sep 2026 this was clocked by clk_25, whose
+// rising edge is the very clkram edge on which blue/green/red_data load
+// a new byte (`!tx && !horz[0]` above), so which value it caught - the
+// new byte, as the picture needs, or the old one - was a race between
+// the BUFG's delay and the data's, and the timing report put it at a
+// tenth of a nanosecond.  Sampling on clkram at the next edge, while
+// horz[0] is high, takes the new byte and the same tx every time; the
+// colour arrives one clkram (half an output pixel) later than before.
+always @(posedge clkram)
+    if(horz[0])begin
+        tripl[0] <= blue_data [tx];
+        tripl[1] <= green_data[tx];
+        tripl[2] <= red_data  [tx];
     end
 
 

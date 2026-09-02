@@ -11,6 +11,9 @@
         <File path="src/cpu.v" type="file.verilog" enable="1"/>
         <File path="src/fdd/fdd4.v" type="file.verilog" enable="1"/>
         <File path="src/fdd/ip/rawtr_prom/rawtr_prom.v" type="file.verilog" enable="1"/>
+        <File path="src/ide/ide.v" type="file.verilog" enable="1"/>
+        <File path="src/ide/ide_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/ide/sd_arbiter.v" type="file.verilog" enable="1"/>
         <File path="src/ip/dbufsec16/dbufsec16.v" type="file.verilog" enable="1"/>
         <File path="src/ip/fifo_audio/fifo_audio.v" type="file.verilog" enable="1"/>
         <File path="src/ip/rom208/rom208.v" type="file.verilog" enable="1"/>

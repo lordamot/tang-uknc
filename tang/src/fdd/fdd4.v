@@ -30,7 +30,8 @@ module fdd4(
     outaddr,
     inbyte,
     outbyte,
-    mount_dsk
+    mount_dsk,
+    sd_taken
 );
 input         pin_25mhz_ck;
 input         ppu_vm_init_i;
@@ -64,6 +65,7 @@ input         outen;   // when outen=1, a byte of sector content
 input  [ 8:0] outaddr; // outaddr from 0 to 511, because the sector size is 512
 input  [ 7:0] inbyte;   // a byte of sector content 
 input  [ 3:0] mount_dsk;
+input         sd_taken;  // the IDE cartridge's transfer is pending or running
 //---------------------------------------------------------------------------------
 // Size dsk image in sectors
 //---------------------------------------------------------------------------------
@@ -206,7 +208,11 @@ assign rdy     = ~ppu_vm_init_i;
 assign rstart  = {3'b000, read_sd}<<drive;
 assign wstart  = {3'b000,write_sd}<<drive;
 
-wire is_clean = ~motor|rbusy;
+// sd_taken: sd_card.v serves one requester at a time and the MCU picks
+// the drive from a one-hot mask, so a floppy request while the IDE's is
+// up would be misread.  The floppy simply skips that sector's request;
+// the software sees a read error and retries, which it does anyway.
+wire is_clean = ~motor|rbusy|sd_taken;
 
 // read_sd rises on sd_rd's rising edge and falls as soon as the reader is
 // busy or the motor stops; sd_card.v sees it in this same clock domain.

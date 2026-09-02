@@ -33,7 +33,10 @@ installed on the host and none of it committed.  On top of that:
   tarball, needs no licence for the GW2AR-18C, and only needed its own
   stale bundled libraries moved out of the way.  See
   `.claude/docs/build.md` for the three things that had to be settled.
-  Current resource use: Logic 41%, Register 23%, BSRAM 48%, PLL 2/2,
+  Current resource use (2 Sep 2026, with the IDE cartridge): Logic 47%,
+  Register 26%, BSRAM 64%, PLL 2/2.  Before the cartridge it was Logic
+  44%, Register 25%, BSRAM 48%; the original January 2025 figures were
+  Logic 41%, Register 23%, BSRAM 48%, PLL 2/2,
   IOLOGIC 7%.  BSRAM went from 46% with the second audio FIFO for stereo;
   logic from 39% with the HDMI encoder; the IOLOGIC row is the four
   OSER10s and is new.  Timing: 14651 paths, 8997 endpoints, **0 setup
@@ -446,6 +449,26 @@ appearing with an SD card present" after a re-layout was.
   real paths the PPU- and CPU-to-channel ones at 4.2 ns of slack under
   the 15 ns cap, `make timing` green.  **Built and gated, not run on
   the board** - the board has the 10:22 build.
+
+  **The artefact then went away for good, and what it had hidden came
+  out.**  Adding the IDE cartridge moved the placement and the `ram1`
+  lines went from 15 to 64, more than the report lists, so the gate
+  could no longer vouch for the rest.  `sdram2.v` now makes clk_25 and
+  the PPU clock from two flops of their own (`clk25_q`, `clk312_q`,
+  `syn_preserve`), in lockstep with the counter bits and feeding nothing
+  but the clock network, and the generated clocks sit on those.  The
+  next report had four hold lines, all real: three clkram -> clk_25
+  into the pixel sampler `tripl` and one clk4 -> clk_25 from a CPU
+  register into the channel's `P177062`, each a tenth of a nanosecond
+  short on a coincident edge - the CPU one being the exact race that
+  blanked the screen that morning.  Two answers, both kept: the
+  headless flow now passes the IDE's `Correct_Hold_Violation` on to the
+  router (`tools/gowin_tcl.py`, `set_option -correct_hold_violation`),
+  and `vp1_120.v`'s CPU side no longer relies on winning that race - the
+  strobe goes through two flops, the decode fires on the synchronised
+  copy when address and data have been stable for two clocks, and the
+  ack (data and interrupt-vector alike) goes out one clock after the
+  data, 80 ns a CPU access to the channel.
 - **Still open:** `clk27_d` on fabric; `xm2-01.v` clocks the PPU timer
   from `timer_clk_4`, a mux of counter bits (the beeper divider was
   re-clocked on 2 Sep 2026); `audio.v` clocks the I2S FIFO read from
@@ -804,6 +827,108 @@ phase; the 10:22 build (phase right) does everything.  What made the
 difference is not any one RTL change but that the crossings between the
 processors and the clk_25 peripherals are now analysed with the right
 edges, so a placement can no longer roll them.
+
+### 14. IDE hard disk cartridge - ADDED, WORKS ON THE BOARD
+
+2 Sep 2026.  `src/ide/ide.v` and `ide_rom.v`: Oleg H.'s IDE controller
+for the УКНЦ in ROM cartridge slot 1, with its WD boot ROM
+(`tang/rom/ide_wdromv0110.bin`, 24 KB in three banks), implemented from
+UKNCBTL's emulation of it; `.claude/docs/platform.md` has the map, the
+inversions and the geometry rules.  The disk is SD slot 4, mounted from
+the OSD's new "HDD 0:" entry (`*.img`), saved with the other images by
+the existing settings code; `sdc.c` reads the image's first sector at
+mount and sends sectors/track, heads and the inversion flag as SYS
+values `'S'`, `'H'`, `'I'`.  `sd_card.v` grew from four slots to five,
+`fdd4.v` yields the SD path while the cartridge's request is up, and
+`ppu.v` exports its window state and no longer writes RAM through the
+window in cartridge mode.
+
+Verified: `make ide-test` (bus in, stand-in card out: ROM banks, status
+after reset, IDENTIFY, a two-sector CHS read at the right LBAs with the
+right words and byte order, the inverted-image case, a sector write
+arriving in order, SET CONFIG changing the LBA arithmetic); `make lint`;
+`make sim` boots as before (the cartridge is absent without a mounted
+image) and draws the start screen at 1.2 s; `make bitstream` passes the
+timing gate with 0 setup and 0 hold violations at logic 47%, registers
+26%, BSRAM 64%; `make fw` builds and is in `bin/bl616.bin`.
+**On the board, 2 Sep 2026, first try:** everything up to the boot
+works - the cartridge appears, the WD ROM runs from the start menu,
+reads its boot sector - and the ROM then refuses the sector as wrong.
+That is a data-form symptom: bytes inverted the wrong way, or (ruled
+out from Gowin's BSRAM guide: a byte port addresses the same 14-bit
+space as a word port, so byte 0 is word 0's low half, as the design and
+the sim model assume) swapped.  The inversion chain matches UKNCBTL
+line for line, so the suspect is the sector-0 heuristic against this
+particular image.  Added the OSD override "HDD image: Auto|Plain|
+Inverted" (`'J'` -> `system_hdd_mode` -> `ide.v`) so the board can say
+which.  **Second try:** only Plain gets past the home block, and the
+boot sector is still refused - so the data form is right and the home
+block (block 0, sector 1) reads correctly, and what the ROM rejects is
+block 1, the WD layout's boot block, which the cartridge reads as sector
+2 of the same track and cannot misplace whatever the geometry.  Reading
+`rt11dsk` (ukncbtl-utils) settled what `hi` does - a complement of every
+byte, nothing more - and showed three incompatible layouts, WD, HD and
+HZ, of which only WD has its boot block at block 1.  The likely truth is
+that the image is not a WD-layout image with a system on partition 0.
+Awaiting the image's origin and its first bytes.  A real bug found on
+the way and fixed: `next_sector` compared the head in 4 bits, so a
+16-head geometry wrapped the head after every sector; `tb_ide` now
+covers it.
+
+**Third try, with the image in hand** (`build/WDC170inv_P.img`, plain
+despite the name: 34 sectors, 10 heads, 980 cylinders, block 1 starting
+with `000240`) and a note from someone who did it on real hardware
+(`build/clue.txt`): the boot succeeds only when the home block's
+geometry bytes match what the drive reports - so **the WD ROM reads
+IDENTIFY**.  Ours handed it garbage: Hard.cpp inverts its identify
+buffer and then applies the image's inversion rule, which comes out
+plain only for an inverted image - the form everyone uses on hardware
+and in the emulator - and a plain image gets `~identify`; on top of
+that we reported 0 cylinders.  Fixed: IDENTIFY is plain on the bus
+whatever the image form (`identify ^ inv` into the buffer), and the MCU
+sends cylinders as `'C'`/`'Y'`.
+
+**Fourth try, with WDINIT's own code:** its identify loop
+(`007702: MOV #177423,(R4)`, then `MOV (R5),R0; COM R0` per word)
+complements what it reads, and its sector loop does not - so the bus
+carries `~identify` on real hardware and the third try had it backwards;
+the tool's "Cylinders: 64555, Heads: 65525, Sectors: 65501" are the
+complements of 980, 10 and 34, which is the plain-identify build seen
+through that `COM`.  Back to `~identify` on the bus for either image
+form, with the real cylinder count kept; `tb_ide` checks `~045a`,
+`~980`, `~UK`.  WDINIT's "heads<>16, sectors<>63 not supported" is the
+tool's own limit for initialising CF cards and does not concern
+booting.  Also added: "HDD prot." (`'K'`), since a booted RT-11 writes
+to its disk (one word at block 108 changed on the card in the first
+session) and the card should be keepable pristine.
+
+**Fifth try, with an empty 16x63 image (`build/wd16x63.img`):** WDINIT
+showed the right geometry and failed its first write - "WD write (track
+sector): 000000 000001", then "read and compare error".  The image came
+back with block 0 untouched and a valid home block, checksum and all,
+in **block 21**: the floppy controller's sector number for track 1
+sector 1, which RT-11 was reading off the floppy while the tool wrote.
+The two requesters were muxed onto `sd_card.v` by "who is pending" and
+could both be visible to it for a cycle or two, and the MCU picks the
+drive from a one-hot mask.  Fixed with `ide/sd_arbiter.v`: one owner at
+a time, granted when the cartridge asks with no floppy request up and
+the card idle, held until done, every mux keyed on the owner, the
+floppies masked and held back meanwhile; `make sdarb-test` drives the
+same-cycle case.  Also: a new READ or WRITE command clears the ERROR
+bit, as on a drive (the tool checks it right after the command).
+**Sixth try, 2 Sep 2026: "all works now"** - WDINIT initialises the
+empty 16x63 image, RT-11 goes onto WD0: and boots from the cartridge.
+The whole chain, for the record: the cartridge in slot 1 with the WD
+ROM in three banks; registers indexed by the inverted address, every
+bus word inverted, sector data inverted once more for a raw-dump image;
+IDENTIFY complemented on the bus with the real geometry; CHS to LBA in
+the cartridge; five SD slots with an arbiter between the floppies and
+the disk; the OSD's HDD 0:, HDD image (Auto/Plain/Inverted) and HDD
+prot. entries, saved with the settings.  Still open: no bounds check on
+CHS; slot 2 is empty and not selectable; byte writes with only the odd
+byte selected are ignored; whether the original WD image
+(`build/WDC170inv_P.img`) boots now that identify is right has not been
+retried.
 
 ## Open questions
 

@@ -30,6 +30,18 @@ module sysctrl (
   output reg        system_video,
   output reg [1:0]  system_reset,
   output reg [1:0]  system_volume,
+  // the mounted IDE image's geometry, from its first sector (mnano/sdc.c):
+  // 'S' sectors per track, 'H' heads, 'I' bit 0 = image stored inverted
+  output reg [7:0]  system_hdd_spt,
+  output reg [7:0]  system_hdd_heads,
+  output reg [7:0]  system_hdd_flags,
+  // 'J' from the OSD: 0 take the detected form, 1 read the image as plain,
+  // 2 read it as inverted - the override for when the detection is wrong
+  output reg [1:0]  system_hdd_mode,
+  // 'C' low byte, 'Y' high byte: cylinders, for IDENTIFY
+  output reg [15:0] system_hdd_cyl,
+  // 'K' from the OSD: 1 = the IDE image is write-protected
+  output reg        system_hdd_wprot,
   output reg [3:0]  system_floppy_wprot
 );
 
@@ -60,6 +72,12 @@ always @(posedge clk) begin
       system_video <= 1'b0;         // color
       system_volume <= 2'b00;       // mute
       system_floppy_wprot <= 4'b00; // floppy not write protected
+      system_hdd_spt <= 8'd0;
+      system_hdd_heads <= 8'd0;
+      system_hdd_flags <= 8'd0;
+      system_hdd_mode <= 2'd0;
+      system_hdd_cyl <= 16'd0;
+      system_hdd_wprot <= 1'b0;
    end else begin
       int_ack <= 8'h00;
 
@@ -112,6 +130,14 @@ always @(posedge clk) begin
                     if(id == "A") system_volume <= data_in[1:0];
                     // Value "P": floppy write protecion None(0), A(1), B(2) both(3)
                     if(id == "P") system_floppy_wprot <= data_in[3:0];
+                    // IDE image geometry, sent before the INSERTED notice
+                    if(id == "S") system_hdd_spt   <= data_in;
+                    if(id == "H") system_hdd_heads <= data_in;
+                    if(id == "I") system_hdd_flags <= data_in;
+                    if(id == "J") system_hdd_mode  <= data_in[1:0];
+                    if(id == "C") system_hdd_cyl[7:0]  <= data_in;
+                    if(id == "Y") system_hdd_cyl[15:8] <= data_in;
+                    if(id == "K") system_hdd_wprot <= data_in[0];
                 end
             end
 

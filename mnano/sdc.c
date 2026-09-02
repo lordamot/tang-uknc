@@ -359,6 +359,51 @@ static int sdc_image_inserted(char drive, unsigned long size) {
   return 0;
 }
 
+extern unsigned char core_id;
+
+// Read sector 0 of the freshly opened image and derive sectors/track,
+// heads and the inversion flag the way UKNCBTL's CHardDrive::AttachImage
+// does: an "HD type" image announces itself with a signature word and
+// carries the geometry in words 4 and 5; an "ID/WD type" image carries
+// sectors and heads in bytes 0 and 1, and is inverted when bytes
+// 0x1f0-0x1fb read 0xff.  A geometry of zero is sent when nothing
+// sensible could be read, which leaves the controller unable to seek -
+// visible, rather than silently wrong.
+static void sdc_uknc_hdd_geometry(int drive) {
+  unsigned char buf[512];
+  UINT rd = 0;
+  unsigned char spt = 0, heads = 0, inv = 0;
+  unsigned long cyl = 0;
+
+  if(f_lseek(&fil[drive], 0) == FR_OK && f_read(&fil[drive], buf, 512, &rd) == FR_OK && rd == 512) {
+    unsigned short w0 = buf[0] | (buf[1] << 8), w1 = buf[2] | (buf[3] << 8), w2 = buf[4] | (buf[5] << 8);
+    if((w0 == 0x54A9 && w1 == 0xFFEF && w2 == 0xFEFF) || (w0 == 0xAB56 && w1 == 0x0010 && w2 == 0x0100)) {
+      inv = (w0 == 0xAB56);
+      if(inv) for(int i = 0; i < 512; i++) buf[i] = ~buf[i];
+      unsigned short w4 = buf[8] | (buf[9] << 8), w5 = buf[10] | (buf[11] << 8);
+      spt = w4;
+      heads = spt ? (w5 / spt) : 0;
+    } else {
+      unsigned char test = 0xff;
+      for(int i = 0x1f0; i <= 0x1fb; i++) test &= buf[i];
+      inv = (test == 0xff);
+      spt = inv ? (unsigned char)~buf[0] : buf[0];
+      heads = inv ? (unsigned char)~buf[1] : buf[1];
+    }
+    f_lseek(&fil[drive], 0);
+  }
+  // cylinders, for the drive's IDENTIFY: the WD ROM reads the drive's
+  // geometry back and wants it to agree with the home block's
+  if(spt && heads) cyl = (fil[drive].obj.objsize / 512) / spt / heads;
+  if(cyl > 65535) cyl = 65535;
+  printf("HDD geometry: %d sectors/track, %d heads, %lu cylinders, %s\r\n", spt, heads, cyl, inv ? "inverted" : "plain");
+  sys_set_val(spi, 'S', spt);
+  sys_set_val(spi, 'H', heads);
+  sys_set_val(spi, 'I', inv);
+  sys_set_val(spi, 'C', cyl & 0xff);
+  sys_set_val(spi, 'Y', (cyl >> 8) & 0xff);
+}
+
 int sdc_image_open(int drive, char *name) {
   // tell core that the "disk" has been removed
   sdc_image_inserted(drive, 0);
@@ -434,6 +479,16 @@ int sdc_image_open(int drive, char *name) {
 
   // remember current image name
   image_name[drive] = strdup(name);
+
+  // The UKNC's IDE cartridge (tang/src/ide/ide.v) addresses its disk by
+  // cylinder/head/sector and turns that into a sector number itself, so
+  // it needs the image's geometry - which sits in the image's first
+  // sector, exactly as UKNCBTL's Hard.cpp reads it - and whether the
+  // image is stored bit-inverted (a raw dump of a real drive is).  Sent
+  // as three SYS values before the INSERTED notice, so the core has them
+  // when the disk appears.
+  if(core_id == CORE_ID_UKNC && drive == 4)
+    sdc_uknc_hdd_geometry(drive);
   
   // image has successfully been opened, so report image size to core
   sdc_image_inserted(drive, fil[drive].obj.objsize);

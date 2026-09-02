@@ -6,6 +6,9 @@ Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ay/ym2149.sv'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/cpu.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/fdd/fdd4.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/fdd/ip/rawtr_prom/rawtr_prom.v'
+Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ide/ide.v'
+Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ide/ide_rom.v'
+Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ide/sd_arbiter.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/dbufsec16/dbufsec16.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/rom208/rom208.v'
@@ -28,6 +31,18 @@ Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mkcolorreg.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ppu.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/sdram2.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/top.v'
+Undeclared symbol 'cart_sel', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":658)
+Undeclared symbol 'cart_bank', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":659)
+Undeclared symbol 'fdd_rd', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":755)
+Undeclared symbol 'fdd_wr', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":756)
+Undeclared symbol 'fdd_outen', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":761)
+Undeclared symbol 'fdd_taken', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":766)
+WARN  (EX3638) : 'fdd_rd' is already implicitly declared on line 755("/var/www/own/tang-uknc/tang/src/top.v":787)
+WARN  (EX3638) : 'fdd_wr' is already implicitly declared on line 756("/var/www/own/tang-uknc/tang/src/top.v":787)
+WARN  (EX3638) : 'fdd_taken' is already implicitly declared on line 766("/var/www/own/tang-uknc/tang/src/top.v":788)
+WARN  (EX3638) : 'fdd_outen' is already implicitly declared on line 761("/var/www/own/tang-uknc/tang/src/top.v":788)
+WARN  (EX3638) : 'cart_sel' is already implicitly declared on line 658("/var/www/own/tang-uknc/tang/src/top.v":791)
+WARN  (EX3638) : 'cart_bank' is already implicitly declared on line 659("/var/www/own/tang-uknc/tang/src/top.v":792)
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_rx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_tx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/vp1-128fdd.v'
@@ -76,9 +91,12 @@ Compiling module 'mkcolorg'("/var/www/own/tang-uknc/tang/src/mkcolorreg.v":1)
 Compiling module 'rd_plan'("/var/www/own/tang-uknc/tang/src/mkcolorreg.v":85)
 Compiling module 'xm2_01'("/var/www/own/tang-uknc/tang/src/xm2-01.v":1)
 Compiling module 'fdd4'("/var/www/own/tang-uknc/tang/src/fdd/fdd4.v":1)
-WARN  (EX3780) : Using initial value of 'write_sd' since it is never assigned("/var/www/own/tang-uknc/tang/src/fdd/fdd4.v":202)
+WARN  (EX3780) : Using initial value of 'write_sd' since it is never assigned("/var/www/own/tang-uknc/tang/src/fdd/fdd4.v":204)
 Compiling module 'rawtr_prom'("/var/www/own/tang-uknc/tang/src/fdd/ip/rawtr_prom/rawtr_prom.v":10)
 Compiling module 'dbufsec16'("/var/www/own/tang-uknc/tang/src/ip/dbufsec16/dbufsec16.v":10)
+Compiling module 'sd_arbiter'("/var/www/own/tang-uknc/tang/src/ide/sd_arbiter.v":16)
+Compiling module 'ide'("/var/www/own/tang-uknc/tang/src/ide/ide.v":37)
+Compiling module 'ide_rom'("/var/www/own/tang-uknc/tang/src/ide/ide_rom.v":3)
 Compiling module 'vp1_128fdd'("/var/www/own/tang-uknc/tang/src/vp1-128fdd.v":15)
 Compiling module 'aberrant'("/var/www/own/tang-uknc/tang/src/aberrant.v":1)
 Compiling module 'YM2149'("/var/www/own/tang-uknc/tang/src/ay/ym2149.sv":42)
@@ -112,8 +130,8 @@ Running technical mapping ...
 [80%] Tech-Mapping Phase 3 completed
 [90%] Tech-Mapping Phase 4 completed
 WARN  (NL0002) : The module "vm2_plb" instantiated to "plb_matrix" is swept in optimizing("/var/www/own/tang-uknc/tang/src/wm2wb/vm2_wb.v":1110)
-WARN  (NL0002) : The module "mkcolorg" instantiated to "mc1" is swept in optimizing("/var/www/own/tang-uknc/tang/src/ppu.v":456)
-WARN  (NL0002) : The module "rd_plan" instantiated to "mc2" is swept in optimizing("/var/www/own/tang-uknc/tang/src/ppu.v":463)
+WARN  (NL0002) : The module "mkcolorg" instantiated to "mc1" is swept in optimizing("/var/www/own/tang-uknc/tang/src/ppu.v":472)
+WARN  (NL0002) : The module "rd_plan" instantiated to "mc2" is swept in optimizing("/var/www/own/tang-uknc/tang/src/ppu.v":479)
 WARN  (NL0002) : The module "vm2_plb" instantiated to "plb_matrix" is swept in optimizing("/var/www/own/tang-uknc/tang/src/wm2wb/vm2_wb.v":1110)
 [95%] Generate netlist file "/var/www/own/tang-uknc/tang/impl/gwsynthesis/test003.vg" completed
 WARN  (CK3000) : Can't calculate clocks' relationship between: "t4n/I" and "pl1/rpll_inst/CLKOUT.default_gen_clk"

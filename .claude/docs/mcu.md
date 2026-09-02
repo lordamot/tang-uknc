@@ -84,6 +84,13 @@ agree on the letters; `sysctrl.v` decodes:
 'R'  system_reset          bits 1:0  0 run, 1 reset, 3 coldboot
 'A'  system_volume         bits 1:0  0 mute, 1 33%, 2 66%, 3 100%
 'P'  system_floppy_wprot   bits 3:0  one bit per drive
+'S'  system_hdd_spt        bits 7:0  IDE image sectors per track  } sent by sdc.c
+'H'  system_hdd_heads      bits 7:0  IDE image heads              } at mount, from
+'I'  system_hdd_flags      bit 0     IDE image stored inverted    } the image's sector 0
+'J'  system_hdd_mode       bits 1:0  0 use 'I', 1 read as plain, 2 as inverted (OSD "HDD image")
+'C'  system_hdd_cyl[7:0]   bits 7:0  IDE image cylinders, low byte   } file size / 512 / spt / heads,
+'Y'  system_hdd_cyl[15:8]  bits 7:0  IDE image cylinders, high byte  } for IDENTIFY
+'K'  system_hdd_wprot      bit 0     IDE image write-protected (OSD "HDD prot.")
 ```
 
 Anything the menu offers has to have a letter here, in `variables_uknc[]`
@@ -94,9 +101,11 @@ in `menu.c`, and in the menu form string - three places.
 `menu.c`, four form strings for УКНЦ:
 
 ```
-main      FDD 0: fileselector, System, Drives, Settings, Reset
+main      FDD 0: fileselector, HDD 0: fileselector (*.img, SD slot 4),
+          System, Drives, Settings, Reset
 System    Video RGB|BGR ('V'), Cold Boot
-Drives    Disk 0:..3: fileselectors, Disk prot. None|0:|1:|2:|3:|All ('P')
+Drives    Disk 0:..3: fileselectors, Disk prot. None|0:|1:|2:|3:|All ('P'),
+          HDD image Auto|Plain|Inverted ('J'), HDD prot. Off|On ('K')
 Settings  Volume Mute|33%|66%|100% ('A'), Save settings
 ```
 

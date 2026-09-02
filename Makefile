@@ -66,7 +66,7 @@ SIMBINW  := $(BUILD)/sim/objw/tb_top_w
 # video frame is a million cycles.
 VFLAGS   := -Wno-fatal --timing -j 4
 
-MIFS     := $(BUILD)/mif/uknc_rom.hex $(BUILD)/mif/rawtrk.hex
+MIFS     := $(BUILD)/mif/uknc_rom.hex $(BUILD)/mif/rawtrk.hex $(BUILD)/mif/ide_wdrom.hex
 
 RUN_MS   ?= 300
 PPM_MAX  ?= 4
@@ -125,6 +125,17 @@ $(BUILD)/mif/uknc_rom.hex: tang/rom/uknc_rom.mif $(TOOLS)/mif.py
 $(BUILD)/mif/rawtrk.hex: tang/src/fdd/rom128/rawtrk.mif $(TOOLS)/mif.py
 	@mkdir -p $(dir $@)
 	$(PYTHON) $(TOOLS)/mif.py tohex $< $@
+
+# The IDE cartridge ROM, for the sim stub of ide_rom.  The synthesised
+# form is tang/src/ide/ide_rom.v, made from the same binary by
+# tools/bin2prom.py (make ide-rom) and committed like the other ROM
+# images are.
+$(BUILD)/mif/ide_wdrom.hex: tang/rom/ide_wdromv0110.bin $(TOOLS)/mif.py
+	@mkdir -p $(dir $@)
+	$(PYTHON) $(TOOLS)/mif.py binhex $< $@
+
+ide-rom:
+	$(PYTHON) $(TOOLS)/bin2prom.py tang/rom/ide_wdromv0110.bin tang/src/ide/ide_rom.v -m ide_rom
 
 #-----------------------------------------------------------------------
 # Lint and simulation
@@ -290,6 +301,23 @@ fdd-test: $(VERILATOR) mif
 # The timing gate on its own.  What it checks is in .claude/rules/timing.md.
 timing:
 	$(PYTHON) $(TOOLS)/timing_check.py
+
+# The IDE cartridge alone: PPU bus in, SD request interface out, with a
+# stand-in card that streams a known pattern.  sim/tb/tb_ide.v.
+ide-test: $(VERILATOR) mif
+	@mkdir -p $(BUILD)/sim/ide
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_ide -Mdir $(BUILD)/sim/ide -o tb_ide \
+	  sim/tb/tb_ide.v tang/src/ide/ide.v $(STUBS) >/dev/null
+	$(BUILD)/sim/ide/tb_ide
+
+# The SD path arbiter between the floppies and the IDE cartridge.
+sdarb-test: $(VERILATOR)
+	@mkdir -p $(BUILD)/sim/sdarb
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_sdarb -Mdir $(BUILD)/sim/sdarb -o tb_sdarb \
+	  sim/tb/tb_sdarb.v tang/src/ide/sd_arbiter.v >/dev/null
+	$(BUILD)/sim/sdarb/tb_sdarb
 
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out

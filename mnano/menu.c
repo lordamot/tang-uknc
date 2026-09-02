@@ -79,6 +79,7 @@ static const char main_form_uknc[] =
   "UKNC Nano,;"                        // main form has no parent
   // --------
   "F,FDD 0:,0|dsk;"                 // fileselector for Disk 1:
+  "F,HDD 0:,4|img;"                 // the IDE cartridge's disk, SD slot 4
   "S,System,1;"                         // System submenu is form 1
   "S,Drives,2;"                         // Storage submenu
   "S,Settings,3;"                       // Settings submenu is form 3
@@ -97,7 +98,9 @@ static const char storage_form_uknc[] =
   "F,Disk 1:,1|dsk;"                     // fileselector for Disk 1:
   "F,Disk 2:,2|dsk;"                     // fileselector for Disk 2:
   "F,Disk 3:,3|dsk;"                     // fileselector for Disk 3:
-  "L,Disk prot.:,None|0:|1:|2:|3:|All,P;";   // Enable/Disable Floppy write protection
+  "L,Disk prot.:,None|0:|1:|2:|3:|All,P;"   // Enable/Disable Floppy write protection
+  "L,HDD image:,Auto|Plain|Inverted,J;"       // how the IDE image's bytes are read (see sdc.c)
+  "L,HDD prot.:,Off|On,K;";                   // write-protect the IDE image
   
 static const char settings_form_uknc[] =
   "Settings,0|3;"                       // return to form 0, entry 4
@@ -117,6 +120,8 @@ menu_variable_t variables_uknc[] = {
   { 'V', { 0 }},    // default video = RGB
   { 'A', { 1 }},    // default volume = 33%
   { 'P', { 0 }},    // default no floppy write protected
+  { 'J', { 0 }},    // default HDD image form = auto-detected from sector 0
+  { 'K', { 0 }},    // default HDD writable
   { '\0',{ 0 }}
 };
 // ------------------------------------------------------------------

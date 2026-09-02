@@ -53,7 +53,8 @@ Decoded on `adr[15:9]`:
 
 ```
 0000000-0077777   RAM (32 KB, the PPU's own)
-0100000-0117777   overlay: ROM if R177054[0], else RAM read if R177054[4]
+0100000-0117777   overlay: ROM if R177054[0], else RAM read if R177054[4],
+                  else the ROM cartridge in slot R177054[3], bank R177054[2:1]
 0120000-0137777   ROM
 0140000-0157777   ROM
 0160000-0176777   ROM
@@ -62,8 +63,14 @@ Decoded on `adr[15:9]`:
 
 `R177054` is the mapping register and the only thing that moves the
 boundary: bit 0 selects ROM over the `0100000` window, bit 4 enables the
-RAM read underneath it, bit 8 forces the event line, bit 9 gates the CPU's
-timer (`pin_tmr_ena_o` out to `cpu.v`).  It resets to `10'o1401`.
+RAM read underneath it, bits 2:1 name a cartridge bank (1..3) and bit 3 a
+slot when neither bit 0 nor bit 4 is set, bit 8 forces the event line, bit
+9 gates the CPU's timer (`pin_tmr_ena_o` out to `cpu.v`).  It resets to
+`10'o1401`.  Cartridge mode is exported as `pin_cart_sel_o`/`_bank_o`
+for the IDE cartridge below, and in that mode a write to the window no
+longer falls through to the RAM behind it (it did for every mode until
+Sep 2026; in cartridge mode it would be an IDE register write landing in
+RAM at `0110000`+ as well).
 
 Inside `0177000-0177777` the PPU's own registers are selected on
 `adr[8:1]`:
@@ -185,6 +192,99 @@ Image geometry: **819200 bytes = 1600 sectors of 512** - 80 tracks, 2
 sides, 10 sectors of 512.  The older scheme, `load.v`, had the same
 number as `204800` 32-bit words per image and stacked four images back to
 back in RAM; it was never instantiated and left the tree in Sep 2026.
+
+## Hard disk (`ide/ide.v`, `ide/ide_rom.v`)
+
+Oleg H.'s IDE controller for the УКНЦ ("КНЖМД"), a ROM cartridge with the
+drive's registers inside its address space, exactly as UKNCBTL emulates
+it (`emubase/Hard.cpp`, `Board.cpp`, `Memory.cpp` - the reference for
+every number here).  Added Sep 2026.  It occupies **cartridge slot 1**
+and exists only while an image is mounted on SD slot 4 (the OSD's
+"HDD 0:"); with none mounted the slot is empty and the window times out.
+
+```
+0100000-0107777   ROM bank R177054[2:1] - 1 of tang/rom/ide_wdromv0110.bin
+                  (24 KB = three 8 KB banks; tools/bin2prom.py -> ide_rom.v)
+0110000-0117777   the IDE registers, shadowing the upper 4 KB of every bank
+                  while the disk is attached, index = ~adr[3:1]:
+  0110016  data        0110014  error / precomp   0110012  sector count
+  0110010  sector no.  0110006  cylinder low      0110004  cylinder high
+  0110002  head        0110000  status / command
+```
+
+**Every word on the bus is inverted**, both ways: a register reads as
+`{8'h00, ~value}`, a written value is `~bus[7:0]`.  Sector data is
+inverted once more when the image is stored "inverted" - a raw dump of a
+real drive, which holds `~software`; the MCU detects that from the
+image's first sector (bytes `0x1f0`-`0x1fb` all `0xff`, or the `0xAB56`
+signature of an "HD type" image) and sends it as SYS value `'I'` with the
+geometry `'S'` (sectors/track) and `'H'` (heads) before the INSERTED
+notice.  The net effect is that software always sees its own view of
+the disk whichever way the image is stored - the same rule for the same
+reason as in the emulator.  The detection is a heuristic (twelve bytes of
+sector 0 all `0xff`), so the OSD's Drives menu has "HDD image:
+Auto|Plain|Inverted" (`'J'`) to overrule it; the first image tried on
+the board (2 Sep 2026) booted the WD ROM and was refused as a wrong boot
+sector, which is what a wrong form looks like.
+
+Commands: `20`/`21` read, `30`/`31` write (multi-sector through the
+sector count, CHS advanced as `NextSector()` does), `91` set config
+(sectors/track and heads from the registers, overriding the mounted
+values), `EC` identify (the emulator's block, model "UKNC Nano Hard
+Disk", cylinders from the MCU as file size / 512 / spt / heads, sent as
+`'C'` low and `'Y'` high byte).  **IDENTIFY reaches the software
+COMPLEMENTED, whatever form the image is in** - that is the bus
+inverting the drive's own words, and the software knows it: WDINIT's
+identify loop (`build/wdinit.dsk`, `MOV #177423,(R4)` then `MOV (R5),R0;
+COM R0`) complements every word it reads, while its sector reads store
+the words as they come.  A build that put identify on the bus plain
+made WDINIT print 64555, 65525, 65501 - the complements of 980, 10 and
+34.  The WD ROM does read IDENTIFY: `build/clue.txt`, a real-hardware
+note, says the home block's geometry bytes have to match what the drive
+reports or the boot fails, so the cylinder count has to be real too
+(2 Sep 2026).  The Drives menu's "HDD prot." (`'K'`) makes writes fail
+with ERROR and BAD_SECTOR, as the emulator does for a read-only image,
+and leaves the card untouched.
+Status `50` after reset, `58` with data ready.  Addressing is CHS and the
+sector number on the SD path is `(cyl * heads + head) * spt + sector -
+1`, computed in two multiply stages in the cartridge.  Images are `.img`,
+raw 512-byte sectors, geometry in sector 0 as the WD driver writes it.
+
+**Three incompatible hard-disk layouts exist for the УКНЦ**, and
+`rt11dsk` (ukncbtl-utils) tells them apart: **WD** - bytes 0 and 1 of the
+home block are sectors/track and sides, words 1..23 the partition sizes,
+partitions laid out one after another from block 1, a checksum over the
+block, `wdwaittime`/`wdhidden` at `0122`/`0124`; **HD** - signature
+`54A9 FFEF FEFF` (or its complement), geometry in words 4 and 5,
+partitions at cylinder boundaries from words 6..; **HZ** - 32 MB
+partitions, no home block.  This ROM is the WD driver's: its boot block
+is disk block 1, and an image in either other layout, or a WD image with
+no system on its first partition, is refused with "wrong boot sector"
+after the home block has been read correctly - and so does a correct WD
+image if IDENTIFY disagrees with its home block.  WDINIT itself only
+initialises drives reporting 16 heads and 63 sectors - CF cards - and
+says so; it is not needed to boot an existing image.  `rt11dsk hi`
+complements every byte of an image and nothing else, which is the
+"inverted" form; `build/WDC170inv_P.img`, despite its name, is plain
+(34 sectors, 10 heads, 980 cylinders, checksum words at `0x1fc`).
+
+The cartridge shares `sd_card.v`'s one request interface with the four
+floppies, and the MCU picks the drive out of a one-hot mask, so
+`ide/sd_arbiter.v` grants the path to one owner at a time: the cartridge
+gets it when it asks with no floppy request up and the card idle, keeps
+it until the card reports done, and while it owns the floppies' request
+bits are masked and `fdd4.v` holds back (`sd_taken`); the sector number,
+the write data and the incoming-byte strobe all follow the owner.  The
+first version muxed by "who is pending" and let both be visible for a
+cycle or two, and on the board that put WDINIT's home block into block
+21 of the image - the floppy's sector number for the track RT-11 was
+reading at that moment (`make sdarb-test`).  Not bounds-checked: a CHS
+beyond the image reads whatever the card holds past the file.
+
+`sim/tb/tb_ide.v` (`make ide-test`) drives the bus and a stand-in card
+through every command above and checks each word against Hard.cpp's
+conventions.  **On the board since 2 Sep 2026**: WDINIT partitions an
+empty image, RT-11 installs on WD0: and boots from the cartridge.
 
 ## Sound (`aberrant.v`)
 

@@ -18,7 +18,9 @@ live set, by role:
 | top | `top.v` |
 | processors | `cpu.v`, `ppu.v`, `wm2wb/vm2_wb.v`, `wm2wb/vm2_plm.v`, `wmrst.v` |
 | video/memory | `sdram2.v`, `mkcolorreg.v` |
-| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `audio.v` |
+| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `audio.v`, `ide/ide.v` |
+| SD path | `ide/sd_arbiter.v` - one owner at a time between the floppies and the cartridge on `sd_card.v` |
+| generated ROM | `ide/ide_rom.v` - twelve pROM primitives from `tang/rom/ide_wdromv0110.bin` by `tools/bin2prom.py` (`make ide-rom`), stubbed in simulation like the vendor IP |
 | serial | `uart/uart_rx.v`, `uart/uart_tx.v` |
 | MisterNano | `mister/{mcu_spi,sysctrl,hid,osd_u8g2,sd_card,sd_rw,sdcmd_ctrl,sector_dpram}.v` |
 | HDMI | `hdmi/{hdmi_tx,tmds_channel,hdmi_packet,hdmi_serdes}.v` |
@@ -343,7 +345,7 @@ the first without the diagnostic monitor:
 ```
 Logic      8923/20736   44%
 Register   3873/15915   25%
-BSRAM        22/46      48%
+BSRAM        29/46      64%   (22/46 before the IDE cartridge's 24 KB ROM, Sep 2026)
 DSP           0/         0%
 PLL           2/2      100%
 IOLOGIC       8/121      7%

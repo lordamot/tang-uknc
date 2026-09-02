@@ -149,22 +149,22 @@ create_generated_clock -name clk4     -source [get_pins {pl1/rpll_inst/CLKOUT}] 
 // the build that carried the wrong phase loaded no floppy ("зависание
 // при приеме А.В.Р.").  Master edges are numbered from 1, rising odd,
 // falling even, so clk_25 rising at k=1,3,.. is edges 3,7,..:
-create_generated_clock -name clk_25   -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {3 5 7} [get_pins {ram1/horz_0_s0/Q}]
+create_generated_clock -name clk_25   -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {3 5 7} [get_pins {ram1/clk25_q_s0/Q}]
 // A generated clock on a flop's Q pin makes every path from that Q look
 // clock-launched, and the tool resolves a BUFG-output target back to the
-// Q anyway, so the report carries ~15 false hold lines inside ram1 from
-// horz[0] and horz[3] into the SDRAM state machine.  They are the one
-// artefact the gate allows by pattern; see clk_3_12 below.
+// Q anyway.  While clk_25 and clk_3_12 sat on horz[0] and horz[3] - bits
+// the SDRAM state machine also reads - the report carried 15 to 64 false
+// hold lines a build and the timing gate could not see past them.  Since
+// 2 Sep 2026 sdram2.v makes the two clocks from flops of their own,
+// clk25_q and clk312_q, in lockstep with the counter bits and preserved
+// through synthesis, which feed nothing but the clock network: the
+// generated clocks sit on those and every hold line in the report is
+// real.
 // clk_3_12 rising at k=8 (edge 17), falling at k=16 (edge 33): its edges
-// on even k, as above.  Written on the BUFG output t3/O; the tool resolves
-// that back to the flop's Q (the report lists ram1/horz_3_s0/Q as the
-// object), so the false hold lines from that Q into the SDRAM state
-// machine - horz[3:0] is its phase bit `q` - remain, 15 of them, all
-// clk_3_12/clk_25 -> clkram inside ram1 and all really clkram -> clkram.
-// tools/timing_check.py allows exactly those and nothing else.  top.v
-// makes the inverted PPU clock from t3's output rather than the raw bit,
-// which keeps every negedge flop downstream of one point either way.
-create_generated_clock -name clk_3_12 -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {17 33 49} [get_pins {t3/O}]
+// on even k, as above.  On clk312_q's Q; top.v makes the inverted PPU
+// clock from the BUFG's output, so every negedge flop is downstream of
+// this one point through an inverter the tool follows.
+create_generated_clock -name clk_3_12 -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {17 33 49} [get_pins {ram1/clk312_q_s0/Q}]
 
 //------------------------------------------------------------------------
 // Flops clocked by data, which is not a thing a timing tool can analyse.
@@ -225,6 +225,27 @@ set_max_delay -from [get_clocks {clk4}]     -to [get_clocks {clk_25}]   15
 set_max_delay -from [get_clocks {clk_25}]   -to [get_clocks {clk4}]     15
 set_max_delay -from [get_clocks {clk4}]     -to [get_clocks {clk_3_12}] 15
 set_max_delay -from [get_clocks {clk_3_12}] -to [get_clocks {clk4}]     15
+
+// Paths that are false by construction, each with its reason - the
+// rule in .claude/rules/timing.md is that a false path names a crossing
+// that has been read and shown to be handled, and this list is that.
+//
+// CPU -> clk_25: everything the CPU's bus drives into vp1_120.v goes
+// through a synchronised strobe (two flops; the first stage is allowed
+// to go metastable, that is what the second is for) and data registers
+// that load only on the synchronised strobe's edge, two clocks after
+// the CPU last changed anything.  The tool cannot see the enable, so it
+// reports hold races on the first stages and on data flops that never
+// load at the racing edge; the interface is safe whichever way the
+// power-up aligns clk4, and the sim and the board have both shown it.
+set_false_path -from [get_clocks {clk4}] -to [get_clocks {clk_25}]
+//
+// SDRAM read data -> a processor: sdram2.v sets cpu_dout/ppu_dout on one
+// clkram edge and raises the acknowledge on the next, and the processor
+// captures the data only when it has seen the acknowledge, so the data
+// is at least one clkram old at any edge on which it is taken.
+set_false_path -from [get_pins {ram1/ppu_dout_*_s0/Q}] -to [get_clocks {clk_3_12}]
+set_false_path -from [get_pins {ram1/cpu_dout_*_s0/Q}] -to [get_clocks {clk4}]
 
 // The SPI domain is asynchronous to every clock on the board and the
 // crossing in mcu_spi.v is a handshake: spi_data_in is written on the

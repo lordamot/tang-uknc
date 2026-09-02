@@ -107,15 +107,38 @@ reg  [ 7:0]portB = 0;
 reg  [ 7:0]portC = 0;
 reg  [ 7:0]portW = 0;
 
-wire cecpu = &cpu_wbm_adr_i[15:10] && cpu_wbm_stb_i;
+// The CPU runs on clk4, whose edges land on a clk_25 edge or 20 ns from
+// one depending on the power-up (test003.sdc).  In the coincident case
+// every capture of the CPU's bus here is a hold race that the router has
+// to win by a tenth of a nanosecond, and on 2 Sep 2026 one placement
+// lost it and the start screen never came.  So the strobe is taken
+// through two flops and the decode fires on the rising edge of the
+// synchronised copy, by which time address and data have been stable
+// for two clocks; and the ack goes out one clock after the data it
+// acknowledges, so that however the CPU's edge falls it never sees the
+// ack before the data.  The interrupt-acknowledge strobe gets the same.
+// Cost: 80 ns per CPU access to the channel.  Sep 2026.
+reg  [1:0] cpu_stb_s = 2'b00;
+reg  [1:0] cpu_wbi_s = 2'b00;
+always @(posedge clk) begin
+    cpu_stb_s <= {cpu_stb_s[0], cpu_wbm_stb_i};
+    cpu_wbi_s <= {cpu_wbi_s[0], cpu_wbi_stb_i};
+end
+wire cecpu = &cpu_wbm_adr_i[15:10] && cpu_stb_s[1];
 reg  cecpu_old = 1'b0;
 reg  cpu_wbi_stb_i_old = 0;
 
 reg  [15:0]cpu_wbm_dat_o;
-reg        cpu_wbm_ack_o = 1'b0;
+reg        cpu_ack_r = 1'b0;         // the ack as the decode raises it
+reg        cpu_wbm_ack_o = 1'b0;     // one clock later, out to the CPU
+reg        cpu_wbi_ack_r = 1'b0;     // the same pair for the interrupt vector
+reg        cpu_wbi_ack_o = 1'b0;
+always @(posedge clk) begin
+    cpu_wbm_ack_o <= cpu_ack_r & cpu_stb_s[1];
+    cpu_wbi_ack_o <= cpu_wbi_ack_r & cpu_wbi_s[1];
+end
 
 reg  [15:0]cpu_wbi_dat_o;
-reg        cpu_wbi_ack_o = 1'b0;
 
 reg        C177560 = 0;
 reg        C176660 = 0;
@@ -255,8 +278,8 @@ always @(posedge clk)begin
             end
             if(cpu_vm_init_i)begin
                 cecpu_old <= 1'b0;
-                cpu_wbm_ack_o <= 1'b0;
-                cpu_wbi_ack_o <= 1'b0;
+                cpu_ack_r <= 1'b0;
+                cpu_wbi_ack_r <= 1'b0;
                 C177560 <= 1'b0;
                 C176660 <= 1'b0;
                 C177564 <= 1'b0;
@@ -267,9 +290,9 @@ always @(posedge clk)begin
                 enVIRQPrx[3] <= 1'b1;
             end else begin
                 cecpu_old <= cecpu;
-					 if(!cpu_wbm_stb_i)begin
+					 if(!cpu_stb_s[1])begin
 							cpu_wbm_dat_o <= 16'o0;
-							cpu_wbm_ack_o <= 1'b0;
+							cpu_ack_r <= 1'b0;
 					 end else
                 if(~cecpu_old & cecpu)begin
                     case({cpu_wbm_wre_i, cpu_wbm_adr_i[9:1]})
@@ -279,85 +302,85 @@ always @(posedge clk)begin
 //				Приемники ЦП 0 и 1 канал
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                     //1560 k0 - sos
-                    {1'b0,9'o670}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; else begin cpu_wbm_dat_o <= {1'b0,~P177076[3],C177560,6'o00}; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o670}: if(P177076[2]) cpu_ack_r <= 1'b0; else begin cpu_wbm_dat_o <= {1'b0,~P177076[3],C177560,6'o00}; cpu_ack_r <= 1'b1; end
                     //0660 k1 - sos
-                    {1'b0,9'o330}: begin cpu_wbm_dat_o <= {1'b0,~P177076[4],C176660,6'o00}; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o330}: begin cpu_wbm_dat_o <= {1'b0,~P177076[4],C176660,6'o00}; cpu_ack_r <= 1'b1; end
                     
                     //1562 k0 - data
-                    {1'b0,9'o671}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; 
-											  else begin cpu_wbm_dat_o <= {1'b0,C177562}; P177076[3] <= 1'b1; enVIRQCrx[0] <= 1'b1; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o671}: if(P177076[2]) cpu_ack_r <= 1'b0; 
+											  else begin cpu_wbm_dat_o <= {1'b0,C177562}; P177076[3] <= 1'b1; enVIRQCrx[0] <= 1'b1; cpu_ack_r <= 1'b1; end
                     //0662 k1 - data
-                    {1'b0,9'o331}: begin cpu_wbm_dat_o <= {1'b0,C176662}; P177076[4] <= 1'b1; enVIRQCrx[1] <= 1'b1; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o331}: begin cpu_wbm_dat_o <= {1'b0,C176662}; P177076[4] <= 1'b1; enVIRQCrx[1] <= 1'b1; cpu_ack_r <= 1'b1; end
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //				Передатчики ЦП 0, 1 и 2 канал
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                     //1564 k0 - sos
-                    {1'b0,9'o672}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; else begin cpu_wbm_dat_o <= {1'b0,~P177066[3],C177564,6'o00}; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o672}: if(P177076[2]) cpu_ack_r <= 1'b0; else begin cpu_wbm_dat_o <= {1'b0,~P177066[3],C177564,6'o00}; cpu_ack_r <= 1'b1; end
                     //0664 k1 - sos
-                    {1'b0,9'o332}: begin cpu_wbm_dat_o <= {1'b0,~P177066[4],C176664,6'o00}; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o332}: begin cpu_wbm_dat_o <= {1'b0,~P177066[4],C176664,6'o00}; cpu_ack_r <= 1'b1; end
                     //0674 k2 - sos
-                    {1'b0,9'o336}: begin cpu_wbm_dat_o <= {1'b0,~P177066[5],C176674,6'o00}; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o336}: begin cpu_wbm_dat_o <= {1'b0,~P177066[5],C176674,6'o00}; cpu_ack_r <= 1'b1; end
                     
                     //1566 k0 - data
-                    {1'b0,9'o673}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; else begin cpu_wbm_dat_o <= 9'o0; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o673}: if(P177076[2]) cpu_ack_r <= 1'b0; else begin cpu_wbm_dat_o <= 9'o0; cpu_ack_r <= 1'b1; end
                     //0666 k1 - data
-                    {1'b0,9'o333}: begin cpu_wbm_dat_o <= 9'o0; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o333}: begin cpu_wbm_dat_o <= 9'o0; cpu_ack_r <= 1'b1; end
                     //0676 k2 - data
-                    {1'b0,9'o337}: begin cpu_wbm_dat_o <= 9'o0; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b0,9'o337}: begin cpu_wbm_dat_o <= 9'o0; cpu_ack_r <= 1'b1; end
 
                     //0670 - reserve
-                    {1'b0,9'o334}: cpu_wbm_ack_o <= 1'b1;
+                    {1'b0,9'o334}: cpu_ack_r <= 1'b1;
                     //0672 - reserve
-                    {1'b0,9'o335}: cpu_wbm_ack_o <= 1'b1;
+                    {1'b0,9'o335}: cpu_ack_r <= 1'b1;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //	write	write	write	write	write	write	write	write	write	write	write	write	write	write	write
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //				Приемники ЦП 0 и 1 канал
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                     //1560 k0 - sos
-                    {1'b1,9'o670}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; else begin C177560 <= cpu_wbm_dat_i[6]; enVIRQCrx[0] <= cpu_wbm_dat_i[6]; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b1,9'o670}: if(P177076[2]) cpu_ack_r <= 1'b0; else begin C177560 <= cpu_wbm_dat_i[6]; enVIRQCrx[0] <= cpu_wbm_dat_i[6]; cpu_ack_r <= 1'b1; end
                     //0660 k1 - sos
-                    {1'b1,9'o330}: begin C176660 <= cpu_wbm_dat_i[6]; enVIRQCrx[1] <= cpu_wbm_dat_i[6]; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b1,9'o330}: begin C176660 <= cpu_wbm_dat_i[6]; enVIRQCrx[1] <= cpu_wbm_dat_i[6]; cpu_ack_r <= 1'b1; end
                     
                     //1562 k0 - data
-                    {1'b1,9'o671}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; else cpu_wbm_ack_o <= 1'b1;
+                    {1'b1,9'o671}: if(P177076[2]) cpu_ack_r <= 1'b0; else cpu_ack_r <= 1'b1;
                     //0662 k1 - data
-                    {1'b1,9'o331}: cpu_wbm_ack_o <= 1'b1;
+                    {1'b1,9'o331}: cpu_ack_r <= 1'b1;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //				Передатчики ЦП 0, 1 и 2 канал
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                     //1564 k0 - sos
-                     {1'b1,9'o672}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; else begin C177564 <= cpu_wbm_dat_i[6]; enVIRQCtx[0] <= cpu_wbm_dat_i[6]; cpu_wbm_ack_o <= 1'b1; end
+                     {1'b1,9'o672}: if(P177076[2]) cpu_ack_r <= 1'b0; else begin C177564 <= cpu_wbm_dat_i[6]; enVIRQCtx[0] <= cpu_wbm_dat_i[6]; cpu_ack_r <= 1'b1; end
                     //0664 k1 - sos
-                    {1'b1,9'o332}: begin C176664 <= cpu_wbm_dat_i[6]; enVIRQCtx[1] <= cpu_wbm_dat_i[6]; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b1,9'o332}: begin C176664 <= cpu_wbm_dat_i[6]; enVIRQCtx[1] <= cpu_wbm_dat_i[6]; cpu_ack_r <= 1'b1; end
                     //0674 k2 - sos
-                    {1'b1,9'o336}: begin C176674 <= cpu_wbm_dat_i[6]; enVIRQCtx[2] <= cpu_wbm_dat_i[6]; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b1,9'o336}: begin C176674 <= cpu_wbm_dat_i[6]; enVIRQCtx[2] <= cpu_wbm_dat_i[6]; cpu_ack_r <= 1'b1; end
                     
                     //1566 k0 - data
-                    {1'b1,9'o673}: if(P177076[2]) cpu_wbm_ack_o <= 1'b0; else begin P177060 <= cpu_wbm_dat_i[7:0]; P177066[3] <= 1'b1; enVIRQCtx[0] <= 1'b1; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b1,9'o673}: if(P177076[2]) cpu_ack_r <= 1'b0; else begin P177060 <= cpu_wbm_dat_i[7:0]; P177066[3] <= 1'b1; enVIRQCtx[0] <= 1'b1; cpu_ack_r <= 1'b1; end
                     //0666 k1 - data
-                    {1'b1,9'o333}: begin P177062 <= cpu_wbm_dat_i[7:0]; P177066[4] <= 1'b1; enVIRQCtx[1] <= 1'b1; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b1,9'o333}: begin P177062 <= cpu_wbm_dat_i[7:0]; P177066[4] <= 1'b1; enVIRQCtx[1] <= 1'b1; cpu_ack_r <= 1'b1; end
                     //0676 k2 - data
-                    {1'b1,9'o337}: begin P177064 <= cpu_wbm_dat_i[7:0]; P177066[5] <= 1'b1; enVIRQCtx[2] <= 1'b1; cpu_wbm_ack_o <= 1'b1; end
+                    {1'b1,9'o337}: begin P177064 <= cpu_wbm_dat_i[7:0]; P177066[5] <= 1'b1; enVIRQCtx[2] <= 1'b1; cpu_ack_r <= 1'b1; end
 
                     //0670 - reserve
-                    {1'b1,9'o334}: cpu_wbm_ack_o <= 1'b1;
+                    {1'b1,9'o334}: cpu_ack_r <= 1'b1;
                     //0672 - reserve
-                    {1'b1,9'o335}: cpu_wbm_ack_o <= 1'b1;
+                    {1'b1,9'o335}: cpu_ack_r <= 1'b1;
                     endcase
                 end
-                cpu_wbi_stb_i_old <= cpu_wbi_stb_i;
-					 if(!cpu_wbi_stb_i)begin
+                cpu_wbi_stb_i_old <= cpu_wbi_s[1];
+					 if(!cpu_wbi_s[1])begin
 						  cpu_wbi_dat_o <= 16'o0;
-                    cpu_wbi_ack_o <= 1'b0;
+                    cpu_wbi_ack_r <= 1'b0;
 					 end else
-                if(~cpu_wbi_stb_i_old & cpu_wbi_stb_i)begin
-                     if(setVIRQCrx[0] && enVIRQCrx[0])begin cpu_wbi_dat_o <= 16'o60; enVIRQCrx[0] <= 1'b0; cpu_wbi_ack_o <= 1'b1; end
-							else if(setVIRQCtx[0] && enVIRQCtx[0])begin cpu_wbi_dat_o <= 16'o64; enVIRQCtx[0] <= 1'b0; cpu_wbi_ack_o <= 1'b1; end
-								else if(setVIRQCrx[1] && enVIRQCrx[1])begin cpu_wbi_dat_o <= 16'o460; enVIRQCrx[1] <= 1'b0; cpu_wbi_ack_o <= 1'b1; end
-									else if(setVIRQCtx[1] && enVIRQCtx[1])begin cpu_wbi_dat_o <= 16'o464; enVIRQCtx[1] <= 1'b0; cpu_wbi_ack_o <= 1'b1; end
-										else if(setVIRQCtx[2] && enVIRQCtx[2])begin cpu_wbi_dat_o <= 16'o474; enVIRQCtx[2] <= 1'b0; cpu_wbi_ack_o <= 1'b1; end
-											else begin cpu_wbi_ack_o <= 1'b0; cpu_wbi_dat_o <= 16'o0; end
+                if(~cpu_wbi_stb_i_old & cpu_wbi_s[1])begin
+                     if(setVIRQCrx[0] && enVIRQCrx[0])begin cpu_wbi_dat_o <= 16'o60; enVIRQCrx[0] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+							else if(setVIRQCtx[0] && enVIRQCtx[0])begin cpu_wbi_dat_o <= 16'o64; enVIRQCtx[0] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+								else if(setVIRQCrx[1] && enVIRQCrx[1])begin cpu_wbi_dat_o <= 16'o460; enVIRQCrx[1] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+									else if(setVIRQCtx[1] && enVIRQCtx[1])begin cpu_wbi_dat_o <= 16'o464; enVIRQCtx[1] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+										else if(setVIRQCtx[2] && enVIRQCtx[2])begin cpu_wbi_dat_o <= 16'o474; enVIRQCtx[2] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+											else begin cpu_wbi_ack_r <= 1'b0; cpu_wbi_dat_o <= 16'o0; end
                 end
             end
         end

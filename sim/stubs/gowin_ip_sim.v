@@ -276,6 +276,29 @@ module rawtr_prom (
         else if (ce) dout <= mem[ad];
 endmodule
 
+// ide_rom - src/ide/ide_rom.v, 12288 x 16 of pROM primitives made by
+//           tools/bin2prom.py from tang/rom/ide_wdromv0110.bin; the hex
+//           here comes from the same binary through mif.py binhex.
+module ide_rom (
+    output reg [15:0] dout,
+    input             clk,
+    input             ce,
+    input             reset,
+    input      [13:0] ad
+);
+    parameter MEM_HEX = "build/mif/ide_wdrom.hex";
+    reg [15:0] mem [0:16383];
+    integer i;
+    initial begin
+        for (i = 0; i < 16384; i = i + 1) mem[i] = 16'h0000;
+        $readmemh(MEM_HEX, mem);
+        dout = 16'h0000;
+    end
+    always @(posedge clk)
+        if (reset)   dout <= 16'h0000;
+        else if (ce) dout <= mem[ad];
+endmodule
+
 //------------------------------------------------------------------------
 // Semi-dual-port block RAM (SDPB): port A writes, port B reads, and the
 // two may be different widths.  Gowin lays these out as one flat bit

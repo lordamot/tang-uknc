@@ -39,8 +39,13 @@ always means a new layout, cannot do that again.
 - **No false paths, no relaxed constraints, to make a report green.**
   `set_false_path` and `set_clock_groups` are for crossings that have
   been read and shown to be synchronised or non-existent, and the SDC
-  comment says which.  The `ram1`-internal hold lines are the one known
-  artefact and the gate allows exactly those.
+  comment says which.  The ones there now: the CPU's bus into `vp1_120`
+  (a synchronised strobe and enable-qualified data), and SDRAM read data
+  into either processor (the acknowledge follows the data by a clock).
+  A new one needs the same paragraph.  A synchroniser's first stage is
+  the textbook case; a data bus captured at a coincident edge is not,
+  unless an enable that the SDC comment names keeps it from loading
+  there.
 
 ## The gate
 
@@ -50,11 +55,11 @@ runs the check alone on the last report.  It fails on: any setup
 violation; any hold violation outside `ram1`, or more than the report
 lists; `TA1132`, `TA1117`, `TA2000`, `TA2003`, `TA2004` in the log; a
 `PR1014` beyond the two known nets; any of the named clocks missing.
-The exceptions it allows are listed in the script by name and reason,
-each with a slack floor: the `ram1`-internal lines (clk_25 sits on a
-flop's Q that also feeds logic) and the OSD enable onto a video
-register's reset pin.  Adding to that list needs the same: a name, a
-reason, a floor, and a line here.
+Any hold violation fails it - the counter-bit clocks come from flops of
+their own since 2 Sep 2026, so there is no artefact to allow - except
+the exceptions listed in the script by name, reason and slack floor
+(today: the OSD enable onto a video register's reset pin).  Adding to
+that list needs the same: a name, a reason, a floor, and a line here.
 
 A red gate is information, not an obstacle: it says which path a new
 layout would have rolled the dice on.  Fix the path or the constraint,

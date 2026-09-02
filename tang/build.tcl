@@ -9,6 +9,9 @@ add_file -type verilog "src/ay/ym2149.sv"
 add_file -type verilog "src/cpu.v"
 add_file -type verilog "src/fdd/fdd4.v"
 add_file -type verilog "src/fdd/ip/rawtr_prom/rawtr_prom.v"
+add_file -type verilog "src/ide/ide.v"
+add_file -type verilog "src/ide/ide_rom.v"
+add_file -type verilog "src/ide/sd_arbiter.v"
 add_file -type verilog "src/ip/dbufsec16/dbufsec16.v"
 add_file -type verilog "src/ip/fifo_audio/fifo_audio.v"
 add_file -type verilog "src/ip/rom208/rom208.v"
@@ -48,6 +51,7 @@ set_option -verilog_std sysv2017
 set_option -global_freq 100.000
 set_option -rw_check_on_ram 0
 set_option -use_sspi_as_gpio 1
+set_option -correct_hold_violation 1
 set_option -output_base_name test003
 
 run all

@@ -30,7 +30,10 @@ module ppu_wb(
     pin_wbi_ack_i,
     pin_wbi_stb_o,
 
-    pin_tmr_ena_o
+    pin_tmr_ena_o,
+
+    pin_cart_sel_o,
+    pin_cart_bank_o
 );
 input        clk_ppu_p;
 input        clk_ppu_n;
@@ -64,6 +67,10 @@ input        pin_wbi_ack_i;
 output       pin_wbi_stb_o;
 
 output       pin_tmr_ena_o;
+// Window block 0 (0100000-0117777) in ROM-cartridge mode, slot 1, and the
+// bank R177054[2:1] - for the IDE cartridge in src/ide/ide.v.  Sep 2026.
+output       pin_cart_sel_o;
+output [ 1:0]pin_cart_bank_o;
 //========================================================================================
 //  Wishbone PPU
 //========================================================================================
@@ -143,6 +150,11 @@ assign pin_wbm_sel_o = wbm_sel_o;
 assign pin_wbm_stb_o = wbm_stb_o;
 assign pin_wbi_stb_o = wbi_una_o ? 1'b0 : wbi_stb_o;
 assign pin_tmr_ena_o = R177054[9];
+// Cartridge mode: not the firmware ROM (bit 0), not RAM (bit 4), a bank
+// named in bits 2:1, slot 1 (bit 3 clear).  Slot 2 is empty here.
+wire   cart_sel = ~R177054[0] & ~R177054[4] & (|R177054[2:1]) & ~R177054[3];
+assign pin_cart_sel_o  = cart_sel;
+assign pin_cart_bank_o = R177054[2:1];
 //========================================================================================
 // VIRQ
 //========================================================================================
@@ -267,7 +279,11 @@ always @(posedge vm_clk_p)
             if(wbm_adr_o[15:9] < 'o120)begin
                 addr_ram <= wbm_adr_o[15:0];
                 rom      <= R177054[0];
-                ram_wr   <= wbm_we_o;
+                // Writes used to fall through to the RAM behind the window
+                // whatever the mode.  In cartridge mode they are IDE
+                // register writes and must not land in RAM at 0110000+,
+                // which other software may be using through the window.
+                ram_wr   <= wbm_we_o & ~cart_sel;
                 ram_rd   <=~(R177054[0]|wbm_we_o) & R177054[4];
                 ask      <=~wbm_we_o & R177054[0];
                 rio      <= 1'b0;

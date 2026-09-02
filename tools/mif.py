@@ -9,6 +9,7 @@ directions.
   mif.py tohex  in.mif  out.hex           .mif -> one hex word per line
   mif.py tomif  in.bin  out.mif -w 16     flat binary -> .mif
   mif.py tobin  in.mif  out.bin           .mif -> flat binary
+  mif.py binhex in.bin  out.hex           flat binary -> hex, 16-bit LE words
 
 `tohex` is what the simulation models use: $readmemh cannot read a .mif,
 which carries a header and `addr : data;` syntax.
@@ -84,7 +85,7 @@ def write_mif(path, width, mem):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", choices=["tohex", "tomif", "tobin"])
+    ap.add_argument("mode", choices=["tohex", "tomif", "tobin", "binhex"])
     ap.add_argument("infile")
     ap.add_argument("outfile")
     ap.add_argument("-w", "--width", type=int, default=16,
@@ -105,6 +106,18 @@ def main():
         return
 
     order = "big" if args.big_endian else "little"
+
+    if args.mode == "binhex":
+        nbytes = args.width // 8
+        data = open(args.infile, "rb").read()
+        data += b"\0" * ((-len(data)) % nbytes)
+        digits = (args.width + 3) // 4
+        with open(args.outfile, "w") as f:
+            for i in range(0, len(data), nbytes):
+                v = int.from_bytes(data[i:i+nbytes], order)
+                f.write(f"{v:0{digits}X}\n")
+        print(f"{args.infile}: {len(data)//nbytes} words of {args.width} bits -> {args.outfile}")
+        return
 
     if args.mode == "tomif":
         if args.width % 8:

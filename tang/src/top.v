@@ -349,6 +349,12 @@ wire        system_video       ;
 wire [1:0]  system_reset       ;
 wire [1:0]  system_volume      ;
 wire [3:0]  system_floppy_wprot;
+wire [7:0]  system_hdd_spt     ;
+wire [7:0]  system_hdd_heads   ;
+wire [7:0]  system_hdd_flags   ;
+wire [1:0]  system_hdd_mode    ;
+wire [15:0] system_hdd_cyl     ;
+wire        system_hdd_wprot   ;
 
 sysctrl sctl1(
     .clk                (           mist_clk),
@@ -373,7 +379,13 @@ sysctrl sctl1(
     .system_video       (       system_video),
     .system_reset       (       system_reset),
     .system_volume      (      system_volume),
-    .system_floppy_wprot(system_floppy_wprot)
+    .system_floppy_wprot(system_floppy_wprot),
+    .system_hdd_spt     (     system_hdd_spt),
+    .system_hdd_heads   (   system_hdd_heads),
+    .system_hdd_flags   (   system_hdd_flags),
+    .system_hdd_mode    (    system_hdd_mode),
+    .system_hdd_cyl     (     system_hdd_cyl),
+    .system_hdd_wprot   (   system_hdd_wprot)
 );
 
 wire [5:0] db9_port = 6'd0;
@@ -402,7 +414,7 @@ hid hd1(
 
 
 wire [31:0] sd_img_size   ;
-wire [ 3:0] sd_img_mounted;
+wire [ 4:0] sd_img_mounted;
 wire sdc_iack = int_ack[3];
 wire        sd_busy       ;
 wire        sd_done       ;
@@ -410,9 +422,11 @@ wire        sd_rd_byte_strobe;
 wire [ 8:0] sd_byte_index ;
 wire [ 7:0] sd_rd_data    ;
 wire [ 7:0] sd_wr_data    ;
-wire [ 3:0] sd_rd         ;
-wire [ 3:0] sd_wr         ;
+wire [ 4:0] sd_rd         ;   // slots 0-3 the floppies, 4 the IDE disk
+wire [ 4:0] sd_wr         ;
 wire [31:0] sd_sector     ;
+wire [31:0] fdd_sector    ;
+wire [ 7:0] fdd_wr_data   ;
 
 sd_card #(
     .CLK_DIV(3'd1)                        // for 25 Mhz clock
@@ -460,12 +474,13 @@ sd_card #(
 // per drive - and were what the SDC could only describe as a 1 us clock.
 // Sampled on the clock the pulse belongs to, the value is the same and
 // the path is one the tool can see.
-reg [3:0]mount_dsk = 4'b0000;
+reg [4:0]mount_dsk = 5'b00000;
 always @(posedge mist_clk)begin
     if(sd_img_mounted[0])mount_dsk[0] <= |sd_img_size;
     if(sd_img_mounted[1])mount_dsk[1] <= |sd_img_size;
     if(sd_img_mounted[2])mount_dsk[2] <= |sd_img_size;
     if(sd_img_mounted[3])mount_dsk[3] <= |sd_img_size;
+    if(sd_img_mounted[4])mount_dsk[4] <= |sd_img_size;   // the IDE disk
 end
 
 assign leds[4] = ~mount_dsk[0];
@@ -547,9 +562,10 @@ assign ppu_vm_virq_i = ppu_vm_virq_i_xm2|ppu_vm_virq_i_vp;
 assign ppu_wbm_dat_i = ppu_wbm_ack_i_xm2 ? ppu_wbm_dat_i_xm2 :
                        ppu_wbm_ack_i_vp  ? ppu_wbm_dat_i_vp  :
                        ppu_wbm_ack_i_128 ? ppu_wbm_dat_i_128 : 
-                       ppu_wbm_ack_i_abr ? ppu_wbm_dat_i_abr : 16'o0;
+                       ppu_wbm_ack_i_abr ? ppu_wbm_dat_i_abr :
+                       ppu_wbm_ack_i_ide ? ppu_wbm_dat_i_ide : 16'o0;
 
-assign ppu_wbm_ack_i = ppu_wbm_ack_i_xm2|ppu_wbm_ack_i_vp|ppu_wbm_ack_i_128|ppu_wbm_ack_i_abr;
+assign ppu_wbm_ack_i = ppu_wbm_ack_i_xm2|ppu_wbm_ack_i_vp|ppu_wbm_ack_i_128|ppu_wbm_ack_i_abr|ppu_wbm_ack_i_ide;
 
 assign ppu_wbi_dat_i = ppu_wbi_ack_i_xm2 ? ppu_wbi_dat_i_xm2 :
                        ppu_wbi_ack_i_vp  ? ppu_wbi_dat_i_vp  : 16'o0;
@@ -638,7 +654,9 @@ ppu_wb ppu1(
    .pin_wbi_ack_i(ppu_wbi_ack_i),
    .pin_wbi_stb_o(ppu_wbi_stb_o),
 
-   .pin_tmr_ena_o(pin_tmr_ena_o)
+   .pin_tmr_ena_o(pin_tmr_ena_o),
+   .pin_cart_sel_o (         cart_sel),
+   .pin_cart_bank_o(        cart_bank)
 );
 //------------------------------------------------------------//
 wire sound;
@@ -734,17 +752,92 @@ fdd4 fdd(
 
     .led_init     (      leds[5]),
    
-    .rstart       (        sd_rd),
-    .wstart       (        sd_wr),
-    .rsector      (    sd_sector),
+    .rstart       (       fdd_rd),
+    .wstart       (       fdd_wr),
+    .rsector      (   fdd_sector),
     .rbusy        (      sd_busy),
     .rdone        (      sd_done),
 
-    .outen    (sd_rd_byte_strobe),
+    .outen    (      fdd_outen),
     .outaddr      (sd_byte_index),
     .inbyte       (   sd_rd_data),
-    .outbyte      (   sd_wr_data),
-    .mount_dsk    (    mount_dsk)
+    .outbyte      (  fdd_wr_data),
+    .mount_dsk    (mount_dsk[3:0]),
+    .sd_taken     (    fdd_taken)
+);
+
+//------------------------------------------------------------//
+// The IDE hard disk cartridge (src/ide/ide.v), slot 4 of the SD path.
+//
+// sd_card.v has one request interface and the MCU picks the drive from
+// a one-hot mask, so two requesters must never be visible to it at
+// once - and the first version of this let them be, for a cycle or two,
+// with the sector number and the data muxed by "who is pending".  On
+// the board that put the WD home block into block 21 of the disk image:
+// 21 is the floppy's sector number for track 1 sector 1, which RT-11
+// was reading at the moment WDINIT wrote track 0 sector 1.  So there is
+// an owner now.  The cartridge gets the path when it asks and no floppy
+// request is up and the card is idle; it keeps it until sd_card reports
+// done; while it owns, the floppies' request lines are masked off and
+// fdd4.v holds its own back (sd_taken), and every mux - sector number,
+// write data, incoming bytes - follows the owner and nothing else.
+//------------------------------------------------------------//
+wire        hdd_sd_active ;
+wire        hdd_rstart, hdd_wstart, hdd_other, hdd_outen;
+wire [ 3:0] fdd_rd, fdd_wr;
+wire        fdd_taken, fdd_outen, sd_owner_hdd;
+wire [31:0] hdd_sector    ;
+wire [ 7:0] hdd_wr_data   ;
+wire        cart_sel      ;
+wire [ 1:0] cart_bank     ;
+wire [15:0] ppu_wbm_dat_i_ide;
+wire        ppu_wbm_ack_i_ide;
+
+sd_arbiter sdarb(
+    .clk        (clk_25),
+    .fdd_rd(fdd_rd), .fdd_wr(fdd_wr), .fdd_sector(fdd_sector), .fdd_wr_data(fdd_wr_data),
+    .fdd_taken(fdd_taken), .fdd_outen(fdd_outen),
+    .hdd_rd(hdd_rstart), .hdd_wr(hdd_wstart), .hdd_sector(hdd_sector), .hdd_wr_data(hdd_wr_data),
+    .hdd_other(hdd_other), .hdd_outen(hdd_outen),
+    .sd_rd(sd_rd), .sd_wr(sd_wr), .sd_sector(sd_sector), .sd_wr_data(sd_wr_data),
+    .sd_busy(sd_busy), .sd_done(sd_done), .sd_outen(sd_rd_byte_strobe),
+    .owner_hdd(sd_owner_hdd)
+);
+
+ide hdd(
+    .clk        (            clk_25),
+    .rst        (     ppu_vm_init_o),
+
+    .wbm_adr_i  (     ppu_wbm_adr_o),
+    .wbm_dat_i  (     ppu_wbm_dat_o),
+    .wbm_dat_o  ( ppu_wbm_dat_i_ide),
+    .wbm_wre_i  (     ppu_wbm_wre_o),
+    .wbm_sel_i  (     ppu_wbm_sel_o),
+    .wbm_stb_i  (     ppu_wbm_stb_o),
+    .wbm_ack_o  ( ppu_wbm_ack_i_ide),
+
+    .cart_sel   (          cart_sel),
+    .cart_bank  (         cart_bank),
+
+    .hdd_present(      mount_dsk[4]),
+    .geo_spt    (    system_hdd_spt),
+    .geo_heads  (  system_hdd_heads),
+    .geo_inv    ( system_hdd_flags[0]),
+    .geo_mode   (   system_hdd_mode),
+    .geo_cyl    (    system_hdd_cyl),
+    .wprot      (  system_hdd_wprot),
+
+    .sd_rstart  (        hdd_rstart),
+    .sd_wstart  (        hdd_wstart),
+    .sd_sector  (        hdd_sector),
+    .sd_rbusy   (           sd_busy),
+    .sd_rdone   (           sd_done),
+    .sd_other   (         hdd_other),
+    .sd_outen   (         hdd_outen),
+    .sd_outaddr (     sd_byte_index),
+    .sd_inbyte  (        sd_rd_data),
+    .sd_outbyte (       hdd_wr_data),
+    .sd_active  (     hdd_sd_active)
 );
 
 vp1_128fdd vp128(
