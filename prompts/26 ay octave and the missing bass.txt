@@ -1,0 +1,24 @@
+check hdmi audio output flow. it seems some frequencies like bass sound like they are filtered out - try find reasons and fix. replace of AY core to
+  something more naturally sounding is allowed also
+
+****
+
+Found and fixed, and it was not the HDMI path: every AY tone was an octave low.
+
+The cause is one pin. aberrant.v tied the three YM2149 cores' SEL high. In ym2149.sv SEL selects the prescaler: 0 divides the clock enable by 8, which is what a real AY does (tone = fclk / (16 x period)), and 1 divides by 16, meant for a core fed at twice the chip clock - which is how the MiSTer ZX Spectrum drives it, a 3.5 MHz enable for a 1.7734 MHz chip. Here the enable is the chip clock itself, 1.7734 MHz, so every tone counter and the envelope generator ran at half rate.
+
+Measured in a standalone simulation of the core, then in the unit test: with SEL=1, tone period 252 gives 220 Hz and an envelope of period 1000 gives 3.5 Hz; with SEL=0 they give 440 Hz and 6.9 Hz, which is what the chip does. A PT3 bass line at 65-130 Hz an octave down is 33-65 Hz, which a television's speaker cannot reproduce, while the rest of the tune an octave down still sounds like music. That is the "bass filtered out". Nothing in the HDMI path shapes frequency: the encoder takes the mixer word as it is, the resampler is a sample-and-hold, and the DC blocker is still out. The AY core itself is fine and does not need replacing; the flat tables and mixer are the same ones MiSTer plays with.
+
+It also corrects the earlier record. The "1.77 times too fast, nine semitones sharp" figure from when CE was tied high was computed without this pin; through the divide-by-16 it was actually 12% flat. The phase accumulator was still right, it just was not the last step.
+
+Changed: tang/src/aberrant.v - SEL low on all three instances, with the reasoning in a comment and the stale figure corrected. sim/tb/tb_aberrant.v - now counts the output's edges over one simulated second and fails outside 2% of 880, so a wrong prescaler cannot pass make ab-test again; "it oscillates" was not a pitch check. Docs: platform.md, progress.md (defect 12), and a CLAUDE.md trap.
+
+Verified: make ab-test passes at 440 Hz, make lint clean (the one MULTIDRIVEN warning is the pre-existing one on mount_dsk in top.v), make bitstream builds - logic 44%, registers 25%, BSRAM 48%, 0 setup violations, same as before - and bin/tang.fs is the new one. Not heard on a board. Expected on the board: the whole piece up an octave to where it was written, bass audible, envelope effects at double their previous speed.
+
+Next after this is heard: put the DC blocker back (git show f2bb44b^), which is the step progress.md defect 10 is waiting on. Nothing is committed; say the word.
+
+flash it onto flash
+
+****
+
+Written. make flash-fpga-flash (openFPGALoader -f -r) erased and wrote bin/tang.fs to the Tang's SPI flash to 100% and reported Done. Power-cycle the board now - the tool does not reliably reconfigure the chip, so without the power cycle you are still listening to the old bitstream. If the next flash fails with ftdi_usb_reset failed, replug the USB cable first.
