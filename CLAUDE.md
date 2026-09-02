@@ -286,6 +286,16 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   +9000 under three, and a sink's own AC coupling turns each step into a
   thump.  The layout fix went out alone on purpose, one variable at a
   time; **S2 still does nothing**.
+- **`ym2149.sv`'s `SEL` is a prescaler select, and 1 means "my clock enable
+  is twice the chip clock".**  The divider reloads with `{SEL, 3'b111}`:
+  0 divides by 8, which is the chip; 1 divides by 16.  `aberrant.v` feeds
+  the cores the chip's own 1.7734 MHz and so wants `SEL=0`; it had `SEL=1`
+  until 2 Sep 2026, and every tone was an octave low and every envelope
+  at half speed - heard as "the bass is filtered out", because a bass
+  line an octave down is under a television speaker's floor.  `make
+  ab-test` now counts edges over a simulated second and fails on a wrong
+  pitch; "it oscillates" is not a pitch check.  The old "1.77 times too
+  fast" figure in the history was computed without this pin and is wrong.
 - **Real software never sets the beeper tone bits.**  `R177716[12:8]`
   selects among 8 kHz/1 kHz/500/250/60, and over 234 seconds of a running
   machine the register took four values - `100000`, `100020`, `100200`,

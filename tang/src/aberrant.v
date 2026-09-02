@@ -88,8 +88,9 @@ always @(posedge ppu_vm_clk_p)begin
 // AY clock enable.  An AY-3-8912 wants 1.7734 MHz on CLC, to within 100 Hz,
 // and that is what every PT3 module is written against.  These three run
 // off ppu_vm_clk_p, which is clkram/16 = 3.1339 MHz, and with CE tied high
-// they were free-running at that - 1.767 times too fast, so every note came
-// out about nine semitones sharp and the music that much too quick.
+// they were free-running at that.  (With SEL high as it then was, that was
+// 12% flat rather than the 1.77 times sharp this comment used to claim -
+// see the SEL note below.)
 //
 // A phase accumulator makes the enable instead: 37084/65536 of 3.1339 MHz
 // is 1.773364 MHz, 36 Hz low and inside the chip's own tolerance.  The
@@ -98,6 +99,19 @@ always @(posedge ppu_vm_clk_p)begin
 // This gates the sound generation ONLY.  ym2149.sv writes its registers in
 // a plain always @(posedge CLK) with no CE guard, so bus writes still land
 // on every PPU clock and none can be missed while the enable is low.
+//
+// SEL must be 0 with CE at the chip's own rate.  In ym2149.sv the prescaler
+// reloads with {SEL, 3'b111}: SEL=0 divides CE by 8, SEL=1 by 16.  A real
+// AY divides its clock by 8 before the tone counters (tone = fclk/(16*TP)),
+// so SEL=1 is for a core fed at TWICE the chip clock - which is how the
+// MiSTer ZX Spectrum drives it, 3.5 MHz CE for a 1.7734 MHz chip.  Here
+// CE is 1.7734 MHz, and with SEL=1 it was every tone an octave low and every
+// envelope at half speed (sim/tb/tb_aberrant.v measures it: period 252 came
+// out at 220 Hz instead of 440).  Bass lines an octave down sit at 30-60 Hz,
+// below what a television's speaker reproduces, which is what "the bass is
+// filtered out" was.  The same wrong pin also made the earlier "1.77 times
+// too fast" reading wrong: CE tied high with SEL=1 was 3.1339/16 against
+// 1.7734/8, i.e. 12% flat, not 77% sharp.
 reg [15:0] ay_acc = 16'd0;
 reg        ay_ce  = 1'b0;
 always @(posedge ppu_vm_clk_p)
@@ -125,8 +139,8 @@ YM2149 dd1(
     .CHANNEL_B(         out_b_dd1), // PSG Output channel B
     .CHANNEL_C(         out_c_dd1), // PSG Output channel C
 
-    .SEL      (              1'b1),
-    .MODE     (              1'b1),
+    .SEL      (              1'b0), // CE is the chip clock itself - see above
+    .MODE     (              1'b1), // AY-3-8910 volume table
 
     .ACTIVE   (                  ),
 
@@ -153,8 +167,8 @@ YM2149 dd2(
     .CHANNEL_B(         out_b_dd2), // PSG Output channel B
     .CHANNEL_C(         out_c_dd2), // PSG Output channel C
 
-    .SEL      (              1'b1),
-    .MODE     (              1'b1),
+    .SEL      (              1'b0), // CE is the chip clock itself - see above
+    .MODE     (              1'b1), // AY-3-8910 volume table
 
     .ACTIVE   (                  ),
 
@@ -183,8 +197,8 @@ YM2149 dd3(
     .CHANNEL_B(         out_b_dd3), // PSG Output channel B
     .CHANNEL_C(         out_c_dd3), // PSG Output channel C
 
-    .SEL      (              1'b1),
-    .MODE     (              1'b1),
+    .SEL      (              1'b0), // CE is the chip clock itself - see above
+    .MODE     (              1'b1), // AY-3-8910 volume table
 
     .ACTIVE   (                  ),
 

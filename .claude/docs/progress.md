@@ -595,6 +595,40 @@ expected result is three chips and the beeper at any level, both channels
 at the same level, and no reason left for the unipolar sum - which is why
 the blocker should be the next build, not this one.
 
+### 12. Every AY tone was an octave low - FIXED, NOT HEARD
+
+`aberrant.v` tied the three cores' `SEL` pins high.  In `ym2149.sv` the
+prescaler reloads with `{SEL, 3'b111}`: `SEL=0` divides the clock enable
+by 8, which is what the chip does (tone = fclk / (16 x TP)), and `SEL=1`
+by 16, for a core fed at twice the chip clock - the MiSTer ZX Spectrum
+feeds it a 3.5 MHz enable for a 1.7734 MHz chip.  Here the enable is the
+chip clock itself, 1.7734 MHz, so every tone counter ran at half rate and
+so did the envelope generator.  Measured in `tb_aberrant`: period 252
+gave 220 Hz with `SEL=1` and 440 Hz with `SEL=0`; an envelope of period
+1000 gave 3.5 Hz against the chip's 6.9 Hz.
+
+That is the "bass sounds filtered out" report of 2 Sep 2026.  PT3 bass
+sits at C2-C3, 65-130 Hz; an octave down it is 33-65 Hz, which a
+television's speaker does not reproduce, while the melody an octave down
+still sounds like music.  Nothing in the HDMI path filters anything: the
+encoder takes the mixer word as it is, the resampler is a sample-and-hold
+and the DC blocker is not in the path.  The only frequency-shaping
+element in the whole chain was the AY divider.
+
+The same pin explains the earlier reading in this file that the chips
+free-ran "1.77 times too fast" before the phase accumulator: with `CE`
+tied high at 3.1339 MHz and `SEL=1` the effective clock was 1.567 MHz,
+12% flat, not 77% sharp.  The accumulator was still the right change, it
+just was not the last one.
+
+Fixed 2 Sep 2026: `SEL` low on all three instances.  `tb_aberrant` now
+counts the output edges over a simulated second and fails outside 2% of
+880, so a wrong prescaler cannot get past `make ab-test` again.  Lint
+clean, bitstream builds.  **Not heard on a board.**  Expected: the whole
+piece up an octave to where the composer put it, the bass audible, tempo
+of envelope effects doubled.  Defect 10's blocker is still the next
+change after this one is heard.
+
 ## Open questions
 
 - **Which bitstream is the shipped one?**  `bin/tang.fs` and

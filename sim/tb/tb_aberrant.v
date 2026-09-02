@@ -68,7 +68,8 @@ task check_reg(input [255:0] name, input [7:0] got, input [7:0] want);
 endtask
 
 integer i;
-reg [11:0] lmin, lmax;
+reg [11:0] lmin, lmax, prev;
+integer edges;
 
 initial begin
     repeat (10) @(posedge clk);
@@ -99,6 +100,26 @@ initial begin
         $display("  FAIL: output never moved - the AY is silent");
         errors = errors + 1;
     end else $display("  ok   the AY is oscillating");
+
+    // Pitch.  A period of 252 on a 1.7734 MHz AY is 1773400/(16*252) =
+    // 439.8 Hz.  Count the output's edges over one simulated second: two
+    // per cycle, so 880 expected, and anything outside 2% is a wrong
+    // divider.  This is what the SEL pin got wrong until Sep 2026 - with it
+    // high the core prescales by 16 instead of 8 and every note came out an
+    // octave low, which the "does it move" check above cannot see.
+    ay_set(17'o177360, 8'd0, 8'd252);
+    ay_set(17'o177360, 8'd1, 8'd0);
+    edges = 0; prev = m_ch;
+    for (i = 0; i < 3133900; i = i + 1) begin
+        @(posedge clk);
+        if (m_ch != prev) edges = edges + 1;
+        prev = m_ch;
+    end
+    $display("[tb_aberrant] tone A period 252: %0d edges in 1 s = %0d Hz, want 440", edges, edges / 2);
+    if (edges < 862 || edges > 898) begin
+        $display("  FAIL: pitch is wrong - check CE and SEL in aberrant.v");
+        errors = errors + 1;
+    end else $display("  ok   pitch is right");
 
     // The other two chips must be independently addressable.
     ay_set(17'o177362, 8'd8, 8'd11);

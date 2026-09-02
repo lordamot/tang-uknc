@@ -209,12 +209,20 @@ used to leave `adr[3]` don't-care, which aliased `0177372` onto AY2 and
 **A word write latches an AY register number; a byte write sends data to
 it.**  `aberrant.v` turns that into the chips' BDIR/BC pair, which is why
 `nwtbt` is `&sel`.  The chips are clocked by a phase accumulator at
-1.773355 MHz, the AY-3-8912's specified 1.7734 MHz within 45 Hz; they used
-to free-run at the 3.1339 MHz PPU clock, 1.77 times too fast.
+1.773355 MHz, the AY-3-8912's specified 1.7734 MHz within 45 Hz, **with
+`SEL` low**.  `ym2149.sv`'s `SEL` picks the prescaler - 0 divides the
+enable by 8, as the chip does, 1 by 16 for a core fed at twice the chip
+clock - and it was high until Sep 2026, so every tone was an octave low
+and every envelope ran at half speed: period 252 played 220 Hz, not 440.
+That, not the HDMI path, was the missing bass - a bass line an octave down
+is 30-60 Hz, below a television speaker.  Before the phase accumulator the
+chips free-ran at the 3.1339 MHz PPU clock, which through the same
+divide-by-16 was 12% flat, not the 1.77 times sharp that was written down.
 
 `sim/tb/tb_aberrant.v` (`make ab-test`) drives the wishbone port the way
-`ppu.v`'s core really drives it and checks all three chips take registers
-and produce a tone.  The full-machine testbench cannot: it has no SD card,
+`ppu.v`'s core really drives it and checks all three chips take registers,
+produce a tone, and produce it at the right pitch - 880 edges a second for
+period 252.  The full-machine testbench cannot: it has no SD card,
 so no game or player ever runs and the boot ROM never touches the AYs.
 
 **The mix is mono, at one level, and unipolar on purpose.**  `m_channel` -
