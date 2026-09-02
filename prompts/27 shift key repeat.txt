@@ -1,0 +1,77 @@
+lets try to fix annyoing regression I forgot to mention
+
+Currently pressing PC Keyboard RShift + PC Keyboard ' (button with russian Э on it) prints , (comma) in UKNC but also leads it repeat till another RShift press. This is due complications of UKNC keyboard but such press-flip should be fixed
+
+(sent while the work was running:)
+
+there is headless ukncbtl tooling nearby: ../mc0511-dicewars
+
+./build/moutst.dsk should be fine for rt-11 prompt
+
+****
+
+Fixed in the MCU firmware. It builds and the fix is verified against the real ROM in an emulator; it has not been on the board.
+
+What was wrong, three things stacked:
+
+- The PC ' key was mapped to scan code 05. That is the numeric keypad's comma, not Э (0155, per UKNCBTL's layout). The comma came from the mapping; Shift had nothing to do with the character.
+- The real keyboard is a scanned matrix and the ROM counts rows, not keys. One press is reported per row, one release (0200 | row) when the row is empty, and autorepeat runs until releases balance presses. Shift (0105) and the keypad share row 5. The MCU forwarded every USB event, so Shift+' was two presses in row 5, and hid.v truncates a release to its row, so both releases were 0205.
+- xm2-01.v latches a key byte only when it differs from the last one, so the second 0205 vanished. Two presses, one release: the ROM repeated the comma until another Shift press and release evened the count.
+
+Evidence, replayed against the real ROM at an RT-11 prompt. The headless UKNCBTL in ../mc0511-dicewars got one extra script command in a private scratchpad copy that pokes R177702 the way the FPGA does. Five seconds after each stream:
+
+  0105 005 0205            the board's stream         a line of commas, and on
+  0105 005 0205 0205       with the lost release      one comma, then stop
+  Shift + keypad comma     through the real matrix    nothing typed
+  0105 025 0205            Shift + PC minus           a line of slashes, and on
+  0105 0155 0215 0205      fixed stream, Shift+Э      same as the real matrix
+  0105 0175 0215 0205      fixed stream, Shift+-      =
+
+So Shift with the minus key had the same defect, and the fix had to be general.
+
+The fix, mnano/usb_host.c and mnano/uknc.h:
+
+- kbd_tx_uknc() keeps the matrix: which HID keys it has forwarded and how many are down per row, and sends only a row's first press and last release. A press the OSD ate or a MISS key is not tracked, so its release is dropped instead of announcing a row the core never saw; a release of a forwarded key goes out even under the OSD. Two Shifts held are two keys in row 5. Other cores are untouched.
+- ' is now 0155 (Э). PC minus moved from the keypad minus (025, row 5) to the machine's - = key (0175, row 13), so Shift+- gives = instead of nothing. Right Alt was 0172 (ПОМ) with a comment saying ГРАФ; it is 066 now.
+- The firmware's own function was compiled on the host around a stub to generate the streams above, so the emulator ran the code that ships.
+
+No FPGA change. make fw is clean; the result is in build/fw/bl616.bin and copied over bin/bl616.bin. Flash with make flash-mcu COMX=/dev/ttyACM0, board in boot mode. Nothing committed.
+
+Notes: build/moutst.dsk is not in this repo's build/, so the RT-11 prompt came from mc0511test/toolchain/rt11.dsk with АР2 out of the player it autostarts. Docs updated: mcu.md (a keyboard-rows section and how to test a stream), the CLAUDE.md keyboard trap, progress.md defect 15.
+
+Left open: xm2-01.v has no ready handshake. Two bytes from one USB report (Shift and a letter pressed within the same 8 ms) arrive microseconds apart and the second overwrites the first before the PPU reads it, where the real controller holds the next code back. A one-deep pending register there would close it, but it needs a bitstream, so it is a build of its own.
+
+BL companion board connected
+
+****
+
+Flashed. The board was already in boot mode: make flash-mcu COMX=/dev/ttyACM0 wrote the 431696-byte bin/bl616.bin (the same file as build/fw/bl616.bin), the device's SHA256 matched the host's, and the tool reported all programming completed successfully. Reset the board out of boot mode, then Shift+' should give Э and stop, Shift+- should give =, and nothing should repeat on its own. What is still worth trying on the board: a fast Shift+letter, where the modifier and the key land in one USB report, since the FPGA side still has no ready handshake.
+
+press-locking now fixed, but PC Keyboard backspace button stopped removing symbols and instead prints something. can we refine it back to symbol removal behavior? and fix that xm2-01.v problem (I also added ./build/moutst.dsk file finally - it has RT-11 prompt after load)
+
+****
+
+Both done: the firmware handles rollover now and is built but NOT flashed (the BL616 board dropped off USB while the Tang came on), the xm2-01.v queue is built, passes the timing gate and is flashed to the Tang - power-cycle it before testing.
+
+Backspace, two findings from the emulator with moutst.dsk:
+
+- Its startup does SET TT NOSCOPE, and in that mode RT-11 echoes a rubout as a backslash and the deleted characters instead of erasing them. That is what the emulator shows for Backspace typed through UKNCBTL's own matrix, so the printing itself is RT-11's hardcopy echo, not the keyboard. SET TT SCOPE at the prompt gives the erasing behaviour back.
+- Backspace shares row 10 with A, K, M and 3. The faithful matrix rule from the last fix swallows the next key down in a held row, so a Backspace rolled in from A before A was up never arrived. The filter now sends rollover inside a row as a release of the row and a new press, and forgets the row's older keys. Two Shifts are one code held twice.
+
+Verified at the real ROM's RT-11 prompt with the shipped function generating the bytes: A then Backspace rolled in either order, K rolled into A, both Shifts either order then 1 giving !, Shift+' and Shift+-, keys released under the OSD - all as expected. Shift with a keypad key now types the keypad key instead of nothing.
+
+xm2-01.v: but_data is change-detected every clock into a queue of up to seven bytes, and R177702 is loaded only after the PPU has read the previous byte - the real controller's ready handshake. make kbd-test is a new testbench: bursts 1.5 us apart against a PPU polling every 40 or 400 us, all 14 bytes out in order. Lint clean, 0 setup and 0 hold violations, resources unchanged at 47/26/64 percent. The firmware also keeps its bytes 2 ms apart for an older bitstream.
+
+To do at the board: power-cycle the Tang; put the BL616 in boot mode and run make flash-mcu COMX=/dev/ttyACM0 for the rollover firmware (bin/bl616.bin is the new one). Nothing committed; the pnr outputs are regenerated as usual.
+
+BL companion board connected
+
+****
+
+Flashed: the rollover firmware (bin/bl616.bin, the build/fw one) went onto the BL616, the device's SHA256 matched the host's, all programming completed successfully. Reset it out of boot mode. With the Tang power-cycled onto the new bitstream, the pair to try is A then Backspace typed fast, and SET TT SCOPE at the RT-11 prompt if the deleted characters still echo between backslashes - that part is RT-11.
+
+all works, finalize docs then
+
+****
+
+Docs finalised. progress.md defect 15 now reads FIXED, WORKS ON THE BOARD, with the confirmation dated 2 Sep 2026; the CLAUDE.md resource line names the key queue in its PnR; mcu.md, build.md and the CLAUDE.md keyboard trap were already updated as the work went. Nothing is committed - the change is mnano/usb_host.c, mnano/uknc.h, tang/src/xm2-01.v, sim/tb/tb_kbd.v, the Makefile, both binaries in bin/, the regenerated tang/impl outputs, the four docs and this prompts file. Suggested subject: keyboard matrix rows on the mcu and a key queue in xm2-01.
