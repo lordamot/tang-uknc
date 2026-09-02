@@ -123,6 +123,7 @@ endmodule
 //------------------------------------------------------------------------
 module hdmi_serdes (
     input        clk_pixel,
+    input        ref_locked,
     input  [9:0] tmds_ch0,
     input  [9:0] tmds_ch1,
     input  [9:0] tmds_ch2,

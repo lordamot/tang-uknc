@@ -391,14 +391,44 @@ appearing with an SD card present" after a re-layout was.
   edge and puts it in its own asynchronous group; the report analyses it
   (Fmax 31.6 MHz against the 20 MHz needed).  The delays are bounds, not
   measurements of the BL616.
-- **Still open:** `clk_25` and `clk_3_12` are bits of a counter, not PLL
-  outputs, so their relationship to the PLL is not derivable and the hold
-  count (593 this build, 524 the one before; it moves with placement) is
-  the artefact of that.  `clk27_d` is still routed on fabric.  `xm2-01.v`
-  still clocks the PPU timer from `timer_clk_4`, a mux of counter bits,
-  and the beeper divider from `clk8kHz`; `audio.v` clocks the I2S FIFO
-  read from `isread_aud`.  All three are inside the PPU domain and slow,
-  and none of them is on the boot or floppy path.
+- **The counter-bit clocks - RELATED TO THE PLL, 2 Sep 2026.**  The
+  form the parser accepts: `clkram` declared as a base clock on the PLL
+  pin `pl1/rpll_inst/CLKOUT`, then `clk4`, `clk_25` and `clk_3_12` as
+  `create_generated_clock` with that pin as `-source` and `-master_clock
+  clkram`, targets `pl1/rpll_inst/CLKOUTD`, `ram1/horz_0_s0/Q` and
+  `ram1/horz_3_s0/Q`.  Both earlier forms (PLL pin as source without a
+  named master; the flop's own CLK pin as source) fail with TA2004.  The
+  BUFG output `t3/O` is accepted as a target but its inverted twin
+  `t3n/O` is refused (TA2003), so the Q pin it is.  Result: every TA1117
+  gone, hold count 656 -> 56, setup still 0.  Of the 56, the ones inside
+  `ram1` from `clk_3_12`/`clk_25` to `clkram` are an artefact of the
+  clock sitting on a Q pin that also feeds the SDRAM state machine; the
+  real ones are `clk_25 -> clk_3_12` on slow control words (volume,
+  keyboard, floppy status), 0.2-0.4 ns, harmless on a level.  **What this
+  changes on the board:** every clk4 edge lands on a clk_25 edge, so the
+  CPU's bus into `vp1_120` (the CPU-PPU channel) was a hold race on every
+  capture that the tool never looked at, and a placement decided it.  Now
+  it is analysed and fixed by routing.  Defect 13 has the board evidence.
+
+  **And the phase has to be right.**  `-divide_by` puts every generated
+  clock's rising edge on master edge 1, so the first form had clk_25 and
+  clk_3_12 rising together.  They do not: `horz` counts clkram edges,
+  horz[0] rises on odd ones, horz[3] toggles when horz[2:0] wraps, an
+  even one - so every PPU edge sits on a clk_25 FALLING edge, 20 ns from
+  the nearest rising.  With the wrong model the tool checked clk_25 ->
+  PPU paths for hold as coincident (false violations) and for setup as
+  320 ns (never), and a 20 ns path it never optimised - the floppy's
+  status word into `vp1_128fdd` - came out of the 09:51 placement too
+  slow: start screen fine, floppy load hung with "зависание при приеме
+  А.В.Р.".  `-edges {3 5 7}` for clk_25 and `{17 33 49}` for clk_3_12
+  put the edges where they are; the report then shows the PPU-to-channel
+  paths as the tightest in the design at 6.6 ns of slack, the false hold
+  lines gone, 0 setup violations, 20 hold of which 19 are the `ram1`
+  artefact and one is a video register reset at -0.085 ns.
+- **Still open:** `clk27_d` on fabric; `xm2-01.v` clocks the PPU timer
+  from `timer_clk_4`, a mux of counter bits (the beeper divider was
+  re-clocked on 2 Sep 2026); `audio.v` clocks the I2S FIFO read from
+  `isread_aud`.  Slow, inside the PPU domain, not on the boot path.
 
 Resource use after the change: Logic 44%, Register 25%, BSRAM 48%, 0
 setup violations.  **Not run on a board.**
@@ -666,6 +696,83 @@ piece up an octave to where the composer put it, the bass audible, tempo
 of envelope effects doubled.  Defect 10's blocker is still the next
 change after this one is heard.
 
+### 13. The start screen appears on only some power cycles - THREE CAUSES REMOVED, NOT HEARD
+
+Reported 2 Sep 2026: from a power cycle the machine sometimes does not
+reach its start screen, and needed three power cycles once; when it does
+reach it, floppies load and the AYs play.  Nothing in the design is
+random, so the cause has to be a state that is fixed for a power cycle
+and re-rolled by the next one.  Three were found, all on the FPGA side;
+the MCU's handshake was read and is not one (it polls for 5 s, the
+FPGA's `sysctrl` does not answer while in its 335 ms reset, and the 'R'
+write cannot land on an uninitialised memory).
+
+1. **SDRAM initialised 5.7 us after PLL lock, no refresh cycles.**
+   `sdram2.v`'s reset counter stepped per 16 clkram cycles, not per
+   "clkref" as its MiST-derived comment assumed, so the "1 ms" was 10 us,
+   and the sequence was PRECHARGE, NOPs, LOAD MODE with no AUTO REFRESH.
+   A mode load the chip ignores is a power cycle of bad memory: the PPU
+   draws into SDRAM, so no screen, or garbage.  Fixed: 1.3 ms settle
+   after lock, two refreshes before the mode load.
+2. **The HDMI PLL took a PLL output as reference with no reset.**  Where
+   a PLL acquiring on a reference that is itself acquiring ends up is
+   not guaranteed; Gowin's guide asks for RESET released after the input
+   is stable.  Fixed: reset from `sys_rpll`'s LOCK, and the OSER10s from
+   the serial PLL's.  This case would look like *no signal* at the
+   monitor rather than a blank picture.
+3. **The PPU ran from configuration.**  Its reset was the MCU's 'R' bit,
+   0 from power-on, so it executed its boot ROM before the PLL locked
+   and hit SDRAM before init, with the 1801's bus timeout deciding what
+   happened next - possibly the trap-loop the simulation used to show.
+   The MCU's reset a third of a second later cleaned it up in the cases
+   that worked.  Fixed: `pp_rst` includes `~init`.
+
+4. **`init` read as done from configuration.**  `sdram2.v`'s reset
+   counter had no initial value, so it was 0 - which is `init` - from
+   configuration until the first clkram edge, however long the PLL took
+   to give one.  `count_rst` in `top.v` keys off `init`, and so does the
+   PPU's reset now; the simulation found this because its fastboot
+   shortcut waited for `init` and fired at time zero.  Fixed: the counter
+   initialises to 31.
+
+`sim/tb/tb_top.v`'s fastboot shortcut now waits for `init` before
+forcing the reset counter, since the counter is held at zero until then.
+
+**Board result, 2 Sep 2026, build of 09:22 (items 1-4 above, old
+SDC):** the machine now fails *every* power cycle, SD card in or out:
+black screen with a blinking cursor, key presses beep, no start screen.
+The beeps prove the MCU handshake and its reset landed (the beeper is
+behind the volume control, which is mute until the MCU sets it), so the
+PPU is running a clean second boot on initialised memory and the CPU is
+not being heard.  The previous build (09:02, floppy re-clocking) reached
+the screen.
+
+The simulation was tried as a witness and turned out to be an unreliable
+one.  The tree draws a blue field with a cursor at 1.2 s where the
+previous revision draws the start-test text; a three-way bisect passed
+with the PPU hold reverted alone AND with the SDRAM settle reverted
+alone, and failed with only the counter's initial value reverted - i.e.
+the two together, "the PPU starts at 1.3 ms".  PPU bus traces to 1.1 s
+then showed both builds identical to the instruction until 1.038 s, when
+the PPU begins reading the CPU's bytes off the channel (`177060`) and
+the *SDRAM model* hands it wrong words from its own RAM at `002000` and
+`007414`-`007420`; the failing build halts the CPU on them, the passing
+build got one bad read and survived.  That is the model's documented
+burst-interleaving flaw striking or missing by timing, not a property of
+the design, so the sim's pass/fail on these variants means nothing.
+
+What is left is the board: two builds of the same logic, one works, one
+does not, and the difference is placement.  The one path placement can
+break that fits "PPU waits for the CPU and never hears it" is the CPU's
+bus into `vp1_120`, clk4 into clk_25 with coincident edges, which no
+build until 09:51 had analysed (defect 4).  The 09:51 build related the
+clocks and **reached the start screen every time** - so it was the
+crossing - but hung loading a floppy, because that build's clock phase
+was wrong by one clkram period (defect 4, "the phase has to be right")
+and the floppy status path into the PPU had gone unoptimised.  The
+10:22 build corrects the phase and is flashed; **floppy load not yet
+confirmed**.  The PPU hold (item 3) stays in.
+
 ## Open questions
 
 - **Which bitstream is the shipped one?**  `bin/tang.fs` and
@@ -677,23 +784,25 @@ change after this one is heard.
 - **Is the "Disk prot." menu value an index or a bitmask?**  The menu
   offers six choices onto `system_floppy_wprot[3:0]`; `menu.c` decides and
   the FPGA just takes four bits.  Not traced.
-- **One read-after-write miss at 177 ms.**  `make sim` at 300 ms reports
-  `cpu bank1 read 166575 at 014701, wrote 146175` - bits 13 and 8 - on
-  the unmodified tree as much as after the Sep 2026 re-clocking, so it is
-  not that change; the 900 ms baseline above recorded 0.  Either the
-  PPU wrote that word through the shared window (the shadow is per port
-  and would not know) or the SDRAM model dropped a write.  Not traced.
+- **One read-after-write miss at 177 ms - GONE with defect 13.**  `make
+  sim` at 300 ms reported `cpu bank1 read 166575 at 014701, wrote 146175`
+  on the unmodified tree and after the floppy re-clocking alike; after
+  the PPU was held until `init` (defect 13) the same run reports 0 wrong.
+  Not traced to a mechanism, but the PPU running against an
+  uninitialised SDRAM was the only thing that changed.
 - **Why does the PPU end up in a trap loop in simulation?**  See above.
   Find the first divergence, not the symptom; an SD card model is probably
   the prerequisite for going any further.
 - **Will the fixed subpacket layout play bipolar?**  Defect 11 says it
   should and says why it did not before; the board has not heard it.  If
   it does, put the DC blocker back (defect 10).
-- **Why does the player hang with `Зависание при приеме а.в.п`?**  It is a
-  CPU-PPU channel fault and there are no probes on the channel.  The
-  diagnostic monitor that would have carried them is out of the tree
-  (`.claude/docs/fpga.md`, **Board diagnostics**); bringing it back for
-  this is a `git log --all -- tang/src/dbg` away.
+- **Why did the player hang with `Зависание при приеме а.в.п`?**  Now
+  answered by defect 4: the message came back on 2 Sep 2026 from a build
+  whose clk_25 -> PPU paths were modelled with the wrong phase, and it is
+  the floppy status word into `vp1_128fdd` - a 20 ns path that no build
+  before that day had analysed, so every placement rolled it.  Whether
+  the 10:22 build's placement, which analyses it, has cleared it for good
+  is the board's to say.
 
 ## Repository hygiene
 

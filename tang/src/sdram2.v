@@ -86,7 +86,12 @@ assign init = reset == 0;
 reg  [15:0] SDRAM_DQ = 16'hZZZZ;
 assign SDRAM_DQr = SDRAM_DQ;
 
-reg  [ 4:0] reset;
+// reset starts at 31, not 0: with no initial value `init` (reset == 0)
+// read as done from configuration until the first clkram edge, which is
+// however long the PLL takes to start - and count_rst in top.v and the
+// PPU's reset both key off init.  (Sep 2026)
+reg  [ 4:0] reset  = 5'h1f;
+reg  [15:0] settle = 16'd0;     // clkram cycles since PLL lock, saturating
 reg  [ 3:0] sd_cmd;   // current command sent to sd ram
 reg  [10:0] horz = 0;
 reg  [ 9:0] vert = 0;
@@ -188,14 +193,32 @@ always @(posedge clkram)begin
 // --------------------------- startup/reset ---------------------------
 // ---------------------------------------------------------------------
 
-// wait 1ms (32 clkref cycles) after FPGA config is done before going
-// into normal operation. Initialize the ram in the last 16 reset cycles (cycles 15-0)
+// The comment this block came with said "wait 1ms (32 clkref cycles)
+// after FPGA config is done before going into normal operation", which
+// is MiST's sdram.v, where the reset counter ran on a slow reference
+// clock.  Here it ran on horz[3:0] wrapping, one step per 16 clkram
+// cycles, so the 31 steps were 10 us and the PRECHARGE went out 5.7 us
+// after the PLL reported lock - against the 100 us of stable clock a
+// JEDEC SDRAM wants before its first command, and a PLL's output in the
+// moments after LOCK asserts is not that.  There were no AUTO REFRESH
+// commands before LOAD MODE either; the sequence wants at least two.
+// An initialisation the chip does not take is a whole power cycle of
+// garbage memory, and a power cycle is what fixed it.  (Sep 2026)
+//
+// So: after lock, 65536 clkram cycles (1.3 ms, the intended 1 ms) of
+// NOP with the clock running, then the 31 steps as before with two
+// refreshes between the precharge and the mode load.  Each step is 320
+// ns, past tRP and tRFC by a wide margin.
    if(!lockclk)begin
       reset <= 5'h1f;
+      settle <= 16'd0;
       horz <= 0;
       vert <= 0;
       cpu_dout[15:0] <= 0;
-   end else if((q == STATE_LAST) && (reset != 0))reset <= reset - 5'd1;
+   end else begin
+      if(~&settle) settle <= settle + 1'b1;
+      if((q == STATE_LAST) && (reset != 0) && (&settle)) reset <= reset - 5'd1;
+   end
    
    if(reset != 0) begin
       if(q == 0) begin
@@ -205,6 +228,8 @@ always @(posedge clkram)begin
          SDRAM_DQML <= 1;
          SDRAM_DQMH <= 1;
          if(reset == 13)  sd_cmd <= CMD_PRECHARGE;
+         else if(reset ==  9)  sd_cmd <= CMD_AUTO_REFRESH;
+         else if(reset ==  5)  sd_cmd <= CMD_AUTO_REFRESH;
          else if(reset ==  2)  sd_cmd <= CMD_LOAD_MODE;
          else  sd_cmd <= CMD_NOP;
       end else begin

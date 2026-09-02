@@ -113,16 +113,23 @@ assign timer_clk     = R177710[2:1]==2'b00 ? count_clk[0] :
 //========================================================================================
 reg [11:0]sount_count = 0;
 reg [ 6:0]sound_div = 0;
+// sound_div counts rising edges of clk8kHz.  It used to be clocked BY
+// clk8kHz, a flop output, so the divider was a ripple stage on general
+// routing that the timing tool could only guess at; it now advances on
+// the same 25 MHz clock, in the cycle clk8kHz goes from 0 to 1 - the
+// same count, one clock edge earlier.  (Sep 2026)
 always @(posedge pin_vm_clk25)
    if(sount_count==3124)begin
       sount_count <= 12'd0;
       clk8kHz <= ~clk8kHz;
+      if(!clk8kHz) sound_div <= sound_div + 1'b1;
    end else begin
       sount_count <= sount_count + 1'b1;
-      if(sount_count==1562)clk8kHz <= ~clk8kHz;
+      if(sount_count==1562)begin
+         clk8kHz <= ~clk8kHz;
+         if(!clk8kHz) sound_div <= sound_div + 1'b1;
+      end
    end
-
-always @(posedge clk8kHz)sound_div <= sound_div + 1'b1;
 
 assign clk1kHz  = sound_div[4];  // 8000/8   = 1000 Hz
 assign clk500Hz = sound_div[5];  // 8000/16  = 500  Hz

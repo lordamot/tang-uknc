@@ -38,15 +38,11 @@
 // pl1/rpll_inst/CLKOUT.  That it is derived rather than declared is the
 // whole reason the OSER10s can be trusted - the two clocks are related.
 //
-// So setup is clean with real margin everywhere.  The 583 hold violations
-// are NOT a separate discovery - they are the direct cost of the
-// compromise described further down, where clk_25 and clk_3_12 have to be
-// declared as independent clocks because this parser will not accept them
-// as generated ones.  The tool then cannot relate their edges (TA1117,
-// repeatedly) and analyses the crossings between them at the worst case.
-// Before drawing any conclusion from that number, make the generated-clock
-// form resolve; a hold violation between two clocks that are actually the
-// same counter is not a hold violation.
+// The 583 hold violations of that date were the cost of clk_25 and
+// clk_3_12 being declared as independent clocks, which this parser forced
+// until the form that it does accept was found on 2 Sep 2026 - see the
+// counter-bit section below.  With the four clocks related the count is
+// 56, and what is left is real or a known artefact, both described there.
 //
 // Do not make the report green by adding false paths until each one has
 // been shown to be a genuine non-path.  A quiet report bought that way is
@@ -106,21 +102,60 @@ create_clock -name clk27 -period 37.037 -waveform {0 18.518} [get_ports {clk27}]
 //------------------------------------------------------------------------
 // One line each - this parser does not take a backslash continuation.
 //
-// These are create_clock, not create_generated_clock, and that is a
-// compromise worth understanding.  create_generated_clock is the right
-// description - they really are divides of the PLL output - but this
-// version's parser will not resolve the source: with -source
-// [get_pins {pl1/rpll_inst/CLKOUT}] it answers `TA2004 : Cannot get clock
-// with name ''` and drops the constraint.  Declared as independent clocks
-// at their true periods the analysis inside each domain is right, which is
-// the bulk of it; what is lost is the phase relationship between them and
-// the PLL, so paths crossing between the two are analysed without knowing
-// the edges line up.  Restoring that is worth doing if the source can be
-// made to resolve.
+// Until 2 Sep 2026 these were create_clock, declared independent, because
+// no create_generated_clock form would parse; the crossings between the
+// processors and the clk_25 peripherals were then not analysed at all.
+// The form that parses, and the phase that is right, are below.
 //
 // clkram is 27 MHz * 13 / 7 = 50.143 MHz, so /2 and /16 give:
-create_clock -name clk_25   -period 39.886  [get_nets {clk_25}]
-create_clock -name clk_3_12 -period 319.086 [get_nets {clk_3_12}]
+// Sep 2026: declared as what they are.  Two forms fail with TA2004
+// "Cannot get clock with name ''": -source on the PLL's CLKOUT pin, and
+// -source on the counter flop's own CLK pin.  What the parser wants is a
+// NAMED clock at the source, so clkram is declared here on the PLL pin
+// (this replaces the tool's own derived clock on that pin; clkoutp's
+// phase, which the header above worried about, only reaches the SDRAM
+// pad and nothing inside the chip is timed against it), and every
+// division of it - clk4 in the PLL, clk_25 and clk_3_12 in the counter -
+// is a generated clock with clkram as -master_clock.  The tool then
+// relates all four and analyses, and fixes hold on, every crossing
+// between the processors and the peripherals on clk_25, which every clk4
+// edge hits on a clk_25 edge.  Before this those paths were not analysed
+// at all (TA1117), and a placement decided whether the CPU's channel to
+// the PPU worked.
+create_clock -name clkram -period 19.943 -waveform {0 9.972} [get_pins {pl1/rpll_inst/CLKOUT}]
+create_generated_clock -name clk4     -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -divide_by 12 [get_pins {pl1/rpll_inst/CLKOUTD}]
+// PHASE.  horz counts clkram edges from lock, so with k the edge number:
+// horz[0] rises on odd k; horz[3] toggles when horz[2:0] wraps 7 -> 0,
+// which is an EVEN k - the same edge on which horz[0] falls.  So every
+// edge of clk_3_12, rising or falling, sits on a FALLING edge of clk_25,
+// 20 ns from the nearest rising one.  `-divide_by` alone puts every
+// generated clock's rising edge on master edge 1, i.e. clk_25 and
+// clk_3_12 rising together, which is wrong by one clkram period - and
+// with that model every clk_25 -> PPU path was checked for hold as if
+// coincident (false violations on fdd -> vp128, volume -> mixer,
+// keyboard -> R177702) and for setup as if it had 320 ns, when it has 20.
+// The floppy's status word into vp1_128fdd is exactly such a path, and
+// the build that carried the wrong phase loaded no floppy ("зависание
+// при приеме А.В.Р.").  Master edges are numbered from 1, rising odd,
+// falling even, so clk_25 rising at k=1,3,.. is edges 3,7,..:
+create_generated_clock -name clk_25   -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {3 5 7} [get_pins {ram1/horz_0_s0/Q}]
+// clk_25 and clk_3_12 are defined on the counter flops' Q pins.  That has
+// a cost: horz[3:0] is also the SDRAM state machine's phase (`q`), and a
+// clock defined on a Q pin makes every path from it look clock-launched,
+// so the report carries a handful of false hold violations on the
+// counter's own increment and on sdram2's use of q - all of them
+// clk_3_12/clk_25 -> clkram inside ram1, all of them really clkram ->
+// clkram.  Defining clk_3_12 on the BUFG output t3/O instead was tried
+// (Sep 2026) and the parser took it, but the inverted twin on t3n/O was
+// refused (TA2003), and a clock on t3/O alone would leave the PPU's
+// negedge flops unconstrained - the inverter feeds off the raw net, not
+// off t3/O.  So the Q pin it is: from there the network reaches both
+// BUFGs and the inverter.  Read the ram1-internal hold lines as the
+// artefact they are; anything between two different modules is real.
+// clk_3_12 rising at k=8 (edge 17), falling at k=16 (edge 33): its edges
+// on even k, as above.  Polarity matters here because vp1_128fdd and
+// aberrant run on the inverted BUFG, and the tool follows the inverter.
+create_generated_clock -name clk_3_12 -source [get_pins {pl1/rpll_inst/CLKOUT}] -master_clock clkram -edges {17 33 49} [get_pins {ram1/horz_3_s0/Q}]
 
 //------------------------------------------------------------------------
 // Flops clocked by data, which is not a thing a timing tool can analyse.
@@ -178,7 +213,7 @@ set_output_delay -clock spi_clk -clock_fall -min -1 [get_ports {m0s[0]}]
 // after seeing that flag, by which time it has been stable for three SPI
 // bit times.  Every path between the groups goes through that flag, so
 // declaring the groups asynchronous hides nothing that was analysable.
-set_clock_groups -asynchronous -group [get_clocks {spi_clk}] -group [get_clocks {clk27 clk_25 clk_3_12}]
+set_clock_groups -asynchronous -group [get_clocks {spi_clk}] -group [get_clocks {clk27 clkram clk4 clk_25 clk_3_12}]
 
 //------------------------------------------------------------------------
 // Left deliberately undone, in the order worth doing:

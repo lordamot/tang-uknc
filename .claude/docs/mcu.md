@@ -61,6 +61,19 @@ Having identified the core, `main.c` immediately sends `sys_set_val(spi,
 before anything runs, and lights the RGB LED blue (red if the FPGA never
 answered).
 
+The FPGA side of that ordering, as of Sep 2026: `sysctrl.v` is held in
+reset by `sys_rst_n` from configuration until 335 ms after `sdram2.v`
+reports its initialisation done, and while in reset it neither advances
+its state machine nor answers, so the MCU's polling simply fails until
+then and the 'R' that follows always lands on an initialised memory.
+The PPU itself is held by `~init` as well as by 'R', so nothing executes
+before the SDRAM is ready whatever the MCU does.  After the handshake the
+FPGA's coldboot flag is still set and its interrupt line is low; the
+first time the MCU services that interrupt it sees bit 0 and resets
+itself through the watchdog (`sys_handle_event`), which is upstream's
+way of re-running its own initialisation against a freshly configured
+FPGA - so one MCU restart per power-up is normal, not a fault.
+
 ### Setting values
 
 SYS command 4 takes a one-character id and a byte.  Both halves have to

@@ -84,9 +84,12 @@ Two things to know before touching any of this:
   (524 as of Sep 2026) is an artefact of `clk_25` and `clk_3_12` having to
   be declared as independent clocks - see `progress.md`.
 
-`test003.log` also carries a handful of `TA1117` warnings - the tool cannot
-relate the PLL output to `clk_25` and `clk_3_12`, because those are
-counter bits, nor `spi_clk` to anything, because it is the BL616's.
+As of 2 Sep 2026 `test003.log` carries no `TA1117` at all: `clkram` is
+declared on the PLL pin and `clk4`, `clk_25`, `clk_3_12` are generated
+clocks off it with their true phase - the PPU clock's edges sit on
+clk_25's falling edges - so the tool relates the PLL and the counter
+bits; `spi_clk` is in its own asynchronous group.  `test003.sdc` has the
+form, the two forms that do not parse, and why the phase matters.
 
 **Flops clocked by data signals** - `curs_set` in `sdram2.v`, `step`,
 `clk_dsk`, `clk_dsk_n` and `sd_rd` in `fdd4.v`, `sd_img_mounted[n]` in
@@ -99,6 +102,44 @@ edge of the flop it clocked.  `make fdd-test` runs the old floppy module
 beside the new one.  What is still clocked by data: `timer_clk_4` and
 `clk8kHz` in `xm2-01.v`, and `isread_aud` in `audio.v` - all inside the
 PPU domain and slow, declared at 1 us in the SDC.
+
+### What happens at power-up, and what used to
+
+Three things about the start-up chain were changed in Sep 2026 after the
+operator reported the machine reaching its start screen on only some
+power cycles, and everything working once it had:
+
+- **SDRAM initialisation waited 5.7 us after PLL lock, not 1 ms.**  The
+  comment in `sdram2.v` said "wait 1ms (32 clkref cycles)" - MiST's
+  `sdram.v`, whose reset counter ran on a slow reference clock.  Here it
+  stepped once per `horz[3:0]` wrap, 16 clkram cycles, so the whole 31
+  steps were 10 us and the PRECHARGE came 5.7 us after LOCK; a JEDEC part
+  wants 100 us of stable clock first, and a PLL's output right after LOCK
+  is not that.  Nor were there any AUTO REFRESH commands before LOAD
+  MODE.  Now a 16-bit settle counter holds the sequence for 65536 cycles
+  (1.3 ms) after lock and two refreshes go out between precharge and mode
+  load.  `init` therefore rises about 1.3 ms after lock rather than 10 us,
+  and everything downstream - `count_rst`, the 335 ms `sys_rst`, the MCU
+  handshake - shifts by that much.
+- **`init` was true from configuration until the first clock.**  The
+  reset counter it derives from had no initial value, so it read 0 -
+  done - until `!lockclk` loaded it.  It now initialises to 31.
+- **The HDMI PLL had no reset and a PLL for a reference.**  `hdmi_serdes`
+  multiplies the pixel clock, which is `sys_rpll`'s output, by five.  Its
+  RESET was tied low, so it was acquiring while its own reference was
+  still swinging into lock, and where it settled was a property of the
+  power cycle.  It is now held in reset until `sys_rpll` reports LOCK,
+  and the four OSER10s are held until it reports its own.  The stub in
+  `sim/stubs/gowin_ip_sim.v` grew the same port.
+- **The PPU ran from configuration.**  Its reset was the MCU's 'R' bit
+  alone, which is 0 until the MCU writes it, so the PPU executed its
+  boot ROM (BSRAM) from the first clock and hit its first SDRAM access
+  before the SDRAM existed.  `pp_rst` now includes `~init`.
+
+None of the three was observed to be *the* cause - there is no
+instrument on the board - but each is a per-power-cycle state that a
+power cycle would re-roll, which is the shape of the report, and each
+fix is the textbook ordering.
 
 ## Bus fabric
 
@@ -172,7 +213,11 @@ sections 5.4 and 5.2.3.4, derived from Sameer Puri's
 Verilog-2001.  The rest is ours, because upstream's top level generates
 its own video timing and this design already has `sdram2.v` doing that.
 
-Four things worth knowing before touching it:
+Five things worth knowing before touching it:
+
+- **The serial PLL is reset from the pixel PLL's lock, and the OSER10s
+  from the serial PLL's.**  Since Sep 2026; before that both were tied to
+  0 and the PLL cascade started however it started.
 
 - **It takes its timing from `de`/`hs`/`vs` and knows no mode.**  A data
   island has to be announced 8 clocks ahead and a video period 10, which

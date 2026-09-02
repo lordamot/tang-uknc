@@ -23,6 +23,7 @@
 //========================================================================
 module hdmi_serdes (
     input        clk_pixel   ,
+    input        ref_locked  ,   // the PLL that makes clk_pixel has locked
     input  [9:0] tmds_ch0    ,
     input  [9:0] tmds_ch1    ,
     input  [9:0] tmds_ch2    ,
@@ -38,13 +39,19 @@ wire pll_lock;
 // 50.143 MHz x 5 = 250.714 MHz.  VCO = 250.714 x 4 = 1002.9 MHz, inside
 // the GW2A range; the phase detector sees the full 50.143 MHz.  Parameters
 // go in by defparam, which is how Gowin's own generated wrappers do it.
+// This PLL is fed by another PLL's output, and until Sep 2026 it had no
+// reset: it was acquiring while its reference was still swinging into
+// lock, and where that left it was a property of the power cycle.  Gowin's
+// PLL guide wants RESET released after the input clock is stable, so it
+// is held until sys_rpll says it has locked, and the serialisers are held
+// until this one has.
 rPLL pll_hdmi (
     .CLKOUT  (clk_serial),
     .LOCK    (pll_lock  ),
     .CLKOUTP (          ),
     .CLKOUTD (          ),
     .CLKOUTD3(          ),
-    .RESET   (1'b0      ),
+    .RESET   (~ref_locked),
     .RESET_P (1'b0      ),
     .CLKIN   (clk_pixel ),
     .CLKFB   (1'b0      ),
@@ -84,23 +91,24 @@ defparam pll_hdmi.CLKOUTD3_SRC     = "CLKOUT";
 wire [9:0] tmds_ck = 10'b1111100000;
 
 wire [3:0] ser_q;
+wire       ser_rst = ~pll_lock;
 
-OSER10 ser0 (.Q(ser_q[0]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(1'b0),
+OSER10 ser0 (.Q(ser_q[0]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(ser_rst),
     .D0(tmds_ch0[0]), .D1(tmds_ch0[1]), .D2(tmds_ch0[2]), .D3(tmds_ch0[3]),
     .D4(tmds_ch0[4]), .D5(tmds_ch0[5]), .D6(tmds_ch0[6]), .D7(tmds_ch0[7]),
     .D8(tmds_ch0[8]), .D9(tmds_ch0[9]));
 
-OSER10 ser1 (.Q(ser_q[1]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(1'b0),
+OSER10 ser1 (.Q(ser_q[1]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(ser_rst),
     .D0(tmds_ch1[0]), .D1(tmds_ch1[1]), .D2(tmds_ch1[2]), .D3(tmds_ch1[3]),
     .D4(tmds_ch1[4]), .D5(tmds_ch1[5]), .D6(tmds_ch1[6]), .D7(tmds_ch1[7]),
     .D8(tmds_ch1[8]), .D9(tmds_ch1[9]));
 
-OSER10 ser2 (.Q(ser_q[2]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(1'b0),
+OSER10 ser2 (.Q(ser_q[2]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(ser_rst),
     .D0(tmds_ch2[0]), .D1(tmds_ch2[1]), .D2(tmds_ch2[2]), .D3(tmds_ch2[3]),
     .D4(tmds_ch2[4]), .D5(tmds_ch2[5]), .D6(tmds_ch2[6]), .D7(tmds_ch2[7]),
     .D8(tmds_ch2[8]), .D9(tmds_ch2[9]));
 
-OSER10 serc (.Q(ser_q[3]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(1'b0),
+OSER10 serc (.Q(ser_q[3]), .FCLK(clk_serial), .PCLK(clk_pixel), .RESET(ser_rst),
     .D0(tmds_ck[0]), .D1(tmds_ck[1]), .D2(tmds_ck[2]), .D3(tmds_ck[3]),
     .D4(tmds_ck[4]), .D5(tmds_ck[5]), .D6(tmds_ck[6]), .D7(tmds_ck[7]),
     .D8(tmds_ck[8]), .D9(tmds_ck[9]));

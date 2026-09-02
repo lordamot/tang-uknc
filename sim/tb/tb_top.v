@@ -212,8 +212,13 @@ module tb_top;
         end
 
         // Skip the 340 ms power-on reset counter unless told not to.
+        // The counter is held at zero until sdram2 reports init, which
+        // since Sep 2026 is 1.3 ms after PLL lock, so wait for that first
+        // or the force is undone by the counter's own reset.
         if (fastboot) begin
-            #200000;                                 // 200 us, PLL settles
+            wait (!uut.init);      // in case the counter starts at 0
+            wait (uut.init);
+            #20000;
             force uut.count_rst = 24'h7FFFF0;
             #20000;
             release uut.count_rst;

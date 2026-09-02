@@ -70,3 +70,54 @@ flash it onto flash
 ****
 
 Written - twice, by my mistake: the command ran a second time in the same call, and both erase-and-write passes reported 100% and Done, the second without a replug. The SPI flash holds the re-clocked build. Power-cycle the board; the flash tool does not reliably reconfigure the chip. What to watch for over the next few power-ups with the SD card in: the start screen every time, the floppies mounting and loading as before, and the AY still an octave up from where it was.
+
+fix in place it seems. try understand why uknc does not reach main screen always when starting from power cycle. if it reaches (with last firmware updates I had to re-power it 3 times in fact) it - then everything works ok - floppies load, AYs plays
+
+****
+
+Nothing in the design is random, so a failure that a power cycle re-rolls has to be a state fixed for the whole power cycle. I read the start-up chain end to end - PLL, SDRAM initialisation, the reset counter, the PPU's reset, the HDMI serialiser, the MCU's handshake - and found four such states, all on the FPGA side. The MCU is not one: it polls for five seconds, sysctrl does not answer during its 335 ms reset, and its one self-reset on the coldboot flag is upstream's design.
+
+1. The SDRAM was initialised 5.7 us after PLL lock, with no refresh cycles. sdram2.v's comment says "wait 1ms (32 clkref cycles)" - MiST's sdram.v, where the counter ran on a slow reference. Here it stepped once per 16 clkram cycles, so the 31 steps were 10 us and the PRECHARGE went out 5.7 us after LOCK; a JEDEC part wants 100 us of stable clock first, and the sequence had no AUTO REFRESH before LOAD MODE. A mode load the chip ignores is a whole power cycle of bad memory, and the screen lives in that memory. Now: 65536 cycles (1.3 ms) of settle after lock, two refreshes between precharge and mode load.
+2. The HDMI PLL took another PLL's output as its reference and had no reset, so where it settled was a property of the power cycle. It is now reset until the pixel PLL reports LOCK, and the four OSER10s until the serial PLL reports its own. This case would show as no signal at the monitor.
+3. The PPU ran from configuration. Its reset was the MCU's 'R' bit alone, 0 from power-on, so it executed its boot ROM before the memory existed and hit SDRAM with the 1801's bus timeout deciding what happened; the MCU's reset a third of a second later cleaned it up when it did. pp_rst now includes ~init.
+4. init read as done from configuration until the first clock, because the reset counter had no initial value. The simulation found this - its shortcut waited for init and fired at time zero. The counter now initialises to 31.
+
+Verified: lint clean; make sim boots - PPU first bus cycle at 1.31 ms, after init; handshake at 1.45 ms; CPU released; 15 frames - and the read-after-write miss that was in every earlier run is gone, 0 wrong, which is consistent with the PPU's pre-init access having been its cause. make bitstream: 0 setup violations, same resources, bin/tang.fs at 09:22. Not run on a board; not flashed - say so and I will, then power-cycle a handful of times.
+
+Which of the four it was I cannot tell from here. If it still fails, three observations would: whether the monitor says no signal (cause 2) or shows black/garbage (1 or 3); whether the OSD comes up; and the LEDs - leds[3:2] are the CPU's DCLO/ACLO, which the PPU's boot ROM releases, so if they never change the PPU did not boot.
+
+Docs: progress.md defect 13, fpga.md (a power-up section and a fifth HDMI note), mcu.md handshake, a CLAUDE.md trap. Nothing committed.
+
+flash it onto flash
+
+****
+
+Written - and again twice, the same mistake as last time: the command line invoked the flasher a second time to count its output. Both erase-and-write passes reached 100% and Done, so the flash holds the boot-order build. Power-cycle the board, and then a handful more times, since one good boot proves nothing about an intermittent fault. If a power-up still fails: does the monitor say no signal, or show black or garbage; does the OSD open; do LEDs 2 and 3 change.
+
+well. main screen does not appear even if sd card out now - stable. monitor shows black screen and cursor blinking. PPU seem to be working as I can hear beeps from key presses, but no main screen which should be drawn by CPU start
+
+****
+
+A deterministic failure is worth more than the intermittent one. Two things it tells straight away: the beeps go through the volume control, which is mute until the MCU sets it, so the MCU handshake and its reset of the PPU happened, and the PPU is running a clean second boot on initialised memory - and still the CPU is not heard, which is the channel.
+
+I tried the simulation as a witness first. It reproduced a difference - the previous revision draws the start-test text at 1.2 s, the current tree draws a blue field with a cursor - so I bisected it three ways in parallel. Reverting the PPU hold alone passed, reverting the SDRAM settle alone passed, reverting the counter's initial value alone failed: the two together, "the PPU starts at 1.3 ms instead of 10 us", was the trigger. Then PPU bus traces to 1.1 s showed why, and it is not the design: both builds are identical to the instruction until 1.038 s, when the PPU starts reading the CPU's bytes off the channel and the testbench's SDRAM model hands it wrong words from its own RAM; the failing timing got five bad reads and halted the CPU, the passing timing got one and survived. That is the model's documented burst-interleaving flaw, so the sim's verdict on the boot changes is noise. I wrote that down as a trap so nobody trusts a simulated start screen for this again.
+
+What is left is the board: two builds of the same logic, one reaches the screen, one does not, and the only difference is placement. The one path that placement can break which fits "the PPU waits for the CPU and never hears it" is the CPU's bus into vp1_120, the channel module, which runs on the 25 MHz counter bit while the CPU runs on the PLL's 4.18 MHz. Every edge of the one lands on an edge of the other, so every capture there is a hold race, and until today the tool had never looked at it - it could not relate the counter-bit clocks to the PLL, which is defect 4's remaining item. I found the form its parser takes: clkram declared as a base clock on the PLL pin, and clk4, clk_25, clk_3_12 as generated clocks with that pin as source and clkram as master. Two other forms fail with TA2004, and defining on the BUFG output loses the inverted twin. With that the log has no unrelated-clock warning left, the hold count went from 656 to 56, setup is still 0, and what remains is either an artefact inside the SDRAM controller (a clock on a flop output that also feeds logic) or sub-nanosecond on slow control words. The beeper divider was re-clocked as well to clear its own warning.
+
+That build is in the flash now - one variable against the failing one, the constraints. Power-cycle and look. If the screen comes, it was the crossing, and it stays fixed by analysis rather than by luck. If not, the next build reverts the PPU hold alone and keeps everything else.
+
+Docs: progress.md defects 4 and 13 carry the whole account, the SDC its new form, CLAUDE.md two traps. Nothing committed.
+
+fix works in terms that main screen now works, but fdd load now fails with "зависание при приеме А.В.Р.". it is related to layout and delays and we met this error before when were adding various S2 button probes. Also, opus was able to find something related to it in code comments - something about churns and timings 1 micro sec blabla. find it so refine fix we have atm
+
+****
+
+The comment is in top.v, beside where the diagnostic tone used to be: "the SD and floppy paths are clocked by data signals that test003.sdc constrains at a made-up 1 us, so they are not honestly analysed and placement churn can break them silently." That described fdd4's data-clocked flops, which this morning's re-clocking removed. What it did not cover, and what broke the floppy in the build that fixed the screen, is the phase of the clocks I related this morning.
+
+horz counts clkram edges from lock. horz[0] rises on odd edges; horz[3] toggles when horz[2:0] wraps 7 to 0, an even edge - the same edge on which horz[0] falls. So every edge of the PPU clock, rising or falling, sits on a falling edge of clk_25, 20 ns from the nearest rising one. -divide_by alone puts every generated clock's rising edge on master edge 1, i.e. clk_25 and the PPU clock rising together, which is wrong by one clkram period. With that model the tool checked every clk_25-to-PPU path for hold as if coincident - the false violations on fdd -> vp128, volume -> mixer, keyboard -> R177702 in the 09:51 report - and for setup as if it had 320 ns, when it has 20. The floppy's status word from fdd4 into vp1_128fdd is exactly such a path, and the 09:51 placement, which had never been asked to make it fit 20 ns, did not. That is the hang.
+
+Fixed with -edges {3 5 7} on clk_25 and {17 33 49} on clk_3_12, which put the edges where the counter puts them. The report now shows clk_25 rising at 19.9 ns and the PPU clock at 159.5, the PPU-to-channel paths as the tightest in the design at 6.6 ns of slack, 0 setup violations, the false hold lines gone, and 20 hold lines of which 19 are the known artefact inside the SDRAM controller and one is a video register reset at 85 ps. The stale comment in top.v and the constraint file's own history are rewritten to match.
+
+The 10:22 build is in the flash - one variable, the phase. Power-cycle, then load a floppy. If it still hangs, the next step is a synchroniser stage on that status word inside vp1_128fdd, which takes the 20 ns window out of the design rather than out of the placement.
+
+Docs: progress.md defect 4 and 13, the open question about this very message now points at the answer, CLAUDE.md's constraints trap carries the phase. Nothing committed.

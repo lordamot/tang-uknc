@@ -89,13 +89,26 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
 - **The timing constraints are new.**  `tang/src/test003.sdc`, Aug 2026;
   before it the PnR report said `<Timing Constraints File>: ---` and every
   timing number in `tang/impl/pnr/` was against a tool default.  It now
-  reports **0 setup violations** and 559 hold ones, and those 559 are an
-  artefact: `clk_25` and `clk_3_12` have to be declared as independent
-  clocks because this parser will not accept `create_generated_clock` with
-  a PLL-pin source, so the tool cannot relate two clocks that are actually
-  the same counter.  Fix the source resolution before reading anything
-  into the hold number, and do not quiet either number with false paths
-  without checking each crossing.
+  reports **0 setup violations**.  Since 2 Sep 2026 the counter-bit
+  clocks ARE related to the PLL: `clkram` is a base clock on
+  `pl1/rpll_inst/CLKOUT` and `clk4`/`clk_25`/`clk_3_12` are generated
+  clocks with that pin as `-source` and `-master_clock clkram` - the only
+  form this parser takes (the PLL pin without a named master, and the
+  flop's CLK pin, both give TA2004).  Hold went 656 -> 56 with that, and
+  the CPU-to-channel crossing (every clk4 edge on a clk_25 edge) is
+  analysed for the first time; a build without these lines is a build
+  whose CPU-PPU channel works by placement luck, which is what the 09:22
+  build of that day was.  The remaining hold lines inside `ram1` are an
+  artefact of a clock on a Q pin that also feeds logic.  **The phase
+  matters as much as the relation**: `-divide_by` alone puts every
+  generated clock's rise on master edge 1, but `horz[0]` rises on odd
+  clkram edges and `horz[3]` toggles on even ones, so every PPU edge is
+  on a clk_25 FALLING edge, 20 ns from the rising - `-edges {3 5 7}` and
+  `{17 33 49}`.  The build with the wrong phase reached the start screen
+  and hung loading a floppy ("зависание при приеме А.В.Р."): the floppy
+  status word into `vp1_128fdd` is a 20 ns path the tool thought had
+  320.  Do not quiet any number with false paths without checking each
+  crossing.
 - **Gowin's own libraries fight a current Linux.**  `tools/fetch.sh` moves
   the stale duplicates it ships - an old libstdc++, an old freetype, a
   2019 Qt5Core sitting next to a 2025 Qt in the same install - into
@@ -245,6 +258,18 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
 - **The working tree is always dirty with `mode change 100755 => 100644`.**
   That is a checkout artefact across the vendored u8g2 tree, not work.  Use
   `git diff --summary` to see whether anything real is in there.
+- **Nothing may run before `init`, and the SDRAM does not exist until
+  1.3 ms after PLL lock.**  `sdram2.v`'s reset counter steps per 16
+  clkram cycles, not per the slow "clkref" its MiST-derived comment
+  assumed, so its "1 ms" was 10 us and the first SDRAM command went out
+  5.7 us after LOCK, with no refresh before the mode load; a settle
+  counter now holds it 65536 cycles and two AUTO REFRESHes go out.  The
+  PPU's reset was the MCU's 'R' bit alone, 0 from configuration, so it
+  ran before the memory was ready - `pp_rst` now includes `~init`.  The
+  HDMI PLL is cascaded off the pixel PLL and is reset from its LOCK.
+  All three were per-power-cycle states behind "reaches the start screen
+  only sometimes" (Sep 2026, progress.md defect 13).  A tb that skips
+  the power-on counter has to wait for `init` first.
 - **`sys_rst_n` is active HIGH, and the buttons read 0 released.**  The
   name is a lie: it is high for the first 335 ms and low after, and every
   module here takes it as `if (reset)`.  Wire it to something wanting an
@@ -316,6 +341,16 @@ questions).  Follow `.claude/rules/guideline.md` and `.claude/rules/git.md`.
   `100220` - and none of them touched `[12:8]`.  The music is bit 7
   toggled in a timing loop, 177-473 writes per 100 ms.  The divider chain
   in `xm2-01.v` is dead code for anything that actually runs.
+- **The SDRAM model still lies under two-port load, and it can flip a
+  boot.**  Its burst pipeline mixes CPU and PPU reads when they interleave
+  (progress.md, "What the simulation shows"), and whether a given build's
+  PPU gets a bad word at the moment it reads the channel is a matter of
+  timing luck: on 2 Sep 2026 the same logic drew the start screen or
+  halted the CPU depending on whether the PPU started at 10 us or 1.3
+  ms.  A start-screen pass/fail in simulation is therefore not evidence
+  about a boot change until that model is fixed; the PPU I/O trace
+  (`+PPUTRACE`) and the `[mem]` lines say whether the model was the
+  cause, and they did.
 - **A simulation model that lies is worse than no simulation.**  The
   SDRAM model drove its read data one clock late, so every read came back
   as zero, the PPU found its trap vectors zero and sat in a trap loop -

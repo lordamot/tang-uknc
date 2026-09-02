@@ -275,6 +275,7 @@ hdmi_tx hdmi1(
 
 hdmi_serdes hdmi_ser(
     .clk_pixel    (       clkpix),
+    .ref_locked   (       locked),
     .tmds_ch0     (     tmds_ch0),
     .tmds_ch1     (     tmds_ch1),
     .tmds_ch2     (     tmds_ch2),
@@ -591,7 +592,16 @@ wire       cpu_wbm_ack_i_vp;
 wire [15:0]cpu_wbi_dat_i_vp;
 wire       cpu_wbi_ack_i_vp;
 //------------------------------------------------------------//
-wire pp_rst = system_reset[0];//~sys_rst;
+// The PPU is reset by the MCU's 'R' bit, which is 0 from configuration,
+// so until Sep 2026 the PPU ran from the moment the FPGA configured -
+// before the PLL had locked and the SDRAM had been initialised.  Its
+// boot ROM is BSRAM, so it got as far as its first SDRAM access and sat
+// there unacknowledged until init; whether that read as a stall or as a
+// bus timeout into a trap vector that is ALSO in SDRAM depended on the
+// 1801's timeout against the init time, and the MCU's reset a third of a
+// second later was what cleaned it up.  Holding it until the memory is
+// initialised costs nothing and takes that ordering out of the boot.
+wire pp_rst = system_reset[0] | ~init;
 ppu_wb ppu1(
    .clk_ppu_p    (     ppuclk_p),
    .clk_ppu_n    (     ppuclk_n),
@@ -991,10 +1001,14 @@ assign uart_tx = vp65_uart_tx;
 // InfoFrame cadence - and it is gone again because the start screen
 // stopped appearing with an SD card present in the build that carried it.
 // Nothing in it touches the card; what it does is add logic and move the
-// placement, and the SD and floppy paths are clocked by data signals that
-// test003.sdc constrains at a made-up 1 us, so they are not honestly
-// analysed and placement churn can break them silently.  `git show` the
-// tone commit to put it back.
+// placement, and at the time the SD and floppy paths were clocked by data
+// signals that test003.sdc could only call a made-up 1 us clock, so they
+// were not analysed and placement churn broke them silently.  Both halves
+// of that are gone as of 2 Sep 2026: fdd4.v runs on clk_25 with enables,
+// and the SDC relates clk_25 to the PPU clock with the right phase (its
+// edges sit on clk_25's falling edges, 20 ns from the rising ones), so
+// the floppy's status word into vp1_128fdd is a 20 ns path the tool now
+// knows about.  `git show` the tone commit to put the tone back.
 
 //------------------------------------------------------------//
 // One FIFO per channel.  fifo_audio is 16 bits wide and regenerating it as

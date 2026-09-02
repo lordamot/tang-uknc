@@ -7,15 +7,6 @@ Running placement......
 [10%] Placement Phase 0 completed
 [20%] Placement Phase 1 completed
 [30%] Placement Phase 2 completed
-WARN  (TA1132) :  'clk8kHz' was determined to be a clock but was not created.
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "spi_clk" and "pl1/rpll_inst/CLKOUT.default_gen_clk"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_25" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk_3_12" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "pl1/rpll_inst/CLKOUT.default_gen_clk" and "clk_3_12"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "clk8kHz" and "clk_25"
-WARN  (TA1117) : Can't calculate clocks' relationship between: "spi_clk" and "pl1/rpll_inst/CLKOUTD.default_gen_clk"
 [50%] Placement Phase 3 completed
 Running routing......
 [60%] Routing Phase 0 completed
@@ -36,5 +27,5 @@ Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.pin.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.html" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.rpt.txt" completed
 Generate file "/var/www/own/tang-uknc/tang/impl/pnr/test003.tr.html" completed
-Wed Sep  2 09:02:36 2026
+Wed Sep  2 10:22:10 2026
 
