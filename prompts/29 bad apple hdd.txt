@@ -1,0 +1,83 @@
+lets continue digging it. I added ./build/bappwd.img file - it is hdd image blairecase/badapple states about and says its inverted. it does not work yet - hddboot causes no sound and strange color vertical lines instead of demo itself. check whats wrong and fix
+
+****
+
+Found and fixed: the demo addresses the disk by LBA28 and the cartridge only knew CHS. Built, meets timing, flashed to the Tang's SPI flash - power-cycle it, mount bappwd.img as HDD 0: and boot from menu option 2.
+
+How it was found. badapple's readme says the emulator it ships is UKNCBTL with "LBA28 support for IDE emulation" added and shorter DRQ timeouts. Block 2 of the image (un-inverted) writes 0340 to the head register before its reads: bit 6 set, LBA mode, with the sector number in {head[3:0], cyl, sector}. Our ide.v was written from the stock Hard.cpp, which ignores that bit and computes CHS from the same bytes, so every video sector came from the wrong place: coloured vertical stripes is what a 63x16 CHS reading of an LBA address looks like, and the Covox stayed silent because the demo never got its data. The image itself is fine: 63 sectors, 16 heads, inverted, which the MCU's heuristic classifies correctly.
+
+Confirmed in the emulator before touching RTL: my scratchpad copy of the headless UKNCBTL got --cart and --hdd options plus the LBA28 branch in CalculateOffset() and NextSector(); with the WD ROM as cartridge and bappwd.img attached, option 2 boots and the Bad Apple silhouettes play. Without the branch it shows nothing.
+
+The fix in tang/src/ide/ide.v: when curheadreg[6] is set the SD sector is {head[3:0], cyl, sector} straight, skipping the multiply stages, and next_sector counts the 28-bit number up into the registers so a multi-sector read continues and reads back right. tb_ide has four new cases: a two-sector LBA read, a carry from 0xFFFF into the cylinder high byte, bit 24 from the head nibble, and CHS again after LBA. Lint clean, ide-test 0 errors, timing gate 0 setup / 0 hold, Logic 48%, Register 27%, BSRAM 64%.
+
+Not verified: whether the SD path keeps up with the demo's rate, about 21 sectors a frame in 50-sector reads. The card is read by the FPGA's own sd_card.v, not through the MCU, so a sector is a few hundred microseconds; the stock emulator's per-sector delay is of that order and the demo tolerates it. If the picture stutters or drops out on the board, that is the next thing to measure.
+
+Docs: platform.md IDE section, progress.md section 17, the CLAUDE.md IDE trap and resource line. Nothing committed.
+
+looks greatful! but check please covox levels and/or mixing logic - sound plays but quite different from what it should be. check covox implementation in nzeemin's ukncbtl once again, maybe?
+
+****
+
+It was not the DAC and not the mixing: it was sector latency. Fixed with read-ahead in the cartridge; built, meets timing, flashed to the Tang's SPI flash - power-cycle it.
+
+UKNCBTL's Covox, checked again: value |= (port ^ 0xff) << 7, i.e. at the level of its beeper (0x7fff) and its AY sum, printer port 0177100 only, no 177372. Our proportions are close - beeper 8192, Covox 8160, three AY chips 18360 - so level is not what you heard.
+
+What you heard, from the demo's own PPU loop, disassembled in the emulator at 001400-001672: MOV (R5),(R3) sends a word from the IDE data register straight to the Covox, MOV (R5),@0(R5) pairs write screen words, 52 samples and 102 pairs per sector, and BIT #10,(R4) polls DRQ between sectors. So the sample rate is the rate at which sectors arrive, and a wait for a sector is a hole in the audio. Measured with the port logged in the emulator: 1065 writes a frame with instant sectors (26.6 kHz - the readme's "~24 kHz"), 698 with UKNCBTL's stock 1 ms per sector (17.5 kHz); the samples are plain unsigned bytes, high byte zero, mean 128. Our cartridge started fetching the next sector only after the PPU had drained the current one, so each of ~500 sectors a second cost a full card read of silence, 0.4-1 ms against 2 ms of audio: a much lower rate and a buzz near 500 Hz.
+
+ide.v now has two sector banks and fetches the next sector of a multi-sector read while the current one is drained, so the poll sees DRQ again at once. A READ arriving during a read-ahead discards it and fetches its own; a WRITE that fills meanwhile waits. tb_ide checks the second sector is fetched before a word of the first is drained, the third only once a bank is free, DRQ without BUSY across the drain, data in order, and the discard case; the earlier tests were taught that "last request" now runs ahead. Lint clean, 0 setup / 0 hold, Logic 48%, Register 27%, BSRAM 66% (one block for the bank).
+
+Two WAVs went to you: demo.wav with the stock emulator's 1 ms stall baked in, demo_fast.wav without - the second is the reference. Docs: progress.md 17, platform.md IDE section, the CLAUDE.md trap and resource line. Nothing committed.
+
+need to adjust sector delays so covox sample rate will be 24 kHz
+
+****
+
+Done as a setting with 24 kHz as its default. Bitstream built, meets timing, flashed to the Tang; the firmware with the new menu entry is built into bin/bl616.bin and needs the BL616 in boot mode to flash.
+
+The cartridge now holds every sector: after the PPU drains one, the next is not handed over sooner than N x 25 us, counted from the drain, so the card's own read time sits inside the gap rather than adding to it. N is the OSD's new Drives entry "HDD delay", 0-375 us, default 225: 40 ms per frame divided by 960/52 sectors is 2.167 ms a sector, the loop itself takes 1.953 ms at 26.6 kHz, so the gap is 214 us; the emulator given a 225 us gap logs 959.6 Covox writes a frame, 24.0 kHz. The one unknown is our PPU's speed against the emulator's, which is why it is adjustable in 25 us steps rather than fixed - if the board plays a little sharp or flat, the menu moves it. It needs three edits as the trap says: the form string and variables_uknc in menu.c, the 'D' case in sysctrl.v, then top.v to ide.v.
+
+tb_ide checks the hold (BUSY and no DRQ right after a drain and at 900 clocks, DRQ at 1500 with delay 2), everything else still passes, lint clean, 0 setup / 0 hold, Logic 48%, Register 27%, BSRAM 66%. Docs: progress.md 17, platform.md, mcu.md's value table and menu list. Nothing committed.
+
+is bitstream on tang already?
+
+****
+
+Yes - the last flash, right after the sector-gap build passed the gate, wrote bin/tang.fs to the SPI flash, Done, exit 0: LBA28, read-ahead and the hold at its 225 us default. Power-cycle before testing. Only the BL616 firmware with the "HDD delay" menu entry is not on hardware; without it the FPGA uses its own 225 us default, so the demo should already run at 24 kHz and the menu is only for adjusting.
+
+BL companion board connected
+
+****
+
+Flashed: the firmware with the HDD delay entry (bin/bl616.bin, same file as build/fw), SHA256 matched, all programming completed successfully. Reset it out of boot mode. Drives menu: HDD delay, 0-375 us, default 225; move it if the demo plays sharp or flat, and it is saved with the other settings.
+
+two more improvements needed. menu should allow to set up to 975ms. and another thing - badapple itself is music and voice. and it notable at voice sections that sound is somehow capped - kinda high frequencies lowered and bassy (I know about covox and its discretisation - but I mean it seems like high freq filter lowers them - check please if you can). I also added ./build/badapple.wav to reference voice frequences cleanly heard there (although record itself is not good)
+
+****
+
+Both done in one change: the setting now runs 0-975 us, and it works by a different mechanism, because the old one was the filter you heard. Bitstream built, meets timing, flashed to the Tang; firmware with the 40-entry menu in bin/bl616.bin.
+
+The check first. The emulator's Covox stream - exactly the bytes the DAC gets - measured against build/badapple.wav: relative to the 300-1000 Hz band the stream holds about 10 dB more energy above 4 kHz than the recording, which itself rolls off steeply (-20 dB at 4-6 kHz, -45 at 10-11). So the demo's data is not short of highs, and hdmi_tx.v's audio path is a phase accumulator and a FIFO, no filter. What dulls the voice is the per-sector hold I added: 52 samples at the loop's full 26.6 kHz, then a 214 us hold, is amplitude modulation at 461 Hz - sidebands on every voice component, and the pitch itself stays 11% sharp because the gap only pauses playback, it does not slow it.
+
+The replacement slows the loop uniformly. Every read of the IDE data register is acknowledged a fraction of a PPU cycle late - hdd_delay x 0.3125 cycles on average, a phase accumulator carrying the remainder from read to read, dealt out in whole PPU cycles because the bus only sees ack on its own clock. 256 reads a sector, so a sector takes hdd_delay x 25.6 us longer with no gap anywhere; 8, the new default, is 205 us: 2.158 ms a sector, 24.1 kHz. The menu's "HDD delay" is that extra time per sector, 0 to 975 in 25 us steps. tb_ide: with delay 8, 256 reads take exactly 5120 clk_25 more than with 0, data intact.
+
+Lint clean, 0 setup / 0 hold, Logic 48%, Register 27%, BSRAM 66%. Docs: progress.md 17, platform.md, mcu.md, the CLAUDE.md trap (a per-sector hold is a modulator, never do it that way). Nothing committed. Whether the voice is right now is the board's to say; if the pitch is off, the same menu moves it.
+
+BL companion board connected
+
+****
+
+Flashed: the firmware with the 40-entry HDD delay menu (bin/bl616.bin, same as build/fw), SHA256 matched, all programming completed successfully. Reset it out of boot mode. Note the saved uknc.ini may still hold the old value 9 from the previous menu (the same index now means 225 us); the new default is 8 - set it in the Drives menu once and it is saved.
+
+a bit confusing what those 8 9 etc mean as menu shows ms-based delay still. setting it to 750 works well for now, anyway. finalize docs and mark that 750 is good delay to start from
+
+****
+
+Docs finalised with 750 as the number to start from, and it is the default now on both sides: menu.c's 'D' default and sysctrl.v's reset value are index 30, which is 750 us - the "8, 9" in my notes were that index, the menu's number divided by 25; the menu shows microseconds (not ms) and that is the only number worth remembering. progress.md 17, platform.md, mcu.md and the CLAUDE.md trap now say 750 is right on the board, well past the 205 the emulator's timing predicted, so this PPU runs the loop much faster than UKNCBTL's model and the emulator is not to be trusted for rates.
+
+Rebuilt both: bitstream meets timing and is flashed to the Tang (power-cycle it); the firmware with the new default is in bin/bl616.bin, the BL616 was not on USB. Neither changes behaviour for you while the saved uknc.ini holds 750. Nothing committed.
+
+BL companion card connected
+
+****
+
+Flashed: the firmware with the 750 us default (bin/bl616.bin, same as build/fw), SHA256 matched, all programming completed successfully. Reset it out of boot mode. Both halves now carry 750 as their default; the saved uknc.ini still wins if it has a value.

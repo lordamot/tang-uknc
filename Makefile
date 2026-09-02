@@ -288,6 +288,14 @@ ab-test: $(VERILATOR)
 	  sim/tb/tb_aberrant.v tang/src/aberrant.v tang/src/ay/ym2149.sv >/dev/null
 	$(BUILD)/sim/ab/tb_aberrant
 
+# The Covox at 0177372 beside the Aberrant: writes land, reads answer, and
+# no address in 0177360-0177376 is acknowledged by both.
+covox-test: $(VERILATOR)
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_covox -Mdir $(BUILD)/sim/covox -o tb_covox \
+	  sim/tb/tb_covox.v tang/src/covox.v tang/src/aberrant.v tang/src/ay/ym2149.sv >/dev/null
+	$(BUILD)/sim/covox/tb_covox
+
 # The keyboard byte queue in xm2-01.v: a burst of bytes at SPI speed
 # against a PPU that reads slowly must come out complete and in order.
 kbd-test: $(VERILATOR)

@@ -4,6 +4,7 @@
 set_device -name GW2AR-18C GW2AR-LV18QN88C8/I7
 
 add_file -type verilog "src/aberrant.v"
+add_file -type verilog "src/covox.v"
 add_file -type verilog "src/audio.v"
 add_file -type verilog "src/ay/ym2149.sv"
 add_file -type verilog "src/cpu.v"

@@ -1,0 +1,23 @@
+lets add new hardware - Covox. It is audio device so should be mixed into result hdmi audio output
+
+clues are from here: https://github.com/blairecas/badapple - we want so called "new one" which uses port 177372 - search for info of it
+
+(sent while the work was running:)
+
+it should be supported in nzeemin's UKNCBTL btw
+
+****
+
+Added, built, meets timing, flashed to the Tang; not heard yet. Power-cycle the Tang before trying it.
+
+What it is. The "new covox" badapple probes for ("LPT port A 177100 or new covox 177372 if detected") is the ЦАП of the Aberrant sound module's map, on the module's expansion connector - the same map this repo's aberrant.v already carried, with 177372 deliberately left unanswered. No data sheet exists that I could find: badapple's tree holds only the CPU loader (the PPU side is in the released image), nzeemin's UKNCBTL supports a Covox since release 2025.1 but on the PPU printer port 177100 (Board.cpp XORs the port with 0xff), the ukncbtl-qt copies here have none, and the forums that mention 177372 are behind a bot wall. So the interface came out of the players: spcplay's PPU loop writes the sample as the low byte of a MOV to the port, and every UKNC device is detected with a TST under a trap-4 handler, bus timeout meaning absent.
+
+What was built. tang/src/covox.v: one 8-bit register on the PPU clock at 177372, reads acknowledged and returning the sample (so TST finds it), word and byte writes both taken (177373 as the odd byte), unsigned, not inverted - polarity is inaudible on a DAC. top.v puts it on the ack OR and the data mux after the Aberrant and adds it to the mixer shifted up five, 0..8160, about one AY chip's swing; the sum can now reach 34712 with everything at full and clip() saturates that corner. 177370/4/6 stay unacknowledged for the MIDI and OPL2 probes. make covox-test: word, low-byte and high-byte writes land, read-back works, and across 177360-177376 no address is acknowledged by both the Covox and the Aberrant. Lint clean, timing gate 0 setup / 0 hold, Logic 47%, Register 27%, BSRAM 64%.
+
+Not done: the printer-port Covox at 177100, which players fall back to when this one is absent; it is present now, so badapple will pick the new one. Docs: platform.md has the interface and the open questions, fpga.md the bus tables, CLAUDE.md the intro and AY trap, progress.md section 16, build.md the target. The .gprj has the file. Nothing committed.
+
+flash tang onto flash
+
+****
+
+Written to the SPI flash again with make flash-fpga-flash (openFPGALoader -f -r, the same target as the first time): bin/tang.fs of 18:10, the Covox build, Done, exit 0. Power-cycle the Tang - a flash write does not reliably reconfigure the chip on its own.

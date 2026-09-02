@@ -1,6 +1,7 @@
 GowinSynthesis start
 Running parser ...
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/aberrant.v'
+Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/covox.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/audio.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ay/ym2149.sv'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/cpu.v'
@@ -31,18 +32,18 @@ Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mkcolorreg.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ppu.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/sdram2.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/top.v'
-Undeclared symbol 'cart_sel', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":658)
-Undeclared symbol 'cart_bank', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":659)
-Undeclared symbol 'fdd_rd', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":755)
-Undeclared symbol 'fdd_wr', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":756)
-Undeclared symbol 'fdd_outen', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":761)
-Undeclared symbol 'fdd_taken', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":766)
-WARN  (EX3638) : 'fdd_rd' is already implicitly declared on line 755("/var/www/own/tang-uknc/tang/src/top.v":787)
-WARN  (EX3638) : 'fdd_wr' is already implicitly declared on line 756("/var/www/own/tang-uknc/tang/src/top.v":787)
-WARN  (EX3638) : 'fdd_taken' is already implicitly declared on line 766("/var/www/own/tang-uknc/tang/src/top.v":788)
-WARN  (EX3638) : 'fdd_outen' is already implicitly declared on line 761("/var/www/own/tang-uknc/tang/src/top.v":788)
-WARN  (EX3638) : 'cart_sel' is already implicitly declared on line 658("/var/www/own/tang-uknc/tang/src/top.v":791)
-WARN  (EX3638) : 'cart_bank' is already implicitly declared on line 659("/var/www/own/tang-uknc/tang/src/top.v":792)
+Undeclared symbol 'cart_sel', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":664)
+Undeclared symbol 'cart_bank', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":665)
+Undeclared symbol 'fdd_rd', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":761)
+Undeclared symbol 'fdd_wr', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":762)
+Undeclared symbol 'fdd_outen', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":767)
+Undeclared symbol 'fdd_taken', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":772)
+WARN  (EX3638) : 'fdd_rd' is already implicitly declared on line 761("/var/www/own/tang-uknc/tang/src/top.v":793)
+WARN  (EX3638) : 'fdd_wr' is already implicitly declared on line 762("/var/www/own/tang-uknc/tang/src/top.v":793)
+WARN  (EX3638) : 'fdd_taken' is already implicitly declared on line 772("/var/www/own/tang-uknc/tang/src/top.v":794)
+WARN  (EX3638) : 'fdd_outen' is already implicitly declared on line 767("/var/www/own/tang-uknc/tang/src/top.v":794)
+WARN  (EX3638) : 'cart_sel' is already implicitly declared on line 664("/var/www/own/tang-uknc/tang/src/top.v":797)
+WARN  (EX3638) : 'cart_bank' is already implicitly declared on line 665("/var/www/own/tang-uknc/tang/src/top.v":798)
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_rx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_tx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/vp1-128fdd.v'
@@ -96,12 +97,13 @@ WARN  (EX3780) : Using initial value of 'write_sd' since it is never assigned("/
 Compiling module 'rawtr_prom'("/var/www/own/tang-uknc/tang/src/fdd/ip/rawtr_prom/rawtr_prom.v":10)
 Compiling module 'dbufsec16'("/var/www/own/tang-uknc/tang/src/ip/dbufsec16/dbufsec16.v":10)
 Compiling module 'sd_arbiter'("/var/www/own/tang-uknc/tang/src/ide/sd_arbiter.v":16)
-Compiling module 'ide'("/var/www/own/tang-uknc/tang/src/ide/ide.v":37)
+Compiling module 'ide'("/var/www/own/tang-uknc/tang/src/ide/ide.v":51)
 Compiling module 'ide_rom'("/var/www/own/tang-uknc/tang/src/ide/ide_rom.v":3)
 Compiling module 'vp1_128fdd'("/var/www/own/tang-uknc/tang/src/vp1-128fdd.v":15)
 Compiling module 'aberrant'("/var/www/own/tang-uknc/tang/src/aberrant.v":1)
 Compiling module 'YM2149'("/var/www/own/tang-uknc/tang/src/ay/ym2149.sv":42)
 Extracting RAM for identifier 'tone_gen_cnt'("/var/www/own/tang-uknc/tang/src/ay/ym2149.sv":175)
+Compiling module 'covox'("/var/www/own/tang-uknc/tang/src/covox.v":24)
 Compiling module 'cpu_wb'("/var/www/own/tang-uknc/tang/src/cpu.v":1)
 Compiling module 'vp1_120'("/var/www/own/tang-uknc/tang/src/vp1_120.v":3)
 Compiling module 'vp065'("/var/www/own/tang-uknc/tang/src/vp65.v":1)

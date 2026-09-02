@@ -1001,7 +1001,114 @@ setup and 0 hold violations, and the resource line did not move
 (47% / 26% / 64%).  Both flashed on 2 Sep 2026 and confirmed at the
 keyboard: chords, rolled Backspace, no repeat - "all works".
 
+### 16. Covox at 0177372 - ADDED, NOT HEARD
+
+Asked for on 2 Sep 2026: the "new covox" that blairecas/badapple probes
+for ("LPT port A 177100 or new covox 177372 if detected"), mixed into
+the HDMI audio.  It is the ЦАП of the Aberrant sound module's map, on the
+module's expansion connector.  No data sheet turned up - not in
+badapple (the repo holds the CPU loader, the PPU side is in the released
+image only), not in nzeemin's UKNCBTL (whose Covox, release 2025.1, is
+on the PPU printer port `0177100`, inverted), not on the forums - so the
+interface was read out of the players: spcplay's PPU loop writes the
+sample as the low byte of a `MOV` to the port, and every UKNC device is
+detected with a `TST` under a trap-4 handler.
+
+`tang/src/covox.v`: one register on the PPU clock at `0177372`, reads
+acknowledged and returning the sample, word and byte writes both taken
+(`0177373` as the odd byte), unsigned and uninverted.  `top.v` adds it
+to the ack OR and the data mux after the Aberrant, and to the mixer
+shifted up five (0..8160), where `clip()` now has a real corner to
+saturate (34712 with everything at full).  `make covox-test` checks the
+writes, the read-back and that the Covox and the Aberrant never
+acknowledge the same address across `0177360`-`0177376`.  Lint clean.
+`.claude/docs/platform.md` has the interface.  Not implemented: the
+printer-port Covox at `0177100`, which players fall back to when this
+one is absent - it is not, now.
+
+### 17. Bad Apple from the hard disk - LBA28, READ-AHEAD AND A READ STALL, PLAYS ON THE BOARD
+
+2 Sep 2026, with `build/bappwd.img` (blairecas/badapple's WD image,
+inverted, 63 sectors x 16 heads, booted from the cartridge with menu
+option 2): coloured vertical stripes instead of the demo and no sound.
+
+**Stripes: LBA28.**  The readme's own words settled it: the emulator
+the demo ships is UKNCBTL with "LBA28 support for IDE emulation" and
+shorter DRQ timeouts, and block 2 of the image writes `0340` to the
+head register before every read - LBA mode.  `ide.v` followed the stock
+Hard.cpp, which ignores bit 6 and computes CHS from the LBA bytes, so
+every video sector came from the wrong place.  Confirmed in the
+emulator first: the stock `Hard.cpp` boots the image to nothing, and
+with `CalculateOffset()`/`NextSector()` given an LBA28 branch the
+silhouettes play (a scratchpad copy of the headless UKNCBTL from
+`../mc0511-dicewars`, with `--cart` and `--hdd` added).  `ide.v`:
+`curheadreg[6]` selects `{head[3:0], cyl, sector}` as the SD sector
+straight, and `next_sector` counts the 28-bit number up into the
+registers; `tb_ide` has the two-sector LBA read, the carry into the
+cylinder high byte, bit 24 from the head nibble, and CHS after LBA.
+On the board: the demo plays, with sound "quite different".
+
+**The sound: sector latency, not the DAC.**  The PPU loop (disassembled
+in the emulator at 001400-001672) pulls the whole show out of the IDE
+data register: `MOV (R5),(R3)` for a sound word straight to the Covox
+and `MOV (R5),@0(R5)` pairs for screen words, 52 samples and 102 pairs
+per sector, `BIT #10,(R4)` polling DRQ between sectors.  So the sample
+rate IS the rate at which sectors arrive: with near-instant sectors the
+emulator logs 1065 Covox writes a frame (26.6 kHz), with UKNCBTL's
+stock 1 ms per sector 698 (17.5 kHz), and every wait for a sector is a
+hole in the audio - which is why the author shortened those timeouts.
+The samples are plain unsigned bytes in the low byte of the word, high
+byte zero, mean 128, so the DAC's form and level were right.  The
+cartridge fetched the next sector only after the PPU had drained the
+current one, so each of ~500 sectors a second cost a full card read of
+silence, 0.4-1 ms against 2 ms of audio.
+
+`ide.v` now **reads ahead**: a second sector bank (one more BSRAM), and
+the next sector of a multi-sector read is fetched while the current one
+is drained.  A READ arriving while a read-ahead is in flight discards
+that result and fetches its own; a WRITE whose buffer fills meanwhile
+waits for the engine; `tb_ide` checks the second sector is fetched
+before a word of the first is drained, the third only once a bank is
+free, DRQ without BUSY across the drain, data in order, and the discard
+case.  Two WAVs from the emulator with the port logged - stock delay and
+none - went to the operator as the reference.  Heard: it plays.
+
+**Then 24 kHz exactly.**  With instant sectors the loop runs at 26.6
+kHz where the author's hardware gave "~24 kHz", so the cartridge holds
+each sector: not handed over sooner than N x 25 us after the previous
+one was drained (`hold_units`/`hold_tick`, counted from the drain, so
+the card's own time sits inside the gap).  N is the OSD's "HDD delay"
+(`'D'`, `system_hdd_delay`, 0-375 us), default 9 = 225 us: 40 ms /
+(960 / 52) - 1.953 ms = 214 us, and the emulator given a 225 us gap
+logs 959.6 writes a frame, 24.0 kHz.  Our PPU's speed against the
+emulator's is the one unknown, which is why it is a setting.  `tb_ide`
+checks the hold.  Built, flashed, heard - and heard as "the highs
+lowered, bassy" on the voice: 52 samples at the full 26.6 kHz and
+then a 214 us hold is amplitude modulation at 461 Hz, and the pitch
+stays 11% sharp.  The emulator's Covox stream measured against the
+operator's reference recording has no shortage of highs (relative to
+300-1000 Hz it holds 10 dB more above 4 kHz than the recording, which
+rolls off itself), and the HDMI path has no filter, so the hold was
+the culprit.
+
+**Replaced by a per-read stall.**  Every read of the data register is
+acknowledged `hdd_delay` x 0.3125 PPU cycles late on average, a phase
+accumulator in 1/64 cycle carrying the fraction from read to read
+(`stall_acc`/`stall_cnt` in `ide.v`; the bus sees ack on its own
+clock, clk_25/8, so stalls go out in whole PPU cycles and the fraction
+dithers).  256 reads a sector, so the loop slows uniformly by
+`hdd_delay` x 25.6 us a sector, no gap anywhere; 8, the default, is
+205 us: 1.953 + 0.205 = 2.158 ms a sector, 24.1 kHz.  The OSD entry
+runs 0-975 us in 25 us steps (40 entries, `'D'` six bits).  `tb_ide`:
+with delay 8, 256 data reads take 5120 clk_25 more than with 0, the
+data intact, and the sector completes.  **On the board: right at 750
+us**, not 205 - so our PPU runs this loop a good deal faster than the
+emulator's model, and 750 (index 30) is the default now on both
+sides.  The menu shows microseconds; "index 8, 9" in the earlier notes
+are that number divided by 25.  The voice is fine at 750.
+
 ## Open questions
+
 
 - **Which bitstream is the shipped one?**  `bin/tang.fs` and
   `tang/impl/pnr/test003.fs` are the same size and date and differ in

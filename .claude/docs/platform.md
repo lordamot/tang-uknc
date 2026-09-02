@@ -247,7 +247,28 @@ with ERROR and BAD_SECTOR, as the emulator does for a read-only image,
 and leaves the card untouched.
 Status `50` after reset, `58` with data ready.  Addressing is CHS and the
 sector number on the SD path is `(cyl * heads + head) * spt + sector -
-1`, computed in two multiply stages in the cartridge.  Images are `.img`,
+1`, computed in two multiply stages in the cartridge - **or LBA28** when
+bit 6 of the head register is set (`0340` written to `0110002`): then
+`{head[3:0], cyl, sector}` is the sector number itself, and a
+multi-sector read counts it up in the registers.  The WD ROM and RT-11
+use CHS; blairecas/badapple's hard-disk version reads its video by LBA,
+and the emulator it ships is UKNCBTL with "LBA28 support for IDE
+emulation" added - the stock Hard.cpp, which this cartridge was built
+from, is CHS only and reads the wrong sectors, which on the board was
+coloured vertical stripes and silence (Sep 2026).  A multi-sector read
+is **read ahead**: the cartridge has two sector banks and fetches the
+next sector while the software drains the current one, so a
+drain-and-poll loop sees DRQ again at once - badapple takes its Covox
+samples out of the sector stream in that loop, and without the
+read-ahead every sector was a gap in the sound.  And every read of the
+data register can be stretched: the OSD's **HDD delay** (`'D'`, 0-975
+us in 25 us steps, default 750) is the extra time per 256-word sector,
+dealt out over the reads as a fraction of a PPU cycle each, so a
+program streaming sound from its sectors is slowed uniformly - for
+badapple the board sounds right at 750, the default, which is well
+past the 205 the emulator's timing predicted - with no gap
+between sectors (a per-sector hold was tried and heard as a 461 Hz
+modulation dulling the voice).  Images are `.img`,
 raw 512-byte sectors, geometry in sector 0 as the WD driver writes it.
 
 **Three incompatible hard-disk layouts exist for the УКНЦ**, and
@@ -293,7 +314,9 @@ of the real Aberrant sound module - `aberranthacker/aberrant_sound_module`,
 which is where the file gets its name.  Until Aug 2026 only two were built
 and the third was a data path stubbed to zero.
 
-The board's map, and it answers **only** the three AY word addresses:
+The board's map.  The real module answers **only** the three AY word
+addresses; this implementation answers those and, since Sep 2026, the
+ЦАП at `0177372` (`covox.v`, below):
 
 | | | | |
 |---|---|---|---|
@@ -301,10 +324,31 @@ The board's map, and it answers **only** the three AY word addresses:
 | `0177370` MIDI data | `0177372` ЦАП (Covox) | `0177374` YM3812 (OPL2) | `0177376` unused |
 
 `0177366`-`0177377` are decoded onto the expansion connector P2 on the real
-board, so with none of those devices implemented here nothing must answer
-there - a bus timeout is how software learns they are absent.  The decode
-used to leave `adr[3]` don't-care, which aliased `0177372` onto AY2 and
-`0177374` onto AY3.
+board, so apart from the ЦАП nothing must answer there - a bus timeout is
+how software learns the MIDI and the OPL2 are absent.  The decode used to
+leave `adr[3]` don't-care, which aliased `0177372` onto AY2 and `0177374`
+onto AY3.
+
+### The Covox (`covox.v`)
+
+The "new covox" UKNC players probe for - blairecas/badapple: "~24kHz
+8-bit mono covox output (LPT port A 177100 or new covox 177372 if
+detected)" - is the Aberrant map's ЦАП.  No data sheet was found; the
+interface is read out of the players (Sep 2026): a device is detected by
+`TST @#177372` under a trap-4 handler, so reads are acknowledged and
+answer with the last sample in the low byte; a sample is written as the
+low byte of a `MOV` (spcplay's PPU loop is `mov R0,(R2)`) or as a `MOVB`,
+and both land - a word or a byte to `0177372` takes the low byte, a byte
+to `0177373` the high byte.  Mono, unsigned, 0..255, not inverted: the
+bus and the printer port are inverted on the machine and UKNCBTL's Covox
+on `0177100` XORs with 0xff, but polarity is inaudible on a DAC.  The
+sample enters `top.v`'s mixer shifted up five (0..8160, one AY chip's
+swing and a bit) and goes to HDMI and I²S with the rest.  `make
+covox-test` (`sim/tb/tb_covox.v`) checks the writes, the read-back, and
+that no address in `0177360`-`0177376` is acknowledged by both it and the
+Aberrant.  The older Covox on the printer port `0177100` is **not**
+implemented: `vp1_120.v`'s port A is a plain register there.
+
 
 **A word write latches an AY register number; a byte write sends data to
 it.**  `aberrant.v` turns that into the chips' BDIR/BC pair, which is why

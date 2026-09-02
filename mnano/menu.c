@@ -100,7 +100,8 @@ static const char storage_form_uknc[] =
   "F,Disk 3:,3|dsk;"                     // fileselector for Disk 3:
   "L,Disk prot.:,None|0:|1:|2:|3:|All,P;"   // Enable/Disable Floppy write protection
   "L,HDD image:,Auto|Plain|Inverted,J;"       // how the IDE image's bytes are read (see sdc.c)
-  "L,HDD prot.:,Off|On,K;";                   // write-protect the IDE image
+  "L,HDD prot.:,Off|On,K;"                    // write-protect the IDE image
+  "L,HDD delay:,0|25|50|75|100|125|150|175|200|225|250|275|300|325|350|375|400|425|450|475|500|525|550|575|600|625|650|675|700|725|750|775|800|825|850|875|900|925|950|975,D;";  // ~us added per sector, spread over its reads; sets a streamed demo's sample rate
   
 static const char settings_form_uknc[] =
   "Settings,0|3;"                       // return to form 0, entry 4
@@ -122,6 +123,7 @@ menu_variable_t variables_uknc[] = {
   { 'P', { 0 }},    // default no floppy write protected
   { 'J', { 0 }},    // default HDD image form = auto-detected from sector 0
   { 'K', { 0 }},    // default HDD writable
+  { 'D', { 30 }},   // default HDD delay 750 us a sector: badapple's Covox right on the board (index x 25 us)
   { '\0',{ 0 }}
 };
 // ------------------------------------------------------------------

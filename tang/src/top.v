@@ -355,6 +355,7 @@ wire [7:0]  system_hdd_flags   ;
 wire [1:0]  system_hdd_mode    ;
 wire [15:0] system_hdd_cyl     ;
 wire        system_hdd_wprot   ;
+wire [5:0]  system_hdd_delay   ;
 
 sysctrl sctl1(
     .clk                (           mist_clk),
@@ -385,7 +386,8 @@ sysctrl sctl1(
     .system_hdd_flags   (   system_hdd_flags),
     .system_hdd_mode    (    system_hdd_mode),
     .system_hdd_cyl     (     system_hdd_cyl),
-    .system_hdd_wprot   (   system_hdd_wprot)
+    .system_hdd_wprot   (   system_hdd_wprot),
+    .system_hdd_delay   (   system_hdd_delay)
 );
 
 wire [5:0] db9_port = 6'd0;
@@ -555,6 +557,9 @@ wire       ppu_wbi_stb_o_xm2;
 //aberrant
 wire [15:0]ppu_wbm_dat_i_abr;
 wire       ppu_wbm_ack_i_abr;
+//covox
+wire [15:0]ppu_wbm_dat_i_cvx;
+wire       ppu_wbm_ack_i_cvx;
 
 
 assign ppu_vm_virq_i = ppu_vm_virq_i_xm2|ppu_vm_virq_i_vp;
@@ -563,9 +568,10 @@ assign ppu_wbm_dat_i = ppu_wbm_ack_i_xm2 ? ppu_wbm_dat_i_xm2 :
                        ppu_wbm_ack_i_vp  ? ppu_wbm_dat_i_vp  :
                        ppu_wbm_ack_i_128 ? ppu_wbm_dat_i_128 : 
                        ppu_wbm_ack_i_abr ? ppu_wbm_dat_i_abr :
+                       ppu_wbm_ack_i_cvx ? ppu_wbm_dat_i_cvx :
                        ppu_wbm_ack_i_ide ? ppu_wbm_dat_i_ide : 16'o0;
 
-assign ppu_wbm_ack_i = ppu_wbm_ack_i_xm2|ppu_wbm_ack_i_vp|ppu_wbm_ack_i_128|ppu_wbm_ack_i_abr|ppu_wbm_ack_i_ide;
+assign ppu_wbm_ack_i = ppu_wbm_ack_i_xm2|ppu_wbm_ack_i_vp|ppu_wbm_ack_i_128|ppu_wbm_ack_i_abr|ppu_wbm_ack_i_cvx|ppu_wbm_ack_i_ide;
 
 assign ppu_wbi_dat_i = ppu_wbi_ack_i_xm2 ? ppu_wbi_dat_i_xm2 :
                        ppu_wbi_ack_i_vp  ? ppu_wbi_dat_i_vp  : 16'o0;
@@ -826,6 +832,7 @@ ide hdd(
     .geo_mode   (   system_hdd_mode),
     .geo_cyl    (    system_hdd_cyl),
     .wprot      (  system_hdd_wprot),
+    .hdd_delay  (  system_hdd_delay),
 
     .sd_rstart  (        hdd_rstart),
     .sd_wstart  (        hdd_wstart),
@@ -888,6 +895,23 @@ aberrant ay1(
    .ppu_wbm_ack_o(ppu_wbm_ack_i_abr),
 
    .m_channel    (     mono_channel)
+);
+//------------------------------------------------------------//
+// The 8-bit DAC at 0177372 - the Covox of the Aberrant's map (Sep 2026).
+// Same bus, same clock as the Aberrant; its sample joins the mixer below.
+wire [7:0] covox_sample;
+
+covox cvx1(
+   .clk   (         ppuclk_n),
+   .init  (    ppu_vm_init_o),
+   .adr   (    ppu_wbm_adr_o),
+   .dat_i (    ppu_wbm_dat_o),
+   .dat_o (ppu_wbm_dat_i_cvx),
+   .wre   (    ppu_wbm_wre_o),
+   .sel   (    ppu_wbm_sel_o),
+   .stb   (    ppu_wbm_stb_o),
+   .ack   (ppu_wbm_ack_i_cvx),
+   .sample(     covox_sample)
 );
 //------------------------------------------------------------//
 cpu_wb cpu1(
@@ -1016,14 +1040,20 @@ vp065 dd2(
 // that as m_channel - all nine channels added - and it was the output
 // nothing read.  The beeper joins it, and the one sum goes to both sides.
 //
-// Headroom, so nothing ever clips: m_channel is 12 bits and reaches
-// 9 * 255 = 2295, which shifted up three is 18360, and the beeper adds
-// 8192.  The total is 26552, comfortably inside the 32767 a signed sample
-// allows - so full volume is the unattenuated sum and the quieter settings
-// divide down from it.  No saturation is needed and none is done.
+// Headroom: m_channel is 12 bits and reaches 9 * 255 = 2295, which
+// shifted up three is 18360, and the beeper adds 8192.  That is 26552,
+// inside the 32767 a signed sample allows - so full volume is the
+// unattenuated sum and the quieter settings divide down from it.
+//
+// The Covox (Sep 2026) is an 8-bit sample shifted up five, 0..8160: a
+// full-scale swing the size of one AY chip's three channels (6120) and a
+// bit, and of the beeper's.  With it the sum can reach 34712, so the
+// corner where three chips, the beeper and a DAC peak together is the
+// one case clip() below now really saturates; music does not go there.
 wire [15:0] ay_mix = {1'd0, mono_channel, 3'd0};   // 0..18360
 wire [15:0] beeper = {2'd0, sound, 13'd0};         // 0 or 8192
-wire [15:0] mix    = ay_mix + beeper;              // 0..26552
+wire [15:0] covox  = {3'd0, covox_sample, 5'd0};   // 0..8160
+wire [15:0] mix    = ay_mix + beeper + covox;      // 0..34712
 
 // The sum goes out unipolar, as it is.
 //
@@ -1055,9 +1085,8 @@ wire [15:0] mix    = ay_mix + beeper;              // 0..26552
 // `git show f2bb44b^` has the blocker.
 wire signed [17:0] snd_amp = $signed({2'b00, mix});
 
-// mix reaches 26552 when three chips and the beeper all peak at once,
-// which fits a signed sample; clip() is kept for the day the beeper or
-// the AY level goes back up, so the corner clips rather than wraps.
+// mix reaches 34712 when three chips, the beeper and the Covox all peak
+// at once; clip() turns that corner into saturation rather than a wrap.
 function signed [15:0] clip;
     input signed [17:0] v;
     clip = (v >  18'sd32767) ?  16'sh7FFF :

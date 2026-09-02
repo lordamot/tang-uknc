@@ -18,7 +18,7 @@ live set, by role:
 | top | `top.v` |
 | processors | `cpu.v`, `ppu.v`, `wm2wb/vm2_wb.v`, `wm2wb/vm2_plm.v`, `wmrst.v` |
 | video/memory | `sdram2.v`, `mkcolorreg.v` |
-| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `audio.v`, `ide/ide.v` |
+| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `covox.v`, `audio.v`, `ide/ide.v` |
 | SD path | `ide/sd_arbiter.v` - one owner at a time between the floppies and the cartridge on `sd_card.v` |
 | generated ROM | `ide/ide_rom.v` - twelve pROM primitives from `tang/rom/ide_wdromv0110.bin` by `tools/bin2prom.py` (`make ide-rom`), stubbed in simulation like the vendor IP |
 | serial | `uart/uart_rx.v`, `uart/uart_tx.v` |
@@ -154,8 +154,8 @@ Two Wishbone-ish master buses, one per processor, with the peripherals
 combined by OR-of-acks and a priority mux in `top.v`.
 
 ```
-PPU bus  ppu_wbm_*        peripherals: xm2-01, vp1_120, vp1-128fdd, aberrant
-  data mux priority:  xm2 > vp1_120 > vp1-128fdd > aberrant
+PPU bus  ppu_wbm_*        peripherals: xm2-01, vp1_120, vp1-128fdd, aberrant, covox, ide
+  data mux priority:  xm2 > vp1_120 > vp1-128fdd > aberrant > covox > ide
   interrupt vector bus ppu_wbi_*: xm2 then vp1_120
 
 CPU bus  cpu_wbm_*        peripherals: vp1_120, vp65

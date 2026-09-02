@@ -91,6 +91,7 @@ agree on the letters; `sysctrl.v` decodes:
 'C'  system_hdd_cyl[7:0]   bits 7:0  IDE image cylinders, low byte   } file size / 512 / spt / heads,
 'Y'  system_hdd_cyl[15:8]  bits 7:0  IDE image cylinders, high byte  } for IDENTIFY
 'K'  system_hdd_wprot      bit 0     IDE image write-protected (OSD "HDD prot.")
+'D'  system_hdd_delay      bits 5:0  stretch of IDE data reads, ~25 us a sector per step (OSD "HDD delay")
 ```
 
 Anything the menu offers has to have a letter here, in `variables_uknc[]`
@@ -105,7 +106,8 @@ main      FDD 0: fileselector, HDD 0: fileselector (*.img, SD slot 4),
           System, Drives, Settings, Reset
 System    Video RGB|BGR ('V'), Cold Boot
 Drives    Disk 0:..3: fileselectors, Disk prot. None|0:|1:|2:|3:|All ('P'),
-          HDD image Auto|Plain|Inverted ('J'), HDD prot. Off|On ('K')
+          HDD image Auto|Plain|Inverted ('J'), HDD prot. Off|On ('K'),
+          HDD delay 0..975 us ('D', default 750 - right for badapple on the board; the value sent is us/25)
 Settings  Volume Mute|33%|66%|100% ('A'), Save settings
 ```
 

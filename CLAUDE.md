@@ -35,12 +35,12 @@ over HDMI by an encoder of this repository's own (`src/hdmi/`, which
 carries the sound as well); the keyboard translated from USB on the MCU;
 four 800 KB floppies served out of `.dsk` files on the SD card and an
 IDE hard disk cartridge (Oleg H.'s, with its WD ROM) served out of a
-`.img` file on the same card; two
-AY-3-8910s and a one-bit beeper, out over both HDMI and I²S.
+`.img` file on the same card; three AY-3-8912s, an 8-bit Covox at
+`0177372` and a one-bit beeper, out over both HDMI and I²S.
 
 ```
-Logic 47%   Register 26%   BSRAM 64%   PLL 2/2 (100%)  [2 Sep 2026 PnR, with the IDE cartridge and the key queue]
-      (44% / 25% / 48% before the cartridge; its 24 KB ROM is the BSRAM step)
+Logic 48%   Register 27%   BSRAM 66%   PLL 2/2 (100%)  [2 Sep 2026 PnR, with the IDE cartridge in LBA28 with read-ahead, the key queue and the Covox]
+      (44% / 25% / 48% before the cartridge; its 24 KB ROM and second sector bank are the BSRAM steps)
 ```
 
 Key documentation: `.claude/docs/platform.md` (the machine: both address
@@ -75,7 +75,9 @@ from breaking the start screen or the floppy again.
   `0177760`-`0177777` inside МХ2-01's range, because the mask cleared
   `adr[9]` as well; that is fixed (mask `13'o17776`, Aug 2026) but the
   comment is still wrong.  Worked out by running the expression over all
-  65536 addresses, which is the only way to read these.
+  65536 addresses, which is the only way to read these.  `0177372` is the
+  Covox now (`covox.v`, Sep 2026) and must stay out of the AY decode;
+  `0177370/4/6` must stay unacknowledged - `make covox-test` checks both.
 - **Acks are ORed and data is a priority mux.**  Two peripherals answering
   one address is silent: the loser still sees the strobe and still changes
   its own state.  Every new decode has to be checked against every existing
@@ -371,7 +373,21 @@ from breaking the start screen or the floppy again.
   drive's geometry and refuses to boot when it disagrees with the home
   block (`build/clue.txt`), so the cylinder count has to be real.  A
   plain identify made WDINIT print 64555/65525/65501, the complements
-  of 980/10/34.  **`sd_card.v` must never see two requesters**: the MCU
+  of 980/10/34.  **Bit 6 of the head register is LBA28** - the WD ROM
+  never sets it, badapple always does, UKNCBTL's stock Hard.cpp does
+  not know it, and the cartridge does since Sep 2026 (`make ide-test`).
+  The cartridge also reads AHEAD - two sector banks, the next sector
+  fetched while the current one drains - because badapple pulls its
+  Covox samples out of the sector stream and every wait for a sector
+  was a hole in the sound.  A sound that is "there but wrong" on a
+  disk-streamed program is the sector latency, not the DAC - and the
+  OSD's "HDD delay" sets that program's sample rate by stretching every
+  data-register read a fraction of a PPU cycle, never by a per-sector
+  hold: a hold is amplitude modulation at the sector rate, and it was
+  heard as the voice going dull.  750 us is right on the board where
+  the emulator's timing said 205, so this PPU runs that loop much
+  faster than UKNCBTL's model; do not trust the emulator for rates.
+  **`sd_card.v` must never see two requesters**: the MCU
   picks the drive from a one-hot mask, and a floppy read overlapping a
   cartridge write put the WD home block into block 21 of the image.
   `ide/sd_arbiter.v` owns that; route any new SD user through it.  The

@@ -30,6 +30,9 @@ reg         present = 1'b0;
 reg  [ 7:0] spt = 8'd8, heads = 8'd2;
 reg         inv = 1'b0;
 reg         wprot = 1'b0;
+reg  [ 5:0] delay = 6'd0;
+integer clkcnt = 0; always @(posedge clk) clkcnt = clkcnt + 1;
+integer t0, t1, extra;
 
 wire        rstart, wstart, active;
 wire [31:0] rsector;
@@ -43,7 +46,7 @@ ide dut(
     .wbm_adr_i(adr), .wbm_dat_i(dat), .wbm_dat_o(dout), .wbm_wre_i(wre),
     .wbm_sel_i(sel), .wbm_stb_i(stb), .wbm_ack_o(ack),
     .cart_sel(cart_sel), .cart_bank(cart_bank),
-    .hdd_present(present), .geo_spt(spt), .geo_heads(heads), .geo_inv(inv), .geo_mode(2'd0), .geo_cyl(16'd980), .wprot(wprot),
+    .hdd_present(present), .geo_spt(spt), .geo_heads(heads), .geo_inv(inv), .geo_mode(2'd0), .geo_cyl(16'd980), .wprot(wprot), .hdd_delay(delay),
     .sd_rstart(rstart), .sd_wstart(wstart), .sd_sector(rsector),
     .sd_rbusy(rbusy), .sd_rdone(rdone), .sd_other(1'b0),
     .sd_outen(outen), .sd_outaddr(outaddr), .sd_inbyte(inbyte),
@@ -56,12 +59,15 @@ function [7:0] pat; input [31:0] n; input [8:0] i; pat = (n * 7 + i) & 8'hff; en
 reg [7:0] wbuf [0:511];
 integer   nreq = 0, nwr = 0, k;
 reg [31:0] last_sector; reg is_read;
+reg [31:0] req_log [0:255];     // every read request, in order (read-ahead makes "last" ambiguous)
+integer   n0;
 always @(posedge clk) begin
     rdone <= 1'b0; outen <= 1'b0;
     if ((rstart || wstart) && !rbusy) begin
         rbusy <= 1'b1; last_sector = rsector; is_read = rstart;   // the request drops once busy is seen
         repeat (50) @(posedge clk);
         if (is_read) begin
+            req_log[nreq] = last_sector;
             nreq = nreq + 1;
             for (k = 0; k < 512; k = k + 1) begin
                 @(posedge clk); outen <= 1'b1; outaddr <= k; inbyte <= pat(last_sector, k);
@@ -83,7 +89,7 @@ task bus(input w, input [16:0] a, input [15:0] d, output [15:0] r, output acked)
     integer t;
     begin
         @(negedge clk); adr = a; dat = d; wre = w; stb = 1'b1; acked = 0; t = 0;
-        while (!acked && t < 40) begin @(posedge clk); #1; if (ack) begin acked = 1; r = dout; end t = t + 1;
+        while (!acked && t < 400) begin @(posedge clk); #1; if (ack) begin acked = 1; r = dout; end t = t + 1;
             if ($test$plusargs("DBG") && t < 6) $display("    [bus] t=%0d adr=%o stb=%b ce=%b ce_old=%b is_io=%b ack=%b st=%0d hp=%b cs=%b", t, adr, stb, dut.ce, dut.ce_old, dut.is_io, ack, dut.st, dut.hdd_present, dut.cart_sel); end
         repeat (2) @(negedge clk); stb = 1'b0; wre = 1'b0;
         repeat (3) @(posedge clk);
@@ -144,15 +150,18 @@ initial begin
     datard(w); check("ident word 27: ~UK", w, 32'h0000aab4);
     for (i = 28; i < 256; i = i + 1) datard(w);
     regrd(7, s); check("DRQ dropped after 256 words", s & 8'h08, 8'h00);
+    // Hard.cpp's ContinueRead() after IDENTIFY (sector count 1) reads a
+    // sector, and so does the cartridge; let it finish before counting
+    repeat (1500) @(posedge clk); wait_ready;
 
     $display("[tb_ide] READ 2 sectors at C=2 H=1 S=3, spt 8, heads 2: LBA 42, 43");
     regwr(2, 8'd2); regwr(3, 8'd3); regwr(4, 8'd2); regwr(5, 8'd0); regwr(6, 8'ha1);
-    regwr(7, 8'h20); wait_ready; check("sector requested", last_sector, 42);
+    n0 = nreq; regwr(7, 8'h20); wait_ready; check("sector requested", req_log[n0], 42);
     regrd(7, s); check("status DRQ|READY|SEEK", s & 8'hd8, 8'h58);
     for (i = 0; i < 256; i = i + 1) begin datard(w); if (w !== {pat(42, 2*i+1), pat(42, 2*i)}) begin
         if (errors < 5) $display("  FAIL sector 42 word %0d: %h want %h", i, w, {pat(42,2*i+1), pat(42,2*i)}); errors = errors + 1; end end
     $display("  ok   sector 42 read back");
-    wait_ready; check("second sector requested", last_sector, 43);
+    wait_ready; check("second sector requested", req_log[n0+1], 43);
     regrd(3, s); check("sector number advanced", s, 8'd4);
     for (i = 0; i < 256; i = i + 1) begin datard(w); if (w !== {pat(43, 2*i+1), pat(43, 2*i)}) begin
         if (errors < 10) $display("  FAIL sector 43 word %0d: %h", i, w); errors = errors + 1; end end
@@ -182,9 +191,9 @@ initial begin
     $display("[tb_ide] 16 heads: READ 2 at C=0 H=0 S=16 (spt 16) -> LBA 15 then head 1 sector 1 = LBA 16");
     regwr(2, 8'd16); regwr(6, 8'haf); regwr(7, 8'h91);          // spt 16, heads 16
     regwr(2, 8'd2); regwr(3, 8'd16); regwr(4, 8'd0); regwr(5, 8'd0); regwr(6, 8'ha0);
-    regwr(7, 8'h20); wait_ready; check("first LBA", last_sector, 15);
+    n0 = nreq; regwr(7, 8'h20); wait_ready; check("first LBA", req_log[n0], 15);
     for (i = 0; i < 256; i = i + 1) datard(w);
-    wait_ready; check("second LBA (head 1, not cylinder 1)", last_sector, 16);
+    wait_ready; check("second LBA (head 1, not cylinder 1)", req_log[n0+1], 16);
     for (i = 0; i < 256; i = i + 1) datard(w);
 
     $display("[tb_ide] write-protected: WRITE completes with ERROR and no card write");
@@ -209,6 +218,77 @@ initial begin
     wait_ready; check("write LBA for track 0 sector 1", last_sector, 0); check("one write", nwr, 1);
     regwr(2, 8'd1); regwr(3, 8'd1); regwr(4, 8'd0); regwr(5, 8'd0); regwr(6, 8'ha0);
     regwr(7, 8'h20); wait_ready; check("read-back LBA", last_sector, 0);
+
+    $display("[tb_ide] LBA28: head 0xE0, cyl 0x0102, sector 3, two sectors -> 0x010203, 0x010204");
+    regwr(2, 8'd2); regwr(3, 8'h03); regwr(4, 8'h02); regwr(5, 8'h01); regwr(6, 8'hE0);
+    n0 = nreq; regwr(7, 8'h20); wait_ready; check("LBA28 sector", req_log[n0], 32'h010203);
+    for (i = 0; i < 256; i = i + 1) datard(w);
+    wait_ready; check("LBA28 next sector", req_log[n0+1], 32'h010204);
+    regrd(3, s); check("LBA low byte advanced", s, 8'h04);
+    regrd(4, s); check("LBA cyl low kept", s, 8'h02);
+    for (i = 0; i < 256; i = i + 1) datard(w);
+    $display("[tb_ide] LBA28 carry: cyl 0x00FF, sector 0xFF, two sectors -> 0xFFFF, 0x10000");
+    regwr(2, 8'd2); regwr(3, 8'hFF); regwr(4, 8'hFF); regwr(5, 8'h00); regwr(6, 8'hE0);
+    n0 = nreq; regwr(7, 8'h20); wait_ready; check("LBA28 sector", req_log[n0], 32'h00FFFF);
+    for (i = 0; i < 256; i = i + 1) datard(w);
+    wait_ready; check("LBA28 carried into cyl high", req_log[n0+1], 32'h010000);
+    regrd(5, s); check("cyl high byte", s, 8'h01);
+    for (i = 0; i < 256; i = i + 1) datard(w);
+    $display("[tb_ide] LBA28 top nibble: head 0xE1 -> 0x1000000");
+    regwr(2, 8'd1); regwr(3, 8'h00); regwr(4, 8'h00); regwr(5, 8'h00); regwr(6, 8'hE1);
+    regwr(7, 8'h20); wait_ready; check("LBA28 bit 24", last_sector, 32'h1000000);
+    for (i = 0; i < 256; i = i + 1) datard(w);
+    $display("[tb_ide] CHS again after LBA: head 0xA0, C=0 H=0 S=1 -> 0");
+    regwr(2, 8'd1); regwr(3, 8'd1); regwr(4, 8'd0); regwr(5, 8'd0); regwr(6, 8'hA0);
+    regwr(7, 8'h20); wait_ready; check("CHS after LBA", last_sector, 0);
+    for (i = 0; i < 256; i = i + 1) datard(w);
+
+    $display("[tb_ide] read ahead: SET CONFIG spt 16 heads 4, READ 3 at C=3 H=0 S=1 -> 192, 193, 194");
+    regwr(2, 8'd16); regwr(6, 8'hA3); regwr(7, 8'h91);
+    regwr(2, 8'd3); regwr(3, 8'd1); regwr(4, 8'd3); regwr(5, 8'd0); regwr(6, 8'hA0);
+    n0 = nreq; regwr(7, 8'h20); wait_ready;
+    repeat (1500) @(posedge clk);
+    check("first fetched", req_log[n0], 192);
+    check("second fetched ahead before a word was drained, and no third", nreq, n0 + 2);
+    check("second is 193", req_log[n0+1], 193);
+    regrd(7, s); check("DRQ and not BUSY meanwhile", s & 8'h88, 8'h08);
+    for (i = 0; i < 256; i = i + 1) begin datard(w); if (w !== {pat(192, 2*i+1), pat(192, 2*i)}) begin
+        if (errors < 5) $display("  FAIL ahead 192 word %0d: %h", i, w); errors = errors + 1; end end
+    regrd(7, s); check("DRQ again at once after the drain", s & 8'h88, 8'h08);
+    repeat (1500) @(posedge clk);
+    check("third fetched ahead", nreq, n0 + 3); check("third is 194", req_log[n0+2], 194);
+    for (i = 0; i < 256; i = i + 1) begin datard(w); if (w !== {pat(193, 2*i+1), pat(193, 2*i)}) begin
+        if (errors < 10) $display("  FAIL ahead 193 word %0d: %h", i, w); errors = errors + 1; end end
+    regrd(7, s); check("DRQ for the third", s & 8'h88, 8'h08);
+    for (i = 0; i < 256; i = i + 1) begin datard(w); if (w !== {pat(194, 2*i+1), pat(194, 2*i)}) begin
+        if (errors < 15) $display("  FAIL ahead 194 word %0d: %h", i, w); errors = errors + 1; end end
+    regrd(7, s); check("done: DRQ dropped", s & 8'h08, 8'h00); regrd(2, s); check("count 0", s, 8'd0);
+    repeat (700) @(posedge clk); check("no fourth fetch", nreq, n0 + 3);
+    $display("[tb_ide] a READ arriving while a read-ahead is in flight: that result is discarded");
+    regwr(2, 8'd2); regwr(3, 8'd1); regwr(4, 8'd5); regwr(5, 8'd0); regwr(6, 8'hA0);   // C=5: 320 then 321 ahead
+    n0 = nreq; regwr(7, 8'h20); wait_ready;
+    regwr(2, 8'd1); regwr(3, 8'd2); regwr(4, 8'd6); regwr(5, 8'd0); regwr(6, 8'hA0);   // C=6 S=2: 385
+    regwr(7, 8'h20); wait_ready; repeat (1500) @(posedge clk);
+    check("the new sector was fetched last", req_log[nreq-1], 385);
+    for (i = 0; i < 256; i = i + 1) begin datard(w); if (w !== {pat(385, 2*i+1), pat(385, 2*i)}) begin
+        if (errors < 20) $display("  FAIL restart 385 word %0d: %h", i, w); errors = errors + 1; end end
+    regrd(7, s); check("single sector done", s & 8'h08, 8'h00);
+
+    $display("[tb_ide] the stall: HDD delay 8 = 2.5 PPU cycles a data read = 20 clk_25 on average, 256 reads ~5120 clocks");
+    delay = 6'd0;
+    regwr(2, 8'd1); regwr(3, 8'd1); regwr(4, 8'd7); regwr(5, 8'd0); regwr(6, 8'hA0);
+    regwr(7, 8'h20); wait_ready;
+    t0 = clkcnt; for (i = 0; i < 256; i = i + 1) datard(w); t1 = clkcnt; extra = t1 - t0;
+    delay = 6'd8;
+    regwr(2, 8'd1); regwr(3, 8'd2); regwr(4, 8'd7); regwr(5, 8'd0); regwr(6, 8'hA0);
+    regwr(7, 8'h20); wait_ready;
+    t0 = clkcnt; for (i = 0; i < 256; i = i + 1) begin datard(w); if (w !== {pat(449, 2*i+1), pat(449, 2*i)}) begin
+        if (errors < 25) $display("  FAIL stalled 449 word %0d: %h", i, w); errors = errors + 1; end end
+    t1 = clkcnt; extra = (t1 - t0) - extra;
+    if (extra < 4900 || extra > 5400) begin $display("  FAIL stall: %0d extra clocks over 256 reads, want ~5120", extra); errors = errors + 1; end
+    else $display("  ok   stall: %0d extra clocks over 256 reads", extra);
+    regrd(7, s); check("done after the stalled sector", s & 8'h08, 8'h00);
+    delay = 6'd0;
 
     $display("[tb_ide] %0d error(s)", errors);
     $finish;

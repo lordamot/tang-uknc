@@ -42,6 +42,10 @@ module sysctrl (
   output reg [15:0] system_hdd_cyl,
   // 'K' from the OSD: 1 = the IDE image is write-protected
   output reg        system_hdd_wprot,
+  // 'D' from the OSD: stretch of every IDE data-register read, ~25 us a
+  // sector per step - it sets the sample rate of a program that streams
+  // its sound out of the sector data (ide.v, Sep 2026)
+  output reg [5:0]  system_hdd_delay,
   output reg [3:0]  system_floppy_wprot
 );
 
@@ -78,6 +82,7 @@ always @(posedge clk) begin
       system_hdd_mode <= 2'd0;
       system_hdd_cyl <= 16'd0;
       system_hdd_wprot <= 1'b0;
+      system_hdd_delay <= 6'd30;    // 750 us a sector, the MCU's default too - found on the board
    end else begin
       int_ack <= 8'h00;
 
@@ -138,6 +143,7 @@ always @(posedge clk) begin
                     if(id == "C") system_hdd_cyl[7:0]  <= data_in;
                     if(id == "Y") system_hdd_cyl[15:8] <= data_in;
                     if(id == "K") system_hdd_wprot <= data_in[0];
+                    if(id == "D") system_hdd_delay <= data_in[5:0];
                 end
             end
 

@@ -22,10 +22,24 @@
 // reports with the geometry.  Net effect: the software always sees its
 // own view of the disk, whichever way the image is stored.
 //
-// Addressing is CHS, as the driver does it; the LBA sent to the SD path
-// is (cyl * heads + head) * spt + sector - 1, with spt and heads coming
-// from the image's first sector via the MCU and overridable by the SET
-// CONFIG command, exactly as in the emulator.  The cartridge exists only
+// Addressing is CHS, as the WD driver does it: the LBA sent to the SD
+// path is (cyl * heads + head) * spt + sector - 1, with spt and heads
+// coming from the image's first sector via the MCU and overridable by the
+// SET CONFIG command, exactly as in the emulator - or LBA28 when bit 6 of
+// the head register is set, {head[3:0], cyl, sector} taken as the sector
+// number straight (Sep 2026: blairecas/badapple addresses its video this
+// way, head register 0340, and the emulator it ships is UKNCBTL with
+// "LBA28 support" added for it; the stock Hard.cpp is CHS only and read
+// the wrong sectors, which on the board was coloured vertical stripes).
+// A multi-sector read in LBA mode counts the 28-bit number up and leaves
+// it in the registers.  A multi-sector read is also read AHEAD: the next
+// sector is fetched into a second bank while the software drains the
+// first, so a drain-then-wait loop sees DRQ again at once (Sep 2026;
+// a real drive's buffer does the same, and badapple takes its sound
+// samples out of the sector stream, so each wait was a gap in the
+// audio) - and every data-register read can be stretched by the OSD's
+// "HDD delay", which is how that demo's sample rate is set.  The
+// cartridge exists only
 // while a disk image is mounted (hdd_present): with none, the slot is
 // empty and the window times out as on a machine without the board.
 //
@@ -59,6 +73,7 @@ module ide(
     input      [15:0] geo_cyl,      // cylinders = file size / 512 / spt / heads, from the MCU
     input      [ 1:0] geo_mode,     // OSD override: 0 detected, 1 plain, 2 inverted
     input             wprot,        // OSD "HDD prot.": writes fail with ERROR, the card is untouched
+    input      [ 5:0] hdd_delay,    // OSD "HDD delay": stretch of a data read, ~25 us a sector per step (see the stall below)
 
     // the SD path, sd_card.v's request interface (clk_25)
     output reg        sd_rstart,
@@ -117,29 +132,57 @@ reg  [7:0]  bufoff  = 8'd0;          // word index 0..255
 reg         bwr     = 1'b0;
 reg  [7:0]  bwaddr  = 8'd0;
 reg  [15:0] bwdata  = 16'd0;
-wire [15:0] bdout;
 // The word the bus will read next is always addressed, so it is there
 // when the strobe comes; while a write is going on the port carries
 // that instead.
 wire [7:0]  badb = bwr ? bwaddr : bufoff;
 
-dbufsec16 buffer(
+// Two banks (Sep 2026): the bus drains bank `cur` while the SD side fills
+// the other with the next sector of a multi-sector read - see "read
+// ahead" below.  Writes and IDENTIFY use bank `cur` alone.
+reg         cur   = 1'b0;        // the bank the bus reads and writes
+reg         fbank = 1'b0;        // the bank the SD fetch fills
+wire [15:0] bdout0, bdout1;
+wire [ 7:0] outb0, outb1;
+wire [15:0] bdout = cur ? bdout1 : bdout0;
+assign sd_outbyte = cur ? outb1 : outb0;
+
+dbufsec16 buffer0(
     .clka  (clk),
     .cea   (1'b1),
     .reseta(1'b0),
     .ada   (sd_outaddr),
-    .wrea  (sd_outen),
+    .wrea  (sd_outen && fbank == 1'b0),
     .dina  (sd_inbyte),
-    .douta (sd_outbyte),
+    .douta (outb0),
     .ocea  (1'b0),
     .oceb  (1'b0),
     .clkb  (clk),
     .ceb   (1'b1),
     .resetb(1'b0),
-    .wreb  (bwr),
+    .wreb  (bwr && cur == 1'b0),
     .adb   (badb),
     .dinb  (bwdata),
-    .doutb (bdout)
+    .doutb (bdout0)
+);
+
+dbufsec16 buffer1(
+    .clka  (clk),
+    .cea   (1'b1),
+    .reseta(1'b0),
+    .ada   (sd_outaddr),
+    .wrea  (sd_outen && fbank == 1'b1),
+    .dina  (sd_inbyte),
+    .douta (outb1),
+    .ocea  (1'b0),
+    .oceb  (1'b0),
+    .clkb  (clk),
+    .ceb   (1'b1),
+    .resetb(1'b0),
+    .wreb  (bwr && cur == 1'b1),
+    .adb   (badb),
+    .dinb  (bwdata),
+    .doutb (bdout1)
 );
 
 //------------------------------------------------------------------------
@@ -159,6 +202,32 @@ localparam [3:0] S_IDLE = 4'd0, S_RD_LBA1 = 4'd1, S_RD_LBA2 = 4'd2, S_RD_REQ = 4
                  S_WR_WAIT = 4'd8, S_ID_FILL = 4'd9;
 reg  [3:0]  st = S_IDLE;
 reg  [23:0] lba_t = 24'd0;
+// read ahead: the bus wants the next sector (drained its own, or the
+// command just came) / the other bank already holds it / a READ came
+// while a fetch was in flight, so its result is thrown away / a WRITE's
+// buffer filled while a fetch was in flight
+reg         rd_pending = 1'b0, pf_valid = 1'b0, restart = 1'b0, wr_pending = 1'b0;
+reg         pf_bank = 1'b0;      // the bank the fetched sector sits in
+// The stall (Sep 2026): every read of the data register is acknowledged
+// hdd_delay x 0.3125 PPU cycles late on average - a phase accumulator in
+// 1/64 of a cycle carries the fraction from one read to the next - so a
+// program that streams its sound out of the sector data (badapple, 256
+// words a sector, 52 of them samples) is slowed uniformly, hdd_delay x
+// 25.6 us a sector, with no gap between sectors to modulate it.  Our
+// PPU runs that loop at 26.6 kHz in the emulator's model of it, where
+// the author's hardware gave "~24 kHz"; by that arithmetic 8 (205 us)
+// would be 24 kHz, but the board wanted 30 (750 us) - found by ear, and
+// the default now - which says our PPU runs this loop a good deal
+// faster than the emulator's, and the setting is the way to know.  A
+// per-sector hold
+// was tried first and heard as the highs going dull: 52 samples at the
+// full rate, then a 214 us hold, is amplitude modulation at 461 Hz.
+// The bus sees the ack only on its own clock, clk_25/8, so the stall is
+// dealt out in whole PPU cycles, 8 clk_25 each; the fraction dithers.
+reg  [12:0] stall_acc   = 13'd0;   // fraction of a PPU cycle owed, in 1/64
+reg  [ 6:0] stall_cnt   = 7'd0;    // clk_25 cycles still to wait on this read
+reg         stall_armed = 1'b0;    // this data read has had its stall dealt
+wire [12:0] stall_nxt   = stall_acc + {7'd0, hdd_delay} * 13'd20;
 reg  [8:0]  fill = 9'd0;
 assign sd_active = (st == S_RD_REQ) || (st == S_RD_WAIT) || (st == S_WR_REQ) || (st == S_WR_WAIT);
 
@@ -232,9 +301,21 @@ wire [15:0] numcyl = geo_cyl;
 wire        inv_eff  = (geo_mode == 2'd1) ? 1'b0 : (geo_mode == 2'd2) ? 1'b1 : geo_inv;
 wire [15:0] inv_mask = {16{inv_eff}};
 
-// next CHS after a sector, Hard.cpp NextSector()
+// LBA28 mode: bit 6 of the head register, then the sector number is the
+// register bytes themselves and no geometry is involved
+wire        lba_mode = curheadreg[6];
+wire [27:0] lba_cur  = {curheadreg[3:0], curcyl, cursector};
+wire [27:0] lba_nxt  = lba_cur + 28'd1;
+
+// next sector, Hard.cpp NextSector(): CHS, or the LBA counted up
 task next_sector;
     begin
+      if (lba_mode) begin
+        cursector       <= lba_nxt[7:0];
+        curcyl          <= lba_nxt[23:8];
+        curheadreg[3:0] <= lba_nxt[27:24];
+        curhead         <= lba_nxt[27:24];
+      end else begin
         // Hard.cpp NextSector(): sectors are 1-based, heads compared in full
         // width (a 4-bit compare wrapped the head after every sector on a
         // 16-head geometry - found 2 Sep 2026 while reading for another bug)
@@ -247,6 +328,7 @@ task next_sector;
                 curhead <= curhead + 4'd1;
         end else
             cursector <= cursector + 8'd1;
+      end
     end
 endtask
 
@@ -265,6 +347,16 @@ always @(posedge clk) begin
         sd_wstart   <= 1'b0;
         bufoff      <= 8'd0;
         sectorcount <= 9'd0;
+        cur         <= 1'b0;
+        fbank       <= 1'b0;
+        rd_pending  <= 1'b0;
+        pf_valid    <= 1'b0;
+        restart     <= 1'b0;
+        wr_pending  <= 1'b0;
+        pf_bank     <= 1'b0;
+        stall_acc   <= 13'd0;
+        stall_cnt   <= 7'd0;
+        stall_armed <= 1'b0;
         spt_r       <= geo_spt;
         heads_r     <= geo_heads;
         wbm_ack_o   <= 1'b0;
@@ -277,13 +369,35 @@ always @(posedge clk) begin
                 status <= (status & ~ST_BUSY) | ST_READY | ST_SEEK;
         end
 
+        // handing a fetched sector to the bus: it is in a bank and the bus
+        // wants it.  Then the bank just freed is filled with the next sector
+        // of the command while this one drains.
+        if (rd_pending && pf_valid) begin
+            rd_pending <= 1'b0;
+            pf_valid   <= 1'b0;
+            cur        <= pf_bank;
+            bufoff     <= 8'd0;
+            status     <= (status & ~ST_BUSY & ~ST_ERROR) | ST_DRQ | ST_SEEK;
+            if (sectorcount != 9'd0 && st == S_IDLE) begin
+                fbank <= ~pf_bank;
+                st    <= S_RD_LBA1;
+            end
+        end
+
         //----------------------------------------------------------------
         // The bus.  ack rises on the second clock of a strobe and stays
         // until the strobe drops.
         //----------------------------------------------------------------
+        if (stall_cnt != 7'd0) stall_cnt <= stall_cnt - 7'd1;
         if (!wbm_stb_i) begin
-            wbm_ack_o <= 1'b0;
-        end else if (ce && ce_old && !wbm_ack_o) begin
+            wbm_ack_o   <= 1'b0;
+            stall_armed <= 1'b0;
+        end else if (ce && ce_old && !wbm_ack_o && is_io && !wbm_wre_i && ridx == 3'd0 && status[3] && !stall_armed) begin
+            // a data read with data ready: deal it its stall, ack when that has run out
+            stall_armed <= 1'b1;
+            stall_cnt   <= {stall_nxt[9:6], 3'b000};
+            stall_acc   <= {7'd0, stall_nxt[5:0]};
+        end else if (ce && ce_old && !wbm_ack_o && (!stall_armed || stall_cnt == 7'd0)) begin
             wbm_ack_o <= 1'b1;
             if (!is_io) begin
                 wbm_dat_o <= rom_dout;                          // ROM read (writes ack and drop)
@@ -292,12 +406,13 @@ always @(posedge clk) begin
                 3'd0: begin                                      // DATA
                     wbm_dat_o <= bdout ^ inv_mask;
                     if (status[3]) begin
-                        if (bufoff == 8'd255) begin              // sector consumed
+                        if (bufoff == 8'd255) begin              // sector consumed: ContinueRead
                             bufoff <= 8'd0;
                             status <= status & ~ST_DRQ & ~ST_BUSY;
-                            if (sectorcount != 9'd0) begin      // ContinueRead -> next sector
-                                status <= (status & ~ST_DRQ) | ST_BUSY;
-                                st     <= S_RD_LBA1;
+                            if (pf_valid || sectorcount != 9'd0 || st != S_IDLE) begin
+                                rd_pending <= 1'b1;              // the next one: in the other bank, or on its way
+                                status     <= (status & ~ST_DRQ) | ST_BUSY;
+                                if (!pf_valid && st == S_IDLE) begin fbank <= ~cur; st <= S_RD_LBA1; end
                             end
                         end else
                             bufoff <= bufoff + 8'd1;
@@ -320,7 +435,8 @@ always @(posedge clk) begin
                     if (bufoff == 8'd255) begin                  // ContinueWrite
                         bufoff <= 8'd0;
                         status <= (status & ~ST_DRQ) | ST_BUSY;
-                        st     <= S_WR_LBA1;
+                        if (st == S_IDLE) st <= S_WR_LBA1;
+                        else              wr_pending <= 1'b1;    // a read-ahead is still in flight
                     end else
                         bufoff <= bufoff + 8'd1;
                 end
@@ -333,21 +449,27 @@ always @(posedge clk) begin
                 3'd7: if (wbm_sel_i[0]) begin                    // COMMAND
                     case (~wbm_dat_i[7:0])
                     CMD_READ, CMD_READ1: begin
-                        status <= (status | ST_BUSY) & ~ST_DRQ & ~ST_ERROR;
-                        st     <= S_RD_LBA1;
+                        status     <= (status | ST_BUSY) & ~ST_DRQ & ~ST_ERROR;
+                        rd_pending <= 1'b1;
+                        pf_valid   <= 1'b0;
+                        fbank      <= cur;
+                        if (st == S_IDLE) st <= S_RD_LBA1;
+                        else              restart <= 1'b1;       // a read-ahead of the last command is in flight
                     end
                     CMD_SETCFG: begin
                         spt_r   <= sectorcount[7:0];
                         heads_r <= {4'd0, curhead} + 8'd1;
                     end
                     CMD_WRITE, CMD_WRITE1: begin
-                        bufoff <= 8'd0;
-                        status <= (status | ST_DRQ) & ~ST_ERROR;     // a new command clears ERR, as on a drive
+                        bufoff   <= 8'd0;
+                        pf_valid <= 1'b0;
+                        status   <= (status | ST_DRQ) & ~ST_ERROR;   // a new command clears ERR, as on a drive
                     end
-                    CMD_IDENT: begin
-                        fill   <= 9'd0;
-                        status <= (status | ST_BUSY) & ~ST_DRQ;
-                        st     <= S_ID_FILL;
+                    CMD_IDENT: begin                                 // (clobbers a read-ahead in flight; none is at boot)
+                        fill     <= 9'd0;
+                        pf_valid <= 1'b0;
+                        status   <= (status | ST_BUSY) & ~ST_DRQ;
+                        st       <= S_ID_FILL;
                     end
                     default: ;
                     endcase
@@ -363,8 +485,13 @@ always @(posedge clk) begin
         S_IDLE: ;
         // read: LBA in two multiply stages, then the SD request
         S_RD_LBA1, S_WR_LBA1: begin
-            lba_t <= curcyl * heads_r + {20'd0, curhead};
-            st    <= (st == S_RD_LBA1) ? S_RD_LBA2 : S_WR_LBA2;
+            if (lba_mode) begin
+                sd_sector <= {4'd0, lba_cur};
+                st        <= (st == S_RD_LBA1) ? S_RD_REQ : S_WR_REQ;
+            end else begin
+                lba_t <= curcyl * heads_r + {20'd0, curhead};
+                st    <= (st == S_RD_LBA1) ? S_RD_LBA2 : S_WR_LBA2;
+            end
         end
         S_RD_LBA2, S_WR_LBA2: begin
             sd_sector <= lba_t * spt_r + {24'd0, cursector} - 32'd1;
@@ -378,12 +505,25 @@ always @(posedge clk) begin
             if (sd_rstart && sd_rbusy) begin sd_rstart <= 1'b0; st <= S_RD_WAIT; end
         end
         S_RD_WAIT: if (sd_rdone) begin                            // ReadSectorDone
-            status <= (status & ~ST_BUSY & ~ST_ERROR) | ST_DRQ | ST_SEEK;
-            error  <= ER_NONE;
-            bufoff <= 8'd0;
-            if (sectorcount != 9'd0) sectorcount <= sectorcount - 9'd1;
-            if (sectorcount > 9'd1) next_sector;
-            st <= S_IDLE;
+            if (restart) begin                                    // a newer READ: fetch its sector instead
+                restart <= 1'b0;
+                fbank   <= cur;
+                st      <= S_RD_LBA1;
+            end else begin
+                error <= ER_NONE;
+                if (sectorcount != 9'd0) sectorcount <= sectorcount - 9'd1;
+                if (sectorcount > 9'd1) next_sector;
+                // the sector is in fbank; the hand-over above gives it to the
+                // bus when it asks and the hold allows, and starts the read
+                // ahead of the next one into the bank that frees.  The demo
+                // that wanted this (badapple) pulls its sound samples out of
+                // the sector stream itself, so every wait was a hole in the
+                // audio.
+                pf_valid <= 1'b1;
+                pf_bank  <= fbank;
+                if (wr_pending) begin wr_pending <= 1'b0; st <= S_WR_LBA1; end
+                else            st <= S_IDLE;
+            end
         end
         S_WR_REQ: begin
             if (wprot) begin
