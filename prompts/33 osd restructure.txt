@@ -208,3 +208,15 @@ done
 ****
 
 Logged in as lordamot.  make release TAG=v1.0 hit a path bug of mine (../ in front of an absolute zip path), fixed, and then made https://github.com/lordamot/tang-uknc/releases/tag/v1.0 - title "UKNC Nano v1.0", notes from release/v1.0/README.md, assets bl616.bin, tang.fs and uknc-nano-v1.0.zip.  The Makefile fix is committed and pushed.
+
+now next.
+
+fill in changelog - features only
+
+update readme - add both ru/en - nice and easy, explain how to flash and features
+
+release 2.0 - squash all unpushed but ignore prompts directory. although, artefact for release 2.0.0 alph should contain bitstream, bl fw and instructions
+
+****
+
+CHANGELOG.md: 2.0.0 alpha as features only - the machine, the menu, for builders - and a 1.0 line for the original.  README.md rewritten, Russian then English: what it does, what you need with the pinout, how to flash both boards, how to use it, pointers to the howtos.  release/v2.0.0-alpha/ with tang.fs, bl616.bin (the pair on the board) and a README that is the file table plus the same instructions.  One commit 0db825a for all of it, prompts/ left out, pushed with the tag v2.0.0-alpha; make release made https://github.com/lordamot/tang-uknc/releases/tag/v2.0.0-alpha with the three assets, marked pre-release so v1.0 stays "latest" until a non-alpha 2.x.  This prompts record goes in its own commit after.
