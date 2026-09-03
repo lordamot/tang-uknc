@@ -18,6 +18,7 @@ tang/     the FPGA design      - make bitstream  (gw_sh, headless Gowin)
 mnano/    the BL616 firmware   - make fw
 bin/      the two shipped binaries, both rebuilt from these sources
 sim/      testbench, SDRAM model and the stand-ins for the vendor IP
+soft/     RT-11 base disk and test programs for the machine - make soft-test-image
 tools/    the fetched toolchain - make toolchain, ~8 GB, not committed
 ```
 
@@ -53,6 +54,8 @@ are one file), `.claude/docs/mcu.md` (the BL616 firmware, the SPI protocol,
 the menu, the keyboard table), `.claude/docs/build.md` (both toolchains, the
 Makefile, what lint and simulation do and do not cover, flashing),
 `.claude/docs/tools.md` (`tools/`, `bin2mif` and the ROM data),
+`.claude/docs/soft.md` (the RT-11 base disk, the test programs, and how
+an RT-11 program reaches the PPU-side hardware),
 `.claude/docs/progress.md` (state of the port, known defects, open
 questions).  Follow `.claude/rules/guideline.md`, `.claude/rules/git.md`
 and `.claude/rules/timing.md` - the last one is what keeps a re-layout
@@ -433,6 +436,28 @@ from breaking the start screen or the floppy again.
   passing, and keep the shadow per-port, because the CPU and PPU have
   separate address spaces.  When the machine misbehaves in simulation,
   suspect `sim/` before `tang/src/`.
+- **An RT-11 program reaches the AYs, the Covox and the clock only by
+  running code on the PPU**, through the ROM's channel-2 protocol
+  (allocate / copy / call / release), and that code has to be
+  position-independent, run at priority 7, and touch a probed address
+  only with a one-word register-operand instruction under a trap-4
+  handler.  `soft/src/uknc.mac` is the worked form and
+  `.claude/docs/soft.md` the account.  Three things that cost a run each
+  in Sep 2026: macro11's transfer address is the **GSD type-3 entry**,
+  not RLD type 7 (a location-counter definition that happens to say
+  1000 - the sibling project's linker read it as the start and was only
+  right by accident); PC-relative operands are left for the linker as
+  RLD type-3 entries, so a linker that copies TXT records alone reads
+  every variable from the wrong place; an RT-11 file name is six
+  characters, so `COVOXTST.SAV` cannot exist - it is `COVTST.SAV`; and
+  a `.SAV` needs the memory-usage bitmap at 360 of block 0 (bit 7 of
+  byte 360 = block 0), because `R NAME` loads the file whole but a bare
+  `NAME` at the prompt loads by that map, and with it empty the start
+  address is jumped to over the bootstrap still at 0-777 - the board's
+  `?BOOT-U-I/O error` on `RTCTST` against a working `R RTCTST`.  Test
+  in UKNCBTL first: its register log for the AY shows in one line what a
+  WAV only hints at, and `soft.md` says how to give it the Covox and
+  the Kakave+ words it lacks.
 - **`prompts/` is a transcript, not context.**  Never read it at the start
   of a session and never treat anything in it as a standing instruction -
   an old prompt in there is not a current one.  It is in git so the record

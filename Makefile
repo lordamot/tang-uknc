@@ -18,6 +18,8 @@
 #   make mif         ROM images -> build/mif/*.hex for the sim models
 #   make flash-fpga  openFPGALoader the shipped bitstream to SRAM
 #   make flash-mcu   flash the firmware over UART (COMX=/dev/ttyACM0)
+#   make soft        assemble the test programs in soft/src -> soft/*.SAV
+#   make soft-test-image  RT-11 + the test programs -> build/RT11TST.DSK
 #   make clean       remove build/ and sim/out/
 
 ROOT     := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
@@ -97,12 +99,12 @@ FW_BOARD := bl616dk -DCMAKE_C_FLAGS=-DM0S_DOCK=1 -DCONFIG_BT_STACK_CLI=0
 FW_OUT   := mnano/build/build_out/misterynano_fw_bl616.bin
 
 .PHONY: all toolchain lint sim wave frames fw mif clean bitstream \
-        flash-fpga flash-fpga-flash flash-mcu help
+        flash-fpga flash-fpga-flash flash-mcu help soft soft-test-image
 
 all: lint
 
 help:
-	@sed -n '2,20p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \?//'
+	@sed -n '2,22p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \?//'
 
 #-----------------------------------------------------------------------
 # Toolchain
@@ -344,6 +346,48 @@ sdarb-test: $(VERILATOR)
 	  --top-module tb_sdarb -Mdir $(BUILD)/sim/sdarb -o tb_sdarb \
 	  sim/tb/tb_sdarb.v tang/src/ide/sd_arbiter.v >/dev/null
 	$(BUILD)/sim/sdarb/tb_sdarb
+
+#-----------------------------------------------------------------------
+# Software for the machine: soft/
+#-----------------------------------------------------------------------
+# soft/BASERT11.DSK is RT-11 V05.04 SJ alone - the monitor, the floppy
+# and terminal handlers, PIP, DUP, DIR, DATE, SYS and RESORC, plus the
+# two-block UCL.SAV that turns a mistyped command into a message - made
+# from build/moutst.dsk by tools/rt11fs.py new, which keeps every file
+# at its original block so the boot block stays right, and one put.
+# soft/*.SAV are the test programs, MOUTST.SAV lifted from that same disk
+# and the other three assembled from soft/src/ (make soft, needs the
+# macro11 that make toolchain fetches).  soft-test-image puts them all on
+# a copy of the base disk: build/RT11TST.DSK, ready for the SD card.
+MACRO11  := $(TOOLS)/macro11/macro11
+SOFTSRC  := aytest covtst rtctst
+SOFTSAVS := $(foreach s,$(SOFTSRC),soft/$(shell echo $(s) | tr a-z A-Z).SAV)
+SOFTALL  := soft/MOUTST.SAV $(SOFTSAVS)
+
+soft: $(SOFTSAVS)
+
+$(BUILD)/soft/%.obj: soft/src/%.mac soft/src/uknc.mac
+	@test -x $(MACRO11) || { \
+	  echo "macro11 missing - run: make toolchain" >&2; exit 1; }
+	@mkdir -p $(BUILD)/soft
+	cd soft/src && $(MACRO11) -o $(abspath $@) -l $(abspath $(BUILD)/soft/$*.lst) $*.mac
+
+# soft/AYTEST.SAV from build/soft/aytest.obj: make's pattern rules cannot
+# change case, so one rule per program.
+define SOFT_LINK
+soft/$(shell echo $(1) | tr a-z A-Z).SAV: $(BUILD)/soft/$(1).obj $(TOOLS)/savlink.py
+	$(PYTHON) $(TOOLS)/savlink.py $$< $$@
+endef
+$(foreach s,$(SOFTSRC),$(eval $(call SOFT_LINK,$(s))))
+
+soft-test-image: $(BUILD)/RT11TST.DSK
+
+$(BUILD)/RT11TST.DSK: soft/BASERT11.DSK $(SOFTALL) $(TOOLS)/rt11fs.py
+	@mkdir -p $(BUILD)
+	cp soft/BASERT11.DSK $@
+	@for f in $(SOFTALL); do \
+	  $(PYTHON) $(TOOLS)/rt11fs.py put $@ $$(basename $$f) $$f || exit 1; done
+	$(PYTHON) $(TOOLS)/rt11fs.py ls $@
 
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out

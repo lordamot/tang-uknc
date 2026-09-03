@@ -14,7 +14,8 @@ openFPGALoader), CMake, Ninja, the T-Head RISC-V GCC, the Bouffalo SDK and
 **Gowin EDA Education**, which is the half that builds the bitstream.
 `tools/env.sh` puts the same set on `PATH` for use by hand.
 
-What *is* committed is the six scripts:
+What *is* committed is a handful of scripts (each force-added past the
+`/tools/` ignore line):
 
 | script | what |
 |---|---|
@@ -23,6 +24,13 @@ What *is* committed is the six scripts:
 | `gowin_tcl.py` | emits the `gw_sh` build script, from the same `.gprj` |
 | `mif.py` | converts between flat binaries, `.mif` and `$readmemh` hex |
 | `sim_patch.py` | Icarus-compatible copies of the sources it cannot parse |
+| `rt11fs.py` | RT-11 volumes: `ls`, `get`, `put`, `rm`, and `new` for a base disk that keeps its files in place |
+| `savlink.py` | one absolute MACRO-11 object -> RT-11 `.SAV`, RLD applied, transfer address from the GSD, memory bitmap at 360 |
+
+`rt11fs.py` and `savlink.py` are the `soft/` side (`.claude/docs/soft.md`);
+`make toolchain` also clones and builds **macro11** (shattered's) into
+`tools/macro11/` for `make soft`, and that is the only assembler this
+tree needs.
 
 `srcs.py` is the one that matters most: the Gowin project file is the
 source of truth for what gets built, so lint and simulation read it rather

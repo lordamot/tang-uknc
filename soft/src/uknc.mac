@@ -1,0 +1,291 @@
+; uknc.mac - what the test programs on soft/ share: the RT-11 requests
+; they use, the channel-2 exchange that loads and runs code on the
+; peripheral processor, a mailbox in CPU memory the two sides talk
+; through, and tick-clock delays.
+;
+; Included with  .INCLUDE uknc.mac  AFTER the program's .ASECT and
+; . = 1000 (tools/savlink.py links nothing else, and an include placed
+; before them assembles into the relocatable section at 0).  The program defines its
+; PPU code between PPUBEG and PPUEND and calls PPLOAD once, PPRUN per
+; request, PPFREE at the end.
+;
+; How code gets onto the PPU (the ROM's channel-2 protocol, as KKVTST.MAC
+; in build/rtc_kkve/ uses it - that program ran on a real machine):
+;   the CPU writes a two-word message {address of block, 177777} into
+;   channel 2 (data 176676, status 176674 bit 7 = ready), the ROM reads
+;   the block through its window into CPU memory and does what byte 1
+;   says: 1 allocate PPU memory (PPLEN words, PPU address returned in
+;   PPAPP), 20 copy PPLEN words from CPU PPACP to PPU PPAPP, 30 call the
+;   code at PPAPP, 2 release it.  Byte 0 is the result, 0 = done.
+;
+; The PPU code is PC-relative (macro11's default for a label operand),
+; never  #label  for anything inside it, because it runs at whatever
+; address the ROM gave it.  Addresses on the CPU side are constants: the
+; PPU reaches CPU memory through 177010 (address) and 177014 (word),
+; where the address is the CPU byte address divided by two - the CPU's
+; RAM is planes 1 and 2 of the display memory, low bytes in one, high in
+; the other, and the window addresses a plane byte.  UKNCBTL's Memory.cpp
+; and KKVTST agree on that.
+;
+; Nothing here runs on the PPU with interrupts on: PPU entry raises the
+; priority to 7 for the whole request, because the ROM's own interrupt
+; handlers use the same window register.
+
+	.ENABL	LC
+
+;----------------------------------------------------------------------
+; RT-11 programmed requests, spelled out so SYSMAC.SML is not needed
+;----------------------------------------------------------------------
+	.MACRO	.PRINT	S		; ASCIZ at S; ends in 200 = no CRLF
+	MOV	S,R0
+	EMT	351
+	.ENDM
+	.MACRO	.EXIT
+	EMT	350
+	.ENDM
+	.MACRO	.TTYOU			; character in R0
+	EMT	341
+	.ENDM
+	.MACRO	.TTINR			; C=1 if none (JSW bit 12 set)
+	EMT	340
+	.ENDM
+
+JSW	= 44
+TTSPC$	= 10000			; .TTINR returns instead of waiting
+CR	= 15
+LF	= 12
+
+;----------------------------------------------------------------------
+; Channel 2 exchange block
+;----------------------------------------------------------------------
+PPMSG:	.WORD	PPARR		; where the block is
+	.WORD	177777		; end of message
+PPARR:	.BYTE	0		; result, 0 = ok
+PPCMD:	.BYTE	0		; 1 allocate, 2 release, 20 write, 30 run
+	.WORD	32		; device: PPU memory
+PPAPP:	.WORD	0		; PPU address, from allocate
+PPACP:	.WORD	0		; CPU address, for write
+PPLEN:	.WORD	0		; words
+
+; The mailbox.  MBOX is the request, MDONE goes 0 -> 1 when the PPU has
+; finished it, MARG carries arguments in and results out.
+MBOX:	.WORD	0
+MDONE:	.WORD	0
+MARG:	.BLKW	24.		; MARG/2 is its window address on the PPU
+
+; Send the message.  Four bytes, each after ready; the wait after the
+; last is what KKVTST does and it lets the ROM take the message before
+; the block is looked at again.
+PPSEND:	MOV	R0,-(SP)
+	MOV	R1,-(SP)
+	MOV	#PPMSG,R0
+	MOV	#5,R1
+	BR	20$
+10$:	MOVB	(R0)+,@#176676
+20$:	TSTB	@#176674
+	BPL	20$
+	SOB	R1,10$
+	MOV	(SP)+,R1
+	MOV	(SP)+,R0
+	RETURN
+
+; Load the PPU code: R4 = its CPU address, R5 = its length in words.
+; Returns C=1 if the ROM would not give the memory.
+PPLOAD:	MOVB	#1,PPCMD
+	MOV	R5,PPLEN
+	CALL	PPSEND
+	TSTB	PPARR
+	BEQ	10$
+	SEC
+	RETURN
+10$:	MOVB	#20,PPCMD
+	MOV	R5,PPLEN
+	MOV	R4,PPACP
+	CALL	PPSEND
+	CLC
+	RETURN
+
+; Run the PPU code for request R0, then wait up to R1 ticks for MDONE.
+; C=1 on a timeout.
+PPRUN:	MOV	R0,MBOX
+	CLR	MDONE
+	MOVB	#30,PPCMD
+	CALL	PPSEND
+	CALL	TICK0
+10$:	TST	MDONE
+	BNE	20$
+	CALL	TICKS
+	CMP	R0,R1
+	BLO	10$
+	SEC
+	RETURN
+20$:	CLC
+	RETURN
+
+PPFREE:	MOVB	#2,PPCMD
+	CALL	PPSEND
+	RETURN
+
+;----------------------------------------------------------------------
+; The 50 Hz tick clock through .GTIM
+;----------------------------------------------------------------------
+GTAREA:	.BYTE	0,21
+	.WORD	TIME
+TIME:	.BLKW	2		; high word first
+TICK0V:	.WORD	0
+
+; remember now
+TICK0:	MOV	R0,-(SP)
+	MOV	#GTAREA,R0
+	EMT	375
+	MOV	TIME+2,TICK0V
+	MOV	(SP)+,R0
+	RETURN
+
+; R0 = ticks since TICK0
+TICKS:	MOV	#GTAREA,R0
+	EMT	375
+	MOV	TIME+2,R0
+	SUB	TICK0V,R0
+	RETURN
+
+; wait R0 ticks
+DELAY:	MOV	R1,-(SP)
+	MOV	R0,R1
+	CALL	TICK0
+10$:	CALL	TICKS
+	CMP	R0,R1
+	BLO	10$
+	MOV	(SP)+,R1
+	RETURN
+
+; wait R0 ticks or a keypress; C=1 and the key in R0 if one came
+KDELAY:	MOV	R1,-(SP)
+	MOV	R0,R1
+	CALL	TICK0
+10$:	.TTINR
+	BCC	20$
+	CALL	TICKS
+	CMP	R0,R1
+	BLO	10$
+	CLC
+	BR	30$
+20$:	SEC
+30$:	MOV	(SP)+,R1
+	RETURN
+
+;----------------------------------------------------------------------
+; Text
+;----------------------------------------------------------------------
+; R0 = 0..99 as two digits
+PRDEC2:	MOV	R1,-(SP)
+	CLR	R1
+10$:	CMP	R0,#10.
+	BLO	20$
+	SUB	#10.,R0
+	INC	R1
+	BR	10$
+20$:	MOV	R0,-(SP)
+	MOV	R1,R0
+	ADD	#'0,R0
+	.TTYOU
+	MOV	(SP)+,R0
+	ADD	#'0,R0
+	.TTYOU
+	MOV	(SP)+,R1
+	RETURN
+
+; R0 = 0..9999 as four digits
+PRDEC4:	MOV	R1,-(SP)
+	CLR	R1
+10$:	CMP	R0,#100.
+	BLO	20$
+	SUB	#100.,R0
+	INC	R1
+	BR	10$
+20$:	MOV	R0,-(SP)
+	MOV	R1,R0
+	CALL	PRDEC2
+	MOV	(SP)+,R0
+	CALL	PRDEC2
+	MOV	(SP)+,R1
+	RETURN
+
+; R0 = a word in octal
+PROCT:	MOV	R1,-(SP)
+	MOV	R2,-(SP)
+	MOV	R0,R1
+	MOV	#6,R2
+	CLR	R0
+	ROL	R1
+	ROL	R0
+	BR	20$
+10$:	CLR	R0
+	ROL	R1
+	ROL	R0
+	ROL	R1
+	ROL	R0
+	ROL	R1
+	ROL	R0
+20$:	ADD	#'0,R0
+	.TTYOU
+	SOB	R2,10$
+	MOV	(SP)+,R2
+	MOV	(SP)+,R1
+	RETURN
+
+CRLF:	MOV	#CR,R0
+	.TTYOU
+	MOV	#LF,R0
+	.TTYOU
+	RETURN
+
+;----------------------------------------------------------------------
+; PPU side.  These expand inside the program's PPU code, so they are
+; PC-relative like the rest of it.
+;----------------------------------------------------------------------
+; Entry: the priority up, R0 = the request from MBOX.  PPU registers
+; are the ROM's; everything is saved.
+	.MACRO	PPENTRY
+	MFPS	-(SP)
+	MTPS	#340
+	MOV	R1,-(SP)
+	MOV	R2,-(SP)
+	MOV	R3,-(SP)
+	MOV	R4,-(SP)
+	MOV	R5,-(SP)
+	MOV	#MBOX/2,@#177010
+	MOV	@#177014,R0
+	.ENDM
+
+; Exit: MDONE = 1, registers and priority back, return to the ROM.
+	.MACRO	PPLEAVE
+	MOV	#MDONE/2,@#177010
+	MOV	#1,@#177014
+	MOV	(SP)+,R5
+	MOV	(SP)+,R4
+	MOV	(SP)+,R3
+	MOV	(SP)+,R2
+	MOV	(SP)+,R1
+	MTPS	(SP)+
+	RETURN
+	.ENDM
+
+; A trap-4 handler for probing an address.  The program supplies it,
+; inside its PPU code, as
+;	PPTRP:	INC	PPTRPF
+;		RTI
+;	PPTRPF:	.WORD	0
+; (macro11 will not define a label inside a macro).  Vector 4 is in the
+; PPU's RAM.  Only one-word instructions with register operands touch a
+; probed address, so that the PC the trap leaves is the next instruction.
+	.MACRO	PPTRAP
+	MOV	@#4,-(SP)
+	MOV	PC,R1
+	ADD	#PPTRP-.,R1
+	MOV	R1,@#4
+	CLR	PPTRPF
+	.ENDM
+	.MACRO	PPUNTRAP
+	MOV	(SP)+,@#4
+	.ENDM

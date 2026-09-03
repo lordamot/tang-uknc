@@ -1,0 +1,196 @@
+	.TITLE	COVTST - the two 8-bit DACs an УКНЦ program can find
+;
+; Looks for a Covox at both places the players look - the Aberrant
+; map's ЦАП at 177372 and port A of the printer port at 177100 - by
+; touching each under a trap-4 handler on the PPU, says which answered,
+; and plays four notes of a sine through each one that did, naming the
+; port as it goes.
+;
+; The samples are made on the PPU: a 256-byte sine, a 16-bit phase
+; that a step is added to per sample, the high byte indexing the table.
+; The rate is a busy loop, so it is what this PPU's instruction timing
+; makes it - roughly 8 kHz in UKNCBTL, and the board's PPU is known to
+; run this kind of loop faster (.claude/docs/platform.md, the HDD
+; delay), so the notes come out higher there.  This is a test that the
+; port carries sound, not a tuner.
+;
+; The printer port answers on every machine, since it is a register in
+; the ВП1-120; whether a DAC hangs on it is something only ears can
+; tell, and on the Tang Nano build there is none (platform.md).
+;
+	.ASECT
+	. = 1000
+	.INCLUDE uknc.mac
+
+PROBE	= 1			; PPU request: which ports answer -> MARG
+PLAY	= 2			; PPU request: MARG = port, step, samples, pad
+
+NEWCVX	= 177372
+LPTCVX	= 177100
+
+PPWAIT	= 250.			; ticks to wait for a PLAY (a note is ~0.5 s)
+
+START:	MOV	#STACK,SP
+	.PRINT	#HELLO
+	MOV	#PPUBEG,R4
+	MOV	#<PPUEND-PPUBEG>/2,R5
+	CALL	PPLOAD
+	BCC	10$
+	.PRINT	#NOMEM
+	.EXIT
+
+10$:	MOV	#PROBE,R0
+	MOV	#50.,R1
+	CALL	PPRUN
+	BCS	NOPPU
+	MOV	MARG,FOUND
+	.PRINT	#NEWMSG
+	MOV	#YES,R0
+	BIT	#1,FOUND
+	BNE	20$
+	MOV	#NO,R0
+20$:	.PRINT	R0
+	.PRINT	#LPTMSG
+	MOV	#YES,R0
+	BIT	#2,FOUND
+	BNE	30$
+	MOV	#NO,R0
+30$:	.PRINT	R0
+
+	BIT	#1,FOUND
+	BEQ	40$
+	.PRINT	#PLNEW
+	MOV	#NEWCVX,R0
+	CALL	TUNE
+	BCS	NOPPU
+40$:	BIT	#2,FOUND
+	BEQ	50$
+	.PRINT	#PLLPT
+	MOV	#LPTCVX,R0
+	CALL	TUNE
+	BCS	NOPPU
+50$:	TST	FOUND
+	BNE	60$
+	.PRINT	#NONE
+60$:	.PRINT	#DONE
+	BR	OUT
+NOPPU:	.PRINT	#TIMOUT
+OUT:	CALL	PPFREE
+	.EXIT
+
+; four notes through the port in R0.  C=1 if the PPU stopped answering.
+TUNE:	MOV	R0,MARG
+	MOV	#NOTES,R2
+	MOV	#4,R3
+10$:	MOV	(R2)+,MARG+2	; phase step
+	MOV	#4000.,MARG+4	; samples
+	MOV	#12.,MARG+6	; pad loop
+	MOV	#PLAY,R0
+	MOV	#PPWAIT,R1
+	CALL	PPRUN
+	BCS	20$
+	SOB	R3,10$
+	CLC
+20$:	RETURN
+
+FOUND:	.WORD	0
+; steps for C5, E5, G5, C6 at 8 kHz: f * 65536 / 8000
+NOTES:	.WORD	4285.,5399.,6422.,8571.
+
+HELLO:	.ASCIZ	/COVTST - 8-bit DAC at 177372 (Aberrant) and 177100 (printer port A)/
+NOMEM:	.ASCIZ	/?COVTST-F-PPU memory allocate failed/
+TIMOUT:	.ASCIZ	/?COVTST-F-PPU did not answer/
+NEWMSG:	.ASCII	/Covox at 177372: /<200>
+LPTMSG:	.ASCII	/Printer port at 177100: /<200>
+YES:	.ASCIZ	/present/
+NO:	.ASCIZ	/absent (bus timeout)/
+PLNEW:	.ASCIZ	/Playing C E G C through 177372.../
+PLLPT:	.ASCIZ	/Playing C E G C through 177100.../
+NONE:	.ASCIZ	/No DAC answered; nothing played./
+DONE:	.ASCIZ	/COVTST done./
+	.EVEN
+
+;----------------------------------------------------------------------
+; PPU code
+;----------------------------------------------------------------------
+PPUBEG:	PPENTRY
+	CMP	R0,#PLAY
+	BEQ	PLAYER
+	CMP	R0,#PROBE
+	BNE	LEAVE
+	; which ports answer
+	PPTRAP
+	CLR	R5
+	MOV	#NEWCVX,R3
+	CLR	PPTRPF
+	TST	(R3)
+	TST	PPTRPF
+	BNE	10$
+	BIS	#1,R5
+10$:	MOV	#LPTCVX,R3
+	CLR	PPTRPF
+	TST	(R3)
+	TST	PPTRPF
+	BNE	20$
+	BIS	#2,R5
+20$:	PPUNTRAP
+	MOV	#MARG/2,@#177010
+	MOV	R5,@#177014
+LEAVE:	PPLEAVE
+
+PPTRP:	INC	PPTRPF
+	RTI
+PPTRPF:	.WORD	0
+
+; MARG: port, step, samples, pad.  Middle of the table first and last,
+; so the DAC is not thrown across its range at the ends.
+PLAYER:	MOV	#MARG/2,@#177010
+	MOV	@#177014,R1	; port
+	MOV	#MARG/2+1,@#177010
+	MOV	@#177014,R3	; step
+	MOV	#MARG/2+2,@#177010
+	MOV	@#177014,R4	; samples
+	MOV	#MARG/2+3,@#177010
+	MOV	@#177014,R2	; pad
+	MOV	R2,PAD
+	MOV	PC,R5
+	ADD	#SINE-.,R5	; the table, wherever the code landed
+	CLR	R2		; phase
+	MOVB	#200,(R1)
+30$:	ADD	R3,R2
+	MOV	R2,R0
+	SWAB	R0
+	BIC	#177400,R0
+	ADD	R5,R0
+	MOVB	(R0),(R1)
+	MOV	PAD,R0
+40$:	SOB	R0,40$
+	SOB	R4,30$
+	MOVB	#200,(R1)
+	BR	LEAVE
+
+PAD:	.WORD	0
+; 128 + 100 sin(2 pi i / 256), i = 0..255
+SINE:	.BYTE	128.,130.,133.,135.,138.,140.,143.,145.,148.,150.,152.,155.,157.,159.,162.,164.
+	.BYTE	166.,169.,171.,173.,175.,177.,179.,181.,184.,186.,188.,190.,191.,193.,195.,197.
+	.BYTE	199.,200.,202.,204.,205.,207.,208.,210.,211.,212.,214.,215.,216.,217.,218.,219.
+	.BYTE	220.,221.,222.,223.,224.,224.,225.,226.,226.,227.,227.,227.,228.,228.,228.,228.
+	.BYTE	228.,228.,228.,228.,228.,227.,227.,227.,226.,226.,225.,224.,224.,223.,222.,221.
+	.BYTE	220.,219.,218.,217.,216.,215.,214.,212.,211.,210.,208.,207.,205.,204.,202.,200.
+	.BYTE	199.,197.,195.,193.,191.,190.,188.,186.,184.,181.,179.,177.,175.,173.,171.,169.
+	.BYTE	166.,164.,162.,159.,157.,155.,152.,150.,148.,145.,143.,140.,138.,135.,133.,130.
+	.BYTE	128.,126.,123.,121.,118.,116.,113.,111.,108.,106.,104.,101.,99.,97.,94.,92.
+	.BYTE	90.,87.,85.,83.,81.,79.,77.,75.,72.,70.,68.,66.,65.,63.,61.,59.
+	.BYTE	57.,56.,54.,52.,51.,49.,48.,46.,45.,44.,42.,41.,40.,39.,38.,37.
+	.BYTE	36.,35.,34.,33.,32.,32.,31.,30.,30.,29.,29.,29.,28.,28.,28.,28.
+	.BYTE	28.,28.,28.,28.,28.,29.,29.,29.,30.,30.,31.,32.,32.,33.,34.,35.
+	.BYTE	36.,37.,38.,39.,40.,41.,42.,44.,45.,46.,48.,49.,51.,52.,54.,56.
+	.BYTE	57.,59.,61.,63.,65.,66.,68.,70.,72.,75.,77.,79.,81.,83.,85.,87.
+	.BYTE	90.,92.,94.,97.,99.,101.,104.,106.,108.,111.,113.,116.,118.,121.,123.,126.
+PPUEND:
+
+; the stack, above everything it could overwrite
+	.BLKW	128.
+STACK:	.WORD	0
+
+	.END	START

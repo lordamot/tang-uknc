@@ -37,6 +37,8 @@ make covox-test  the Covox at 177372 beside the Aberrant: writes, read-back, no 
 make ide-test    the IDE cartridge against a stand-in card
 make sdarb-test  the SD path arbiter between floppies and cartridge
 make ide-rom     regenerate src/ide/ide_rom.v from tang/rom/ide_wdromv0110.bin
+make soft        assemble the test programs in soft/src -> soft/*.SAV (macro11)
+make soft-test-image  RT-11 base disk + the test programs -> build/RT11TST.DSK
 make wave        the same, dumping a VCD, then open it (WAVE_MS=2)
 make frames      the same, writing video frames as .ppm (needs 45 ms+)
 make fw          build the BL616 firmware -> build/fw/bl616.bin

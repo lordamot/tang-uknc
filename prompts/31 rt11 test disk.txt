@@ -1,0 +1,64 @@
+cat you create base image for RT11 5.04 SJ in DSK format? Pure RT11, no hdd or mouse drivers in it. And following software: MOUTST.SAV, COVOXTST.SAV (create your own to test playing something through COVOX - both ports separate one and LPT should be checked for COVOX availability), AYTEST.sav (create your own - it should send tone with vibrato in following sequence: AY1 A, B, C, chord AY1 A+B+C, AY2 A, B, C, chord AY2 A+B+C, AY3 A, B, C, chord AY3 A+B+C - and indicate by text what is currently playing), RTCTST.SAV (create your own - should display current RTC clock time if RTC available). Base DSK should be placed under ./soft/BASERT11.DSK, SAVs there also. There should be make soft-test-image command which assembles resulting DSK as ./build/RT11TST.DSK
+
+****
+
+Done. The base disk, the four programs and the make target are in place, and everything was run in UKNCBTL, not on a board.
+
+One name had to change: an RT-11 file name is six characters, so COVOXTST.SAV cannot exist on the disk. The Covox test is COVTST.SAV.
+
+What is where
+
+soft/BASERT11.DSK - RT-11 V05.04 SJ alone, from build/moutst.dsk: RT11SJ.SYS, SWAP.SYS, TT.SYS, MZ.SYS, STARTS.COM, PIP, DUP, DIR, DATE, SYS, RESORC. Every file at its original block, so the boot block still points at the monitor; the rest of the disk is zeroed. It boots to "RT-11SJ (Y) V05.04 G" in the emulator.
+soft/MOUTST.SAV - lifted from that disk.
+soft/AYTEST.SAV, COVTST.SAV, RTCTST.SAV - assembled from soft/src/*.mac; sources committed beside them.
+make soft - reassembles them (macro11, now part of make toolchain).
+make soft-test-image - copies the base disk and adds the four SAVs: build/RT11TST.DSK.
+
+How the programs work. All three devices are on the PPU bus, so each program pushes a few dozen words of PPU code across with the ROM's channel-2 protocol (allocate, copy, call, release - the same mechanism the Kakave+ test KKVTST uses, which ran on real hardware) and talks to it through a mailbox in CPU memory. The shared part is soft/src/uknc.mac; .claude/docs/soft.md is the account.
+
+AYTEST plays 440 Hz on chip 1 channel A, 554 on B, 659 on C, the three together (A major), then chips 2 and 3, 1.5 s each with an eight-step vibrato of plus or minus 4 in the period, naming each voice on the terminal; any key stops it.
+COVTST probes 177372 (the Aberrant DAC) and 177100 (printer port A) under a trap-4 handler on the PPU, prints present or absent for each, and plays C E G C of a sine through each one that answered.
+RTCTST probes 177400 and 177410, reports the cartridge's RTC flag and firmware version, then shows date, time and weekday twice a second until a key. Weekday 1 is Sunday, as kakave.v counts it.
+
+What was checked. Stock UKNCBTL: the disk boots, DIR lists the fifteen files, COVTST says 177372 absent and plays through 177100 alone, RTCTST says both words absent and exits - the bus-timeout path. A scratchpad copy of the emulator given a Covox at both addresses and the Kakave+ words: AYTEST's register log is exactly the twelve-voice sequence with the vibrato, the captured audio has three distinct pitches per chip in the ratio 1 : 1.26 : 1.50 and all three in each chord; COVTST sends 16008 samples with the full swing to each port; RTCTST shows the host's clock and the right weekday.
+
+Things to know on the board.
+The Covox sample rate is a busy loop on the PPU, about 8.4 kHz in the emulator; this board's PPU runs such loops faster, so the notes will be higher. It is a presence test, not a tuner.
+177100 always answers, because it is a register in the VP1-120; the Tang Nano build has no DAC behind it, so expect that half to be silent.
+STARTS.COM is the source disk's, NOSCOPE included; I did not change it without a board to check the terminal's erase sequence on.
+
+Tooling. tools/rt11fs.py (ls, get, put, rm, new) and tools/savlink.py are new. The sibling project's linker took RLD type 7 as the transfer address; that is a location-counter definition that happens to say 1000, and the real one is the GSD type-3 entry. It also ignored the PC-relative relocations. Both would have made these programs crash, and did, once, in the emulator.
+
+Everything is staged, nothing committed. Two files the Makefile already depends on, tools/timing_check.py and tools/bin2prom.py, are not tracked in git at all; that predates this work and is worth a git add -f.
+
+Next: put build/RT11TST.DSK on the card, R AYTEST, R COVTST, R RTCTST, and tell me what each did.
+
+commands work as intended. one unclear thing - why they error if run as "RTCTST" instead of "R RTCTST"?
+
+****
+
+Because this monitor does run a program by its bare name, and that path loads the file differently from R.
+
+A bare PIP works, so run-by-name exists in this V05.04. It loads the program by the memory-usage bitmap in block 0 of the .SAV (bytes 360-377, one bit per 256-word block, bit 7 of byte 360 = block 0), which LINK writes and my linker did not. With the map empty nothing is loaded, and the monitor jumps to the start address over whatever is in memory - the primary bootstrap still sitting at 0-777 - which rereads the disk, fails, prints ?BOOT-U-I/O error and halts. The R command loads the whole file regardless, so it worked. A word that names no file at all goes a third way, to UCL.SAV, which is not on the disk: ?KMON-F-File not found SY:UCL.SAV.
+
+Reproduced in UKNCBTL, including the halt. tools/savlink.py writes the map now (checked against MOUTST's 376 and PIP's 377), the three programs are relinked and build/RT11TST.DSK rebuilt; in the emulator all three run as RTCTST and as R RTCTST. Staged, not committed. The bare-name form has not been on the board yet.
+
+what is that UCL.SAV file for? I've seen it on some disks - guess it is needed for base RT-11 image
+
+****
+
+UCL stands for User Command Linkage. It is RT-11 V5's hook for adding your own keyboard-monitor commands: when KMON does not recognise a command word and no program of that name exists, it runs SY:UCL.SAV with the command line, and that program decides what to do with it. DEC shipped a sample one, with its MACRO source, that kept a table of user-defined command names and the command strings they expand to, so you could type a short word of your own instead of a long RUN or COPY line. The message you get without it is exactly that hook finding nothing: ?KMON-F-File not found SY:UCL.SAV.
+
+It is not needed for a base image. Nothing in the system calls it except unrecognised command words, and every real command - R, RUN, DIR, COPY, bare program names - works without it. The disks you have seen it on either kept the DEC sample or carried somebody's own set of shortcuts, which is why the file differs from disk to disk. The only effect of leaving it off is the message above for a typo instead of whatever the custom program would have printed.
+
+If you ever want it, the thing to add is a UCL.SAV from a V5.04 distribution together with its definition file, not something to build here, and I would keep BASERT11.DSK as it is.
+
+lets add UCL.SAV to BASERT11.DSK
+
+****
+
+Done: UCL.SAV is on soft/BASERT11.DSK (block 260, after RESORC) and in build/RT11TST.DSK, with a copy kept as soft/UCL.SAV.
+
+Where it came from: none of the floppies here had one, only KMON's own reference to the name inside RT11SJ.SYS. Partition 0 of build/WDC170inv_P.img has a two-block UCL.SAV dated 31 Dec 1999, and that is the one. It is twenty words: load the address of a message, .PRINT, .EXIT - the message being "!UCL-E-Bad command or file name". It defines no commands; it just replaces "?KMON-F-File not found SY:UCL.SAV" with a friendlier line.
+
+Checked in the emulator on the rebuilt image: FOO now answers "!UCL-E-Bad command or file name", and a bare RTCTST still runs. Documented in .claude/docs/soft.md and the Makefile comment; staged, not committed.

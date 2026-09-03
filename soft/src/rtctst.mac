@@ -1,0 +1,230 @@
+	.TITLE	RTCTST - the clock of the Kakave+ cartridge
+;
+; Shows the time and date the cartridge's clock at 177410 holds, twice
+; a second, until a key is pressed.  The protocol is the one in
+; tang/src/kakave.v and build/rtc_kkve/kakave_m_ide_rtc_v3_6.ino: a
+; write of 0..3 to 177410 selects what the next read answers -
+;   0  minutes:seconds   1  weekday:hours   2  month:date   3  year
+; all binary, 24-hour, weekday 1..7 with 1 = Sunday as the cartridge's
+; DS3231 library counts it.  (KKVTST beside it prints 1 as Monday and
+; is a day off; this one follows the hardware.)
+;
+; The cartridge's mouse register at 177400 is asked as well - command 0
+; answers whether an RTC chip is installed, command 7 the firmware
+; version - since a machine may have the one word and not the other.
+; Both are probed under a trap-4 handler on the PPU; an address that
+; does not answer is a bus timeout, not a zero.
+;
+	.ASECT
+	. = 1000
+	.INCLUDE uknc.mac
+
+READ	= 1			; PPU request: probe and read everything into MARG
+
+; MARG layout, words
+;   0  bit 0: 177400 answered, bit 1: 177410 answered
+;   1  177400 command 0 answer (1 = RTC chip installed)
+;   2  177400 command 7 answer (firmware version, two ASCII digits)
+;   3  {minutes, seconds}   4  {weekday, hours}   5  {month, date}   6  year
+
+START:	MOV	#STACK,SP
+	BIS	#TTSPC$,@#JSW
+	.PRINT	#HELLO
+	MOV	#PPUBEG,R4
+	MOV	#<PPUEND-PPUBEG>/2,R5
+	CALL	PPLOAD
+	BCC	10$
+	.PRINT	#NOMEM
+	.EXIT
+
+10$:	CALL	READIT
+	BCC	12$
+	JMP	NOPPU
+12$:	; the cartridge's own word first
+	BIT	#1,MARG
+	BEQ	20$
+	.PRINT	#KKVMSG
+	MOV	MARG+4,R0	; "3.6" as '3' high, '6' low
+	SWAB	R0
+	.TTYOU
+	MOV	#'.,R0
+	.TTYOU
+	MOV	MARG+4,R0
+	.TTYOU
+	MOV	#CHIP,R0
+	CMP	MARG+2,#1
+	BEQ	15$
+	MOV	#NOCHIP,R0
+15$:	.PRINT	R0
+	BR	30$
+20$:	.PRINT	#NOKKV
+30$:	BIT	#2,MARG
+	BNE	40$
+	.PRINT	#NORTC
+	BR	OUT
+40$:	.PRINT	#RTCMSG
+
+; the clock, twice a second, over the same line
+LOOP:	CALL	READIT
+	BCS	NOPPU
+	MOV	MARG+14,R0	; year
+	CALL	PRDEC4
+	MOV	#'-,R0
+	.TTYOU
+	MOV	MARG+12,R0	; month
+	SWAB	R0
+	BIC	#177400,R0
+	CALL	PRDEC2
+	MOV	#'-,R0
+	.TTYOU
+	MOV	MARG+12,R0	; date
+	BIC	#177400,R0
+	CALL	PRDEC2
+	MOV	#' ,R0
+	.TTYOU
+	.TTYOU
+	MOV	MARG+10,R0	; hours
+	BIC	#177400,R0
+	CALL	PRDEC2
+	MOV	#':,R0
+	.TTYOU
+	MOV	MARG+6,R0	; minutes
+	SWAB	R0
+	BIC	#177400,R0
+	CALL	PRDEC2
+	MOV	#':,R0
+	.TTYOU
+	MOV	MARG+6,R0	; seconds
+	BIC	#177400,R0
+	CALL	PRDEC2
+	MOV	#' ,R0
+	.TTYOU
+	.TTYOU
+	MOV	MARG+10,R0	; weekday 1..7
+	SWAB	R0
+	BIC	#177400,R0
+	DEC	R0
+	CMP	R0,#6
+	BHI	50$
+	ASL	R0
+	.PRINT	DAYS(R0)
+	BR	60$
+50$:	.PRINT	#BADDAY
+60$:	MOV	#CR,R0
+	.TTYOU
+	MOV	#25.,R0
+	CALL	KDELAY
+	BCC	LOOP
+	CALL	CRLF
+	.PRINT	#DONE
+	BR	OUT
+NOPPU:	.PRINT	#TIMOUT
+OUT:	CALL	PPFREE
+	BIC	#TTSPC$,@#JSW
+	.EXIT
+
+READIT:	MOV	#READ,R0
+	MOV	#50.,R1
+	CALL	PPRUN
+	RETURN
+
+DAYS:	.WORD	SUN,MON,TUE,WED,THU,FRI,SAT
+HELLO:	.ASCIZ	/RTCTST - Kakave+ clock at 177410, mouse word at 177400/
+NOMEM:	.ASCIZ	/?RTCTST-F-PPU memory allocate failed/
+TIMOUT:	.ASCIZ	/?RTCTST-F-PPU did not answer/
+KKVMSG:	.ASCII	/Kakave+ at 177400, firmware /<200>
+CHIP:	.ASCIZ	/, reports an RTC chip/
+NOCHIP:	.ASCIZ	/, reports no RTC chip/
+NOKKV:	.ASCIZ	/No Kakave+ word at 177400 (bus timeout)/
+NORTC:	.ASCIZ	/No RTC at 177410 (bus timeout)/
+RTCMSG:	.ASCIZ	/RTC at 177410 answers.  Any key stops./
+BADDAY:	.ASCII	/weekday?/<200>
+DONE:	.ASCIZ	/RTCTST done./
+SUN:	.ASCII	/Sunday   /<200>
+MON:	.ASCII	/Monday   /<200>
+TUE:	.ASCII	/Tuesday  /<200>
+WED:	.ASCII	/Wednesday/<200>
+THU:	.ASCII	/Thursday /<200>
+FRI:	.ASCII	/Friday   /<200>
+SAT:	.ASCII	/Saturday /<200>
+	.EVEN
+
+;----------------------------------------------------------------------
+; PPU code.  Probe both words, then ask each what it knows.  The NOPs
+; between a selector write and the read are the cartridge's: its
+; microcontroller needs the time (KKVTST does the same).
+;----------------------------------------------------------------------
+PPUBEG:	PPENTRY
+	CMP	R0,#READ
+	BNE	LEAVE
+	PPTRAP
+	CLR	R5		; found bits
+	MOV	#MARG/2,R2	; result cursor
+	MOV	#177400,R3
+	CLR	PPTRPF
+	TST	(R3)
+	TST	PPTRPF
+	BNE	10$
+	BIS	#1,R5
+10$:	MOV	#177410,R3
+	CLR	PPTRPF
+	TST	(R3)
+	TST	PPTRPF
+	BNE	20$
+	BIS	#2,R5
+20$:	PPUNTRAP
+	MOV	R2,@#177010
+	MOV	R5,@#177014
+	INC	R2
+	; the mouse word: command 0, command 7
+	BIT	#1,R5
+	BEQ	40$
+	MOV	#177400,R3
+	CLR	R4
+	MOV	R4,(R3)
+	NOP
+	NOP
+	NOP
+	MOV	(R3),R0
+	MOV	R2,@#177010
+	MOV	R0,@#177014
+	INC	R2
+	MOV	#7,R4
+	MOV	R4,(R3)
+	NOP
+	NOP
+	NOP
+	MOV	(R3),R0
+	MOV	R2,@#177010
+	MOV	R0,@#177014
+	INC	R2
+	BR	50$
+40$:	ADD	#2,R2
+50$:	; the clock: selectors 0..3
+	BIT	#2,R5
+	BEQ	LEAVE
+	MOV	#177410,R3
+	CLR	R4
+60$:	MOV	R4,(R3)
+	NOP
+	NOP
+	NOP
+	MOV	(R3),R0
+	MOV	R2,@#177010
+	MOV	R0,@#177014
+	INC	R2
+	INC	R4
+	CMP	R4,#4
+	BLO	60$
+LEAVE:	PPLEAVE
+
+PPTRP:	INC	PPTRPF
+	RTI
+PPTRPF:	.WORD	0
+PPUEND:
+
+; the stack, above everything it could overwrite
+	.BLKW	128.
+STACK:	.WORD	0
+
+	.END	START

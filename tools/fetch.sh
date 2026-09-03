@@ -117,4 +117,12 @@ if have "$T/gowin/IDE/bin/gw_sh"; then log "gowin present"; else
   chmod -R u+x "$T/gowin/IDE/bin" "$T/gowin/Programmer/bin" 2>/dev/null || true
 fi
 
+# 8. macro11, the MACRO-11 cross-assembler soft/src/ is written for.  A
+#    few hundred KB of C; make soft needs it, nothing else does.
+if have "$T/macro11/macro11"; then log "macro11 present"; else
+  log "cloning macro11"
+  git clone --depth 1 https://github.com/shattered/macro11.git "$T/macro11" || exit 1
+  make -C "$T/macro11" -s || exit 1
+fi
+
 log "done"

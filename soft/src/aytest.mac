@@ -1,0 +1,209 @@
+	.TITLE	AYTEST - the three AY-3-8912s of the Aberrant module, one voice at a time
+;
+; Plays, with vibrato, on chip 1 channel A, then B, then C, then the
+; three together as a chord, and the same on chips 2 and 3, saying on
+; the terminal which is sounding.  Any key stops it.
+;
+; The chips are at 177360/177362/177364 on the PPU bus: a word write
+; selects a register, a byte write loads it.  This program keeps a
+; 3 x 16 byte register image in the mailbox, changes it every tick
+; (50 Hz) for the vibrato and has the PPU copy it into the chips.
+;
+; Chip clock 1.7734 MHz, so a tone period is 1773400 / 16 / f:
+;   A4 440 Hz -> 252,  C#5 554 Hz -> 200,  E5 659 Hz -> 168
+; which together are an A major chord.  The vibrato adds an eight-step
+; sine of +-4 to the period at 50/8 = 6.25 Hz.
+;
+;   make soft           assembles it (tools/macro11, tools/savlink.py)
+;   make soft-test-image  puts it on build/RT11TST.DSK
+;
+	.ASECT
+	. = 1000
+	.INCLUDE uknc.mac
+
+PLAY	= 1			; PPU request: load the register image
+
+TONE	= 75.			; ticks a voice sounds
+GAP	= 15.			; ticks of silence between voices
+PPWAIT	= 50.			; ticks to wait for the PPU
+
+START:	MOV	#STACK,SP
+	BIS	#TTSPC$,@#JSW
+	.PRINT	#HELLO
+	MOV	#PPUBEG,R4
+	MOV	#<PPUEND-PPUBEG>/2,R5
+	CALL	PPLOAD
+	BCC	10$
+	.PRINT	#NOMEM
+	.EXIT
+
+10$:	CLR	STEP
+NEXT:	MOV	STEP,R1
+	CMP	R1,#12.
+	BHIS	FINISH
+	MOV	R1,R2
+	ASL	R2
+	.PRINT	NAMES(R2)	; "chip n channel X"
+	MOV	R1,R2
+	ASH	#-2,R2		; chip 0..2
+	MOV	R2,CHIP
+	BIC	#^C3,R1		; voice 0..3 within the chip
+	MOV	R1,VOICE	; (SILENT uses R0 and R1)
+	CALL	SILENT
+	CLR	LFO
+	MOV	#TONE,R3
+20$:	CALL	IMAGE
+	CALL	SEND
+	BCS	NOPPU
+	MOV	#1,R0
+	CALL	KDELAY
+	BCS	STOP
+	INC	LFO
+	BIC	#^C7,LFO
+	SOB	R3,20$
+	CALL	SILENT
+	CALL	SEND
+	MOV	#GAP,R0
+	CALL	KDELAY
+	BCS	STOP
+	INC	STEP
+	BR	NEXT
+
+FINISH:	.PRINT	#DONE
+	BR	OUT
+STOP:	.PRINT	#STOPPD
+	BR	OUT
+NOPPU:	.PRINT	#TIMOUT
+OUT:	CALL	SILENT
+	CALL	SEND
+	CALL	PPFREE
+	BIC	#TTSPC$,@#JSW
+	.EXIT
+
+; the register image, from CHIP, VOICE and LFO
+IMAGE:	CALL	SILENT
+	MOV	CHIP,R0
+	ASH	#4,R0
+	ADD	#MARG,R0	; this chip's 16 bytes
+	MOV	LFO,R2
+	ASL	R2
+	MOV	VIB(R2),R2	; the vibrato offset
+	MOV	VOICE,R1
+	CMP	R1,#3
+	BEQ	20$
+	; one channel: its period and volume, its tone bit alone in the mixer
+	MOV	R1,R4
+	ASL	R4
+	MOV	NOTE(R4),R5
+	ADD	R2,R5
+	CALL	SETCH
+	MOVB	#77,7(R0)
+	MOV	#1,R4
+	ASH	R1,R4
+	BICB	R4,7(R0)
+	RETURN
+20$:	; the chord: all three
+	MOV	#2,R1
+21$:	MOV	R1,R4
+	ASL	R4
+	MOV	NOTE(R4),R5
+	ADD	R2,R5
+	CALL	SETCH
+	DEC	R1
+	BPL	21$
+	MOVB	#70,7(R0)	; tone on A, B, C; noise off
+	RETURN
+
+; channel R1 of the chip image at R0 gets period R5 and full volume
+SETCH:	MOV	R0,-(SP)
+	MOV	R1,-(SP)
+	ASL	R1
+	ADD	R1,R0
+	MOVB	R5,(R0)+	; fine period
+	SWAB	R5
+	MOVB	R5,(R0)		; coarse
+	SWAB	R5
+	MOV	(SP)+,R1
+	MOV	(SP)+,R0
+	MOV	R0,-(SP)
+	ADD	R1,R0
+	MOVB	#17,10(R0)	; volume 15
+	MOV	(SP)+,R0
+	RETURN
+
+; every chip quiet: mixer 77, volumes 0, periods 0
+SILENT:	MOV	#MARG,R0
+	MOV	#24.,R1
+10$:	CLR	(R0)+
+	SOB	R1,10$
+	MOVB	#77,MARG+7
+	MOVB	#77,MARG+27
+	MOVB	#77,MARG+47
+	RETURN
+
+; the image to the chips
+SEND:	MOV	#PLAY,R0
+	MOV	#PPWAIT,R1
+	CALL	PPRUN
+	RETURN
+
+STEP:	.WORD	0
+CHIP:	.WORD	0
+VOICE:	.WORD	0
+LFO:	.WORD	0
+NOTE:	.WORD	252.,200.,168.
+VIB:	.WORD	0,3,4,3,0,-3,-4,-3
+
+NAMES:	.WORD	N1A,N1B,N1C,N1X,N2A,N2B,N2C,N2X,N3A,N3B,N3C,N3X
+HELLO:	.ASCII	/AYTEST - Aberrant AY-3-8912 x3 at 177360, 177362, 177364/<CR><LF>
+	.ASCIZ	/Each voice 1.5 s with vibrato; any key stops./
+NOMEM:	.ASCIZ	/?AYTEST-F-PPU memory allocate failed/
+TIMOUT:	.ASCIZ	/?AYTEST-F-PPU did not answer/
+DONE:	.ASCIZ	/AYTEST done./
+STOPPD:	.ASCIZ	/AYTEST stopped./
+N1A:	.ASCIZ	/AY1 A  (A4 440 Hz)/
+N1B:	.ASCIZ	/AY1 B  (C#5 554 Hz)/
+N1C:	.ASCIZ	/AY1 C  (E5 659 Hz)/
+N1X:	.ASCIZ	/AY1 A+B+C  (A major)/
+N2A:	.ASCIZ	/AY2 A  (A4 440 Hz)/
+N2B:	.ASCIZ	/AY2 B  (C#5 554 Hz)/
+N2C:	.ASCIZ	/AY2 C  (E5 659 Hz)/
+N2X:	.ASCIZ	/AY2 A+B+C  (A major)/
+N3A:	.ASCIZ	/AY3 A  (A4 440 Hz)/
+N3B:	.ASCIZ	/AY3 B  (C#5 554 Hz)/
+N3C:	.ASCIZ	/AY3 C  (E5 659 Hz)/
+N3X:	.ASCIZ	/AY3 A+B+C  (A major)/
+	.EVEN
+
+;----------------------------------------------------------------------
+; PPU code: copy the 3 x 16 byte image from the mailbox into the chips.
+; Registers 0..13 of each; the two spare bytes are skipped.
+;----------------------------------------------------------------------
+PPUBEG:	PPENTRY
+	MOV	#177360,R1	; chip
+	MOV	#MARG/2,R2	; window address of the image
+	MOV	#3,R4
+10$:	CLR	R3		; register number
+20$:	MOV	R2,@#177010
+	MOV	@#177014,R0	; registers R3 (low) and R3+1 (high)
+	INC	R2
+	MOV	R3,(R1)
+	MOVB	R0,(R1)
+	INC	R3
+	SWAB	R0
+	MOV	R3,(R1)
+	MOVB	R0,(R1)
+	INC	R3
+	CMP	R3,#14.
+	BLO	20$
+	INC	R2		; the spare word
+	ADD	#2,R1		; next chip
+	SOB	R4,10$
+	PPLEAVE
+PPUEND:
+
+; the stack, above everything it could overwrite
+	.BLKW	128.
+STACK:	.WORD	0
+
+	.END	START
