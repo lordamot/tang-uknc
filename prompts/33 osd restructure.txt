@@ -164,3 +164,27 @@ lets try once again - you nedd access, not push everything
 ****
 
 Access is there now: ssh -T git@github.com answers "Hi lordamot!" (id_rsa is unlocked in the agent), git ls-remote lists origin's main, and git fetch says up to date - origin/main is still "readme" of March 2025, local main is 29 commits ahead, nothing on the remote that is not here. Nothing was pushed. The three untracked files (tb_hwen.v, menu_test.c, prompts/33) are still not in any commit.
+
+so, what you need to do now:
+
+****
+
+(The message ended at the colon; nothing was done.  Proposed: commit the three untracked files, leave the push to you.)
+
+what you need to do. make everything not pushed - as v 1.0 - and we need artefact tang bin, bl bin, readme.md explaining thats its orig ru / en
+
+****
+
+Made release/v1.0/ with Alexey Gurov's original pair taken from what is on GitHub now (origin/main 0ab368e): tang.fs 7261987 bytes (Jan 2025) and bl616.bin 399808 bytes (Aug 2024), md5 identical to the repository copies, plus README.md in Russian and English saying they are the originals, version 1.0, with the author's own pinout (71-75 to io12/13/10/11/14) that differs from the 2.x wiring.  build/release/uknc-nano-v1.0.zip is the same folder for a GitHub release.  Not committed and no tag made: "v1.0" as a tag belongs on 0ab368e, the last commit GitHub has, and the 29 unpushed commits on top of it are the 2.x line.  If "v1.0" was meant to be the state just before the OSD restructure (f53b1af, 2 Sep 2026) instead, the binaries in the folder are wrong and I will swap them.
+
+commit and push that artefact
+
+****
+
+Committed release/v1.0/ as ea9068c "add v1.0 release artefact: the original binaries with a ru/en readme" and pushed main: origin/main went 0ab368e -> ea9068c, thirty commits, nothing left unpushed. Still untracked and so not on GitHub: sim/tb/tb_hwen.v, mnano/menu_test.c, prompts/33 - make hwen-test and make menu-test fail from a clone until they are committed. No tag was made; build/release/uknc-nano-v1.0.zip is ready to attach to a GitHub release named v1.0 on 0ab368e.
+
+Where is release 1.0 in releases on github?
+
+****
+
+Not there: a GitHub release is made through the web page or the API, and this host has no gh and no token. Pushed the annotated tag v1.0 on 0ab368e instead, so github.com/lordamot/tang-uknc/releases now lists v1.0 as a tag with source archives. To make it a release with the binaries: Releases -> Draft a new release -> choose tag v1.0 -> attach build/release/uknc-nano-v1.0.zip (or the three files from release/v1.0) -> Publish; or install gh / give me a token and I will do it with gh release create.

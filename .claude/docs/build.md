@@ -44,7 +44,16 @@ make fw          build the BL616 firmware -> build/fw/bl616.bin
 make mif         ROM images -> build/mif/*.hex for the sim models
 make flash-fpga  openFPGALoader the shipped bitstream to SRAM
 make flash-mcu   flash the firmware over UART (COMX=/dev/ttyACM0)
+make release     a GitHub release from release/<TAG>/ with the binaries attached (TAG=v1.0)
 ```
+
+`make release` needs `tools/gh` (fetched by `make toolchain`) logged in
+once by the operator - `tools/gh/bin/gh auth login -h github.com -p ssh
+-w` - and the tag already pushed.  It creates the release from
+`release/<TAG>/README.md` as the notes, or replaces the files of an
+existing one.  `tools/` is gitignored and its scripts are force-added
+(`git add -f`); `timing_check.py`, `bin2prom.py` and `osd_png.py` had
+not been until 4 Sep 2026, which broke `make bitstream` from a clone.
 
 `tools/env.sh` puts the same toolchain on `PATH` for running any of it by
 hand; the Makefile does that for itself.

@@ -125,4 +125,15 @@ if have "$T/macro11/macro11"; then log "macro11 present"; else
   make -C "$T/macro11" -s || exit 1
 fi
 
+# 9. GitHub's gh, for `make release` - the one thing that makes a GitHub
+#    release with the binaries attached.  A tarball with a static binary;
+#    it needs a one-time `tools/gh/bin/gh auth login` by the operator.
+GH_VER=2.100.0
+if have "$T/gh/bin/gh"; then log "gh present"; else
+  log "downloading gh $GH_VER"
+  curl -fL --retry 3 -o "$DL/gh.tar.gz" "https://github.com/cli/cli/releases/download/v${GH_VER}/gh_${GH_VER}_linux_amd64.tar.gz" || exit 1
+  mkdir -p "$T/gh"
+  tar -C "$T/gh" --strip-components=1 -xzf "$DL/gh.tar.gz" || exit 1
+fi
+
 log "done"

@@ -19,6 +19,7 @@
 #   make mif         ROM images -> build/mif/*.hex for the sim models
 #   make flash-fpga  openFPGALoader the shipped bitstream to SRAM
 #   make flash-mcu   flash the firmware over UART (COMX=/dev/ttyACM0)
+#   make release     a GitHub release from release/<TAG>/ (TAG=v1.0; needs gh login once)
 #   make soft        assemble the test programs in soft/src -> soft/*.SAV
 #   make soft-test-image  RT-11 + the test programs -> build/RT11TST.DSK
 #   make clean       remove build/ and sim/out/
@@ -101,12 +102,12 @@ FW_OUT   := mnano/build/build_out/misterynano_fw_bl616.bin
 
 .PHONY: all toolchain lint sim wave frames fw mif clean bitstream \
         flash-fpga flash-fpga-flash flash-mcu help soft soft-test-image \
-        hwen-test menu-test
+        hwen-test menu-test release
 
 all: lint
 
 help:
-	@sed -n '2,24p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \?//'
+	@sed -n '2,25p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \?//'
 
 #-----------------------------------------------------------------------
 # Toolchain
@@ -442,6 +443,40 @@ menu-test: $(MENU_TEST_SRC) mnano/menu.h VERSION
 	  -Imnano -Imnano/u8g2/csrc -I$(FATFS_SRC) -o $(BUILD)/menu/menu_test $(MENU_TEST_SRC)
 	$(BUILD)/menu/menu_test $(BUILD)/menu
 	$(PYTHON) $(TOOLS)/osd_png.py $(BUILD)/menu/*.txt
+
+#-----------------------------------------------------------------------
+# GitHub releases.  release/<TAG>/ holds what the release ships - the two
+# binaries and a README that is also the release's notes - and the tag
+# has to exist on GitHub already (git push origin <TAG>).  gh comes with
+# make toolchain and is logged in once by hand:
+#
+#   tools/gh/bin/gh auth login -h github.com -p ssh -w
+#
+# The release is created if it does not exist and its files replaced if
+# it does, so the target can be re-run after a README edit.  The zip is
+# the whole folder, for people who want one download.
+#-----------------------------------------------------------------------
+GH  := $(TOOLS)/gh/bin/gh
+TAG ?= v1.0
+release:
+	@test -x $(GH) || { echo "gh missing - run: make toolchain" >&2; exit 1; }
+	@test -d release/$(TAG) || { echo "no release/$(TAG)/" >&2; exit 1; }
+	@$(GH) auth status >/dev/null 2>&1 || { \
+	  echo "gh is not logged in - run: $(GH) auth login -h github.com -p ssh -w" >&2; exit 1; }
+	@git ls-remote --exit-code --tags origin refs/tags/$(TAG) >/dev/null || { \
+	  echo "tag $(TAG) is not on origin - git push origin $(TAG)" >&2; exit 1; }
+	@mkdir -p $(BUILD)/release
+	rm -f $(BUILD)/release/uknc-nano-$(TAG).zip
+	cd release && zip -q -r ../$(BUILD)/release/uknc-nano-$(TAG).zip $(TAG)
+	@if $(GH) release view $(TAG) >/dev/null 2>&1; then \
+	  echo "release $(TAG) exists - replacing its files and notes"; \
+	  $(GH) release edit $(TAG) --title "UKNC Nano $(TAG)" --notes-file release/$(TAG)/README.md; \
+	  $(GH) release upload $(TAG) --clobber release/$(TAG)/tang.fs release/$(TAG)/bl616.bin $(BUILD)/release/uknc-nano-$(TAG).zip; \
+	else \
+	  $(GH) release create $(TAG) --verify-tag --title "UKNC Nano $(TAG)" --notes-file release/$(TAG)/README.md \
+	    release/$(TAG)/tang.fs release/$(TAG)/bl616.bin $(BUILD)/release/uknc-nano-$(TAG).zip; \
+	fi
+	@$(GH) release view $(TAG) --json url,assets -q '.url, (.assets[] | .name)'
 
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out
