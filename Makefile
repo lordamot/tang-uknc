@@ -467,7 +467,7 @@ release:
 	  echo "tag $(TAG) is not on origin - git push origin $(TAG)" >&2; exit 1; }
 	@mkdir -p $(BUILD)/release
 	rm -f $(BUILD)/release/uknc-nano-$(TAG).zip
-	cd release && zip -q -r ../$(BUILD)/release/uknc-nano-$(TAG).zip $(TAG)
+	cd release && zip -q -r $(BUILD)/release/uknc-nano-$(TAG).zip $(TAG)
 	@if $(GH) release view $(TAG) >/dev/null 2>&1; then \
 	  echo "release $(TAG) exists - replacing its files and notes"; \
 	  $(GH) release edit $(TAG) --title "UKNC Nano $(TAG)" --notes-file release/$(TAG)/README.md; \

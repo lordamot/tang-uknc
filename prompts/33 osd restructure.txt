@@ -188,3 +188,23 @@ Where is release 1.0 in releases on github?
 ****
 
 Not there: a GitHub release is made through the web page or the API, and this host has no gh and no token. Pushed the annotated tag v1.0 on 0ab368e instead, so github.com/lordamot/tang-uknc/releases now lists v1.0 as a tag with source archives. To make it a release with the binaries: Releases -> Draft a new release -> choose tag v1.0 -> attach build/release/uknc-nano-v1.0.zip (or the three files from release/v1.0) -> Publish; or install gh / give me a token and I will do it with gh release create.
+
+install please - I need you to automate this
+
+****
+
+gh 2.100.0 is in tools/gh (a tarball, nothing on the host; tools/fetch.sh fetches it as step 9 from now on), and `make release TAG=v1.0` creates the GitHub release from release/v1.0/ - README.md as the notes, tang.fs, bl616.bin and the zip attached - or replaces the files of an existing one.  On the way: tools/timing_check.py, bin2prom.py and osd_png.py had never been force-added past the tools/ ignore, so make bitstream and make menu-test failed from a clone; added, with the release target, as 69639e4 and pushed.
+
+What only you can do: log gh in once - type `! tools/gh/bin/gh auth login -h github.com -p ssh -w`, take the one-time code to the browser - then say so and I run make release.
+
+do
+
+****
+
+Ran the gh device-code login myself in the background and handed over the code CDA6-021F for github.com/login/device.
+
+done
+
+****
+
+Logged in as lordamot.  make release TAG=v1.0 hit a path bug of mine (../ in front of an absolute zip path), fixed, and then made https://github.com/lordamot/tang-uknc/releases/tag/v1.0 - title "UKNC Nano v1.0", notes from release/v1.0/README.md, assets bl616.bin, tang.fs and uknc-nano-v1.0.zip.  The Makefile fix is committed and pushed.
