@@ -1,3 +1,14 @@
+# UKNC Nano 2.0.0 alpha
+
+| file | size | what it is |
+|---|---|---|
+| `tang.fs` | 7 262 008 | the FPGA bitstream for the Tang Nano 20K |
+| `bl616.bin` | 442 016 | the MCU firmware for the BL616 board |
+
+`tang.fs` - прошивка ПЛИС, `bl616.bin` - прошивка МК.  Как соединить платы, прошить и пользоваться - ниже, по-русски и по-английски; подробности в `howto-ru.md` / `howto.md` репозитория.
+
+---
+
 # UKNC Nano
 
 **МС0511 (УКНЦ)** - советская двухпроцессорная PDP-11-совместимая машина

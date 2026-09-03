@@ -2,34 +2,37 @@
 
 ## 2.0.0 alpha - 3 September 2026
 
-The first release of the v2.x line.  Hardware by Alexey Gurov; the update
-by Sergei Lemeshev and Claude Code.
+Hardware by Alexey Gurov; the 2.x line by Sergei Lemeshev and Claude Code.
 
-### OSD
-- Restructured: main / Hardware / Aberrant / FDD controller /
-  HDD controller / RTC clock / Misc, an About page, Save settings.  The
-  version from `VERSION` at the right of the caption.
-- Cursor left and right step a value either way; a form returns to the
-  entry that opened it.
-- Every add-on is a switch: the three AYs, the Covox (off, at 177372, on
-  the printer port 177100, or both), the floppy controller, the IDE
-  cartridge (HDD0: shown only while it is on), the Kakave+ mouse and
-  clock.  Off means the device is not on the bus.  The beeper can be muted.
-- Write protection per floppy drive; the old six-entry list sent an index
-  the FPGA read as a bitmask.
-- The RTC clock form shows the core's clock once a second.
-- Color: RGB / BGR now swaps red and blue; it swapped red and green.
+### The machine
+- Sound over HDMI, next to the I²S output: one mono mix of everything below.
+- The Aberrant sound module: three AY-3-8912s at `177360/2/4`.
+- Two Covox DACs: the Aberrant's at `177372` and the classic one on printer
+  port A, `177100`.
+- The IDE hard disk cartridge with its WD ROM: `.img` files on the SD card,
+  CHS and LBA28, read-ahead, an adjustable data-read delay for streamed demos.
+- The Kakave+ cartridge's mouse (a USB mouse on the BL616) and real-time clock.
+- Four floppies from `.dsk` files, each with its own write protection.
+- The keyboard as the machine sees it: matrix rows, rollover within a row.
+- Stock MiSTeryNano wiring between the Tang Nano 20K and the BL616.
 
-### FPGA
-- A DAC on port A of the printer port, the older Covox players fall back to.
-- The switches above in `sysctrl.v` and each peripheral; a clock read-back
-  command for the OSD.
+### The on-screen menu
+- One "Hardware" page with a switch for every device above: a device that
+  is off is not on the bus, as on a machine without that board.
+- "Run SAV:" turns any `.SAV` on the card into a bootable RT-11 floppy.
+- The clock as it runs, shown in the RTC page.
+- Cursor left and right step a value; every page returns to where it was opened.
+- The version in the caption, an "About" page, settings kept in `/uknc.ini`.
 
-### Before 2.0.0 (August - September 2026, unnumbered)
-- VM2 cores with the upstream cpu11 fixes; the AY chip select aliasing;
-  HDMI with sound at exactly 48 kHz and the spec subpacket layout; the AY
-  pitch (SEL); timing constraints on every crossing and a gate that refuses
-  a layout without them; power-up ordering (SDRAM, PLLs, the PPU); the IDE
-  cartridge with LBA28 and read-ahead; the Covox at 177372; the Kakave+
-  mouse and clock; the keyboard matrix filter and byte queue; the
-  interrupt-vector chain; "Run SAV:"; the RT-11 base disk and test programs.
+### For builders
+- Both binaries build from the tree with `make bitstream` and `make fw`;
+  lint, simulation of the whole machine, unit tests, a host build of the
+  menu, and a timing gate that refuses a layout with an unanalysed crossing.
+- An RT-11 base disk with test programs for the AYs, the Covox and the clock.
+- Documentation: `howto.md` / `howto-ru.md`, and `.claude/docs/` for the design.
+
+## 1.0 - March 2025
+
+Alexey Gurov's original release: the two processors, the display over HDMI,
+the floppies from `.dsk` files, the AY sound over I²S, the keyboard from USB
+through the BL616, the menu.  `release/v1.0/`.
