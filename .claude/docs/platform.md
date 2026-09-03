@@ -361,8 +361,38 @@ sample enters `top.v`'s mixer shifted up five (0..8160, one AY chip's
 swing and a bit) and goes to HDMI and I²S with the rest.  `make
 covox-test` (`sim/tb/tb_covox.v`) checks the writes, the read-back, and
 that no address in `0177360`-`0177376` is acknowledged by both it and the
-Aberrant.  The older Covox on the printer port `0177100` is **not**
-implemented: `vp1_120.v`'s port A is a plain register there.
+Aberrant.
+
+**The older Covox on the printer port `0177100`** is there too since
+Sep 2026, as the OSD's "Covox" setting decides (`sysctrl 'c'`): *Off*
+takes `0177372` off the bus (a bus timeout, which is how a player learns
+to fall back to the printer port) and plays nothing; *Port 177372* is the
+DAC above; *Port 177100 LPT* leaves `0177372` absent and mixes the byte
+last written to port A of the printer port (`vp1_120.v`'s `portA`,
+brought out as `lpt_data`) as a second DAC, uninverted like the first;
+*Both* has both.  The printer port itself answers on every setting - it
+is a register in the ВП1-120 on every machine - only whether a DAC hangs
+on it changes.  `make hwen-test` checks the byte read-out.
+
+### What the OSD can take out of the machine (Sep 2026)
+
+Each of these is a level from `sysctrl.v` that gates a chip select, so a
+device that is off gives a bus timeout at its addresses exactly as a
+machine without it would, and software that probes finds it absent:
+
+| OSD | letter | what goes |
+|---|---|---|
+| Aberrant AY1/AY2/AY3 | `'1'` `'2'` `'3'` | that chip's `0177360`/`2`/`4`; the chip is held in reset and masked out of the sum |
+| Covox | `'c'` | `0177372` (bit 0), and the printer-port DAC (bit 1) as above |
+| FDD controller | `'f'` | `0177130`/`0177132` in `vp1-128fdd.v`; the drives behind it keep serving the card |
+| HDD controller | `'e'` | the IDE cartridge - `ide.v`'s `hdd_present` is the mounted image AND this, so the window times out as an empty slot |
+| Mouse | `'u'` | the Kakave+ mouse word `0177400` |
+| RTC controller | `'t'` | the Kakave+ clock word `0177410`; the clock counts on regardless, and the OSD reads it back over SYS command 6 |
+| Beeper | `'b'` | nothing on the bus - the beeper is a standard part; it leaves the mixer only |
+
+`make ab-test`, `make covox-test`, `make kakave-test` and `make hwen-test`
+each check their switch: no acknowledge while off, no write landing, the
+others untouched, and the device back when it is on again.
 
 
 **A word write latches an AY register number; a byte write sends data to

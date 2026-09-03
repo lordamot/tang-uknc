@@ -36,7 +36,16 @@ typedef struct {
   // infos needed to scroll a highlighted fileselector entry
   int fs_scroll_cur;
   sdc_dir_entry_t *fs_scroll_entry;
+
+  // ticks of the 25 Hz timer since a form with an 'I' (info) entry was
+  // last redrawn - the UKNC's "RTC clock" form shows the time once a second
+  int info_tick;
 } menu_t;
+
+// the two forms that are not in the forms table: the file selector, and
+// the text view (the UKNC's "About") that an entry of type 'T' opens
+#define MENU_FORM_FSEL           -1
+#define MENU_FORM_TEXT           -2
 
 #ifndef SDL
 menu_t *menu_init(spi_t *spi);

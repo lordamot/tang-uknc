@@ -14,6 +14,7 @@
 #   make bitstream   build the FPGA bitstream with Gowin -> bin/tang.fs
 #                    (refuses a layout that fails the timing gate)
 #   make timing      the timing gate alone, on the last PnR report
+#   make menu-test   the OSD menu on the host: forms, keys, layout
 #   make fw          build the BL616 firmware -> build/fw/
 #   make mif         ROM images -> build/mif/*.hex for the sim models
 #   make flash-fpga  openFPGALoader the shipped bitstream to SRAM
@@ -99,12 +100,13 @@ FW_BOARD := bl616dk -DCMAKE_C_FLAGS=-DM0S_DOCK=1 -DCONFIG_BT_STACK_CLI=0
 FW_OUT   := mnano/build/build_out/misterynano_fw_bl616.bin
 
 .PHONY: all toolchain lint sim wave frames fw mif clean bitstream \
-        flash-fpga flash-fpga-flash flash-mcu help soft soft-test-image
+        flash-fpga flash-fpga-flash flash-mcu help soft soft-test-image \
+        hwen-test menu-test
 
 all: lint
 
 help:
-	@sed -n '2,22p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \?//'
+	@sed -n '2,24p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \?//'
 
 #-----------------------------------------------------------------------
 # Toolchain
@@ -335,6 +337,15 @@ fdd-test: $(VERILATOR) mif
 	  sim/tb/tb_fdd4.v tang/src/fdd/fdd4.v $(BUILD)/sim/fdd/fdd4_old.v $(STUBS) >/dev/null
 	$(BUILD)/sim/fdd/tb_fdd4
 
+# The OSD's hardware switches that live in modules without a test of
+# their own: the floppy controller's fdd_en (vp1-128fdd.v) and the
+# printer port A read-out (vp1_120.v) that the LPT Covox mixes.
+hwen-test: $(VERILATOR)
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_hwen -Mdir $(BUILD)/sim/hwen -o tb_hwen \
+	  sim/tb/tb_hwen.v tang/src/vp1-128fdd.v tang/src/vp1_120.v >/dev/null
+	$(BUILD)/sim/hwen/tb_hwen
+
 # The timing gate on its own.  What it checks is in .claude/rules/timing.md.
 timing:
 	$(PYTHON) $(TOOLS)/timing_check.py
@@ -413,6 +424,24 @@ sav-test: soft/BASERT11.DSK soft/RTCTST.SAV $(TOOLS)/rt11fs.py
 	cmp $(BUILD)/sav/back.sav soft/RTCTST.SAV
 	$(PYTHON) $(TOOLS)/rt11fs.py get $(BUILD)/sav/RT11SAV.DSK STARTS.COM $(BUILD)/sav/starts.com
 	@grep -a -q "^R REALTI" $(BUILD)/sav/starts.com && echo "sav-test: ok"
+
+# The OSD menu on the host (mnano/menu_test.c): menu.c with its SDL host
+# switch, u8g2 drawing into a bitmap, FatFs with no card, the core and
+# the SD layer stubbed.  Walks every UKNC form with the keys usb_host.c
+# sends, asserts what the core was told and where the cursor landed, and
+# leaves every screen it looked at under build/menu/ as text and as PNG.
+FATFS_SRC := $(TOOLS)/bouffalo_sdk/components/fs/fatfs
+MENU_TEST_SRC := mnano/menu_test.c mnano/menu.c \
+  $(wildcard mnano/u8g2/csrc/*.c) mnano/u8g2/sys/bitmap/common/u8x8_d_bitmap.c \
+  $(FATFS_SRC)/ff.c $(FATFS_SRC)/ffunicode.c
+menu-test: $(MENU_TEST_SRC) mnano/menu.h VERSION
+	@test -d $(FATFS_SRC) || { echo "bouffalo_sdk missing - run: make toolchain" >&2; exit 1; }
+	@mkdir -p $(BUILD)/menu
+	rm -f $(BUILD)/menu/*.txt $(BUILD)/menu/*.png
+	@$(CC) -O1 -w -DSDL -DUKNC_VERSION='"$(shell head -1 VERSION)"' \
+	  -Imnano -Imnano/u8g2/csrc -I$(FATFS_SRC) -o $(BUILD)/menu/menu_test $(MENU_TEST_SRC)
+	$(BUILD)/menu/menu_test $(BUILD)/menu
+	$(PYTHON) $(TOOLS)/osd_png.py $(BUILD)/menu/*.txt
 
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out

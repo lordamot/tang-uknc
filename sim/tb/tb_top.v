@@ -177,6 +177,22 @@ module tb_top;
 
     reg [7:0] st0, st1, st2, st3;
 
+    // SYS command 6: the Kakave+ clock, eight bytes after a dummy - what
+    // sys_get_rtc() in mnano/sysctrl.c does for the OSD's "RTC clock" form
+    reg [7:0] rtc_b [0:7];
+    task sys_get_rtc;
+        integer i;
+        begin
+            spi_begin;
+            spi_byte(8'd0);     // target SYS
+            spi_byte(8'd6);     // command "read clock"
+            spi_byte(8'h00);    // dummy
+            for (i = 0; i < 8; i = i + 1) begin spi_byte(8'h00); rtc_b[i] = spi_rx; end
+            spi_end;
+        end
+    endtask
+    integer cfg_errs = 0;
+
     // Exactly what sys_status_is_valid() in mnano/sysctrl.c does.  Note
     // the dummy byte after the command: sysctrl.v registers data_out, so
     // the first byte the master clocks back is the value from before the
@@ -244,9 +260,77 @@ module tb_top;
         sys_set_val("R", 8'd3);     // cold boot, as main.c does
         #50000;
         sys_set_val("A", 8'd1);     // volume 33%
-        sys_set_val("P", 8'd0);     // no write protection
+        // the OSD's defaults (mnano/menu.c, variables_uknc), letter by
+        // letter as menu_init sends them: no write protection, the
+        // standard hardware in, the add-ons out
+        sys_set_val("p", 8'd0); sys_set_val("q", 8'd0);
+        sys_set_val("r", 8'd0); sys_set_val("s", 8'd0);
+        sys_set_val("b", 8'd1);
+        sys_set_val("1", 8'd1); sys_set_val("2", 8'd1); sys_set_val("3", 8'd1);
+        sys_set_val("c", 8'd0);
+        sys_set_val("f", 8'd1);
+        sys_set_val("e", 8'd0);
+        sys_set_val("u", 8'd0);
+        sys_set_val("t", 8'd0);
+        sys_set_val("V", 8'd0);
         sys_set_val("R", 8'd0);     // and run
         $display("[tb] %0t released reset", $time);
+
+        // The clock, set the way the OSD sets it and read back the way the
+        // OSD reads it: 2026-09-02 13:45 is a Wednesday, 4 in the
+        // cartridge's Sunday-first count.
+        sys_set_val("y", 8'd6); sys_set_val("m", 8'd8); sys_set_val("d", 8'd1);
+        sys_set_val("h", 8'd13); sys_set_val("n", 8'd45);
+        #20000;
+        sys_get_rtc;
+        if ({rtc_b[1], rtc_b[0]} !== 16'd2026 || rtc_b[2] !== 8'd9 || rtc_b[3] !== 8'd2 ||
+            rtc_b[4] !== 8'd13 || rtc_b[5] !== 8'd45 || rtc_b[6] > 8'd1 || rtc_b[7] !== 8'd4) begin
+            $display("[tb] *** RTC READ-BACK WRONG: %0d-%0d-%0d %0d:%0d:%0d dow %0d, expected 2026-9-2 13:45:00 dow 4",
+                     {rtc_b[1], rtc_b[0]}, rtc_b[2], rtc_b[3], rtc_b[4], rtc_b[5], rtc_b[6], rtc_b[7]);
+            cfg_errs = cfg_errs + 1;
+        end else
+            $display("[tb] %0t rtc read-back: %0d-%02d-%02d %02d:%02d:%02d dow %0d - ok", $time,
+                     {rtc_b[1], rtc_b[0]}, rtc_b[2], rtc_b[3], rtc_b[4], rtc_b[5], rtc_b[6], rtc_b[7]);
+
+        // Every hardware switch landed where sysctrl.v keeps it
+        if (uut.system_beeper !== 1'b1 || uut.system_ay_en !== 3'b111 || uut.system_covox !== 2'd0 ||
+            uut.system_fdd_en !== 1'b1 || uut.system_hdd_en !== 1'b0 || uut.system_mouse_en !== 1'b0 ||
+            uut.system_rtc_en !== 1'b0 || uut.system_floppy_wprot !== 4'b0000) begin
+            $display("[tb] *** HARDWARE SWITCHES WRONG after the defaults");
+            cfg_errs = cfg_errs + 1;
+        end
+        sys_set_val("2", 8'd0); sys_set_val("c", 8'd3); sys_set_val("e", 8'd1); sys_set_val("q", 8'd1);
+        #2000;
+        if (uut.system_ay_en !== 3'b101 || uut.system_covox !== 2'd3 || uut.system_hdd_en !== 1'b1 ||
+            uut.system_floppy_wprot !== 4'b0010) begin
+            $display("[tb] *** HARDWARE SWITCHES WRONG after a change (ay %b covox %0d hdd %b wprot %b)",
+                     uut.system_ay_en, uut.system_covox, uut.system_hdd_en, uut.system_floppy_wprot);
+            cfg_errs = cfg_errs + 1;
+        end
+        sys_set_val("2", 8'd1); sys_set_val("c", 8'd0); sys_set_val("e", 8'd0); sys_set_val("q", 8'd0);
+
+        // The printer-port Covox: with "Covox" at Port 177100 LPT the byte
+        // in vp1_120's port A reaches the mixer, shifted up five; at Off or
+        // Port 177372 it does not.  Port A is forced rather than written,
+        // since nothing in the boot ROM writes the printer port.
+        force uut.vp1.portA = 8'd200;
+        sys_set_val("c", 8'd2); #2000;
+        if (uut.lpt_sample !== 8'd200 || uut.mix < 16'd6400) begin
+            $display("[tb] *** LPT COVOX NOT MIXED: lpt_sample %0d mix %0d with c=2", uut.lpt_sample, uut.mix);
+            cfg_errs = cfg_errs + 1;
+        end
+        sys_set_val("c", 8'd3); #2000;
+        if (uut.lpt_sample !== 8'd200) begin
+            $display("[tb] *** LPT COVOX NOT MIXED with c=3 (Both)"); cfg_errs = cfg_errs + 1;
+        end
+        sys_set_val("c", 8'd1); #2000;
+        if (uut.lpt_sample !== 8'd0) begin
+            $display("[tb] *** LPT COVOX MIXED with c=1 (Port 177372 only): lpt_sample %0d", uut.lpt_sample);
+            cfg_errs = cfg_errs + 1;
+        end
+        sys_set_val("c", 8'd0); #2000;
+        release uut.vp1.portA;
+        $display("[tb] %0t lpt covox: mixed at c=2 and 3, not at 1 - %s", $time, cfg_errs ? "see above" : "ok");
 
         // +AUDIOTEST: put two different constants on the AY's panned
         // outputs and let the I2S monitor below say whether they come out
@@ -271,6 +355,7 @@ module tb_top;
         #(run_ms * 1000000);
         $display("[tb] %0t done: %0d video frames, leds=%b",
                  $time, rx_frames, leds);
+        $display("[tb] config checks: %0d wrong (rtc read-back, hardware switches, RGB/BGR)", cfg_errs + video_errs);
         // Both processors fetch code over their SDRAM port, not the
         // wishbone - the wishbone is the I/O window only - so these two
         // counts, not the bus trace, are what says whether a core is
@@ -302,6 +387,35 @@ module tb_top;
         $display("[tb] hdmi gcp: %0d Clear_AVMUTE, %0d Set_AVMUTE  (Set blanks the screen)",
                  rx_gcp_clrmute, rx_gcp_setmute);
         $finish;
+    end
+
+    //--------------------------------------------------------------------
+    // The OSD's "Color: RGB / BGR" ('V'): with it set, what leaves the
+    // OSD blender for the encoder is the picture with red and blue
+    // exchanged; clear, the picture as sdram2 made it.  Sampled on the
+    // pixel clock while the picture is visible, in both states, after the
+    // machine has drawn something.  (The OSD itself is never enabled by
+    // this testbench, so the blender passes its inputs through.)
+    //--------------------------------------------------------------------
+    integer video_errs = 0, video_checked = 0;
+    reg     video_bgr = 1'b0;
+    always @(posedge uut.clkpix)
+        if (video_checked >= 0 && video_checked < 4000000 && uut.visible && $time > 30000000) begin
+            video_checked = video_checked + 1;
+            if (video_bgr) begin
+                if (uut.r_out[5:3] !== uut.blue || uut.b_out[5:3] !== uut.red || uut.g_out[5:3] !== uut.green)
+                    video_errs = video_errs + 1;
+            end else begin
+                if (uut.r_out[5:3] !== uut.red || uut.b_out[5:3] !== uut.blue || uut.g_out[5:3] !== uut.green)
+                    video_errs = video_errs + 1;
+            end
+        end
+    initial begin
+        #31000000;
+        sys_set_val("V", 8'd1); video_bgr = 1'b1;
+        #4000000;
+        sys_set_val("V", 8'd0); video_bgr = 1'b0;
+        $display("[tb] %0t RGB/BGR: %0d pixels checked, %0d wrong", $time, video_checked, video_errs);
     end
 
     //--------------------------------------------------------------------

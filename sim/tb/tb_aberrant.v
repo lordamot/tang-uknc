@@ -21,6 +21,7 @@ reg clk = 1'b0;
 always #159.5 clk = ~clk;          // 3.1339 MHz, the PPU clock
 
 reg         init = 1'b1;
+reg  [ 2:0] ay_en = 3'b111;
 reg  [16:0] adr  = 17'o0;
 reg  [15:0] dat  = 16'o0;
 reg         cyc  = 1'b0;
@@ -36,9 +37,22 @@ aberrant dut (
     .ppu_wbm_adr_i(adr), .ppu_wbm_dat_i(dat), .ppu_wbm_dat_o(dout),
     .ppu_wbm_cyc_i(cyc), .ppu_wbm_wre_i(wre), .ppu_wbm_sel_o(sel),
     .ppu_wbm_stb_i(stb), .ppu_wbm_ack_o(ack),
+    .ay_en(ay_en),
     .m_channel(m_ch));
 
 integer errors = 0;
+reg acked;
+
+// a read, five clocks of strobe; reports whether the module acknowledged
+task bus_read(input [16:0] a);
+    begin
+        acked = 0;
+        @(negedge clk); adr = a; sel = 2'b11; wre = 1'b0; cyc = 1'b1; stb = 1'b1;
+        repeat (5) begin @(posedge clk); #1; acked = acked | ack; end
+        @(negedge clk); stb = 1'b0; cyc = 1'b0;
+        repeat (2) @(posedge clk);
+    end
+endtask
 
 // One bus cycle, strobe held five clocks as the real master holds it.
 task bus_write(input [16:0] a, input [15:0] d, input [1:0] s);
@@ -127,6 +141,47 @@ initial begin
     check_reg("AY2 R8", dut.dd2.ymreg[8], 8'd11);
     check_reg("AY3 R8", dut.dd3.ymreg[8], 8'd7);
     check_reg("AY1 R8 untouched", dut.dd1.ymreg[8], 8'd15);
+
+    // The OSD's per-chip switches (Sep 2026).  A chip that is off is not
+    // acknowledged, is held in reset, and adds nothing to the sum; the
+    // others are untouched.  AY1 is still sounding its 440 Hz from above.
+    $display("[tb_aberrant] switching AY2 off");
+    ay_en = 3'b101;
+    repeat (4) @(posedge clk);
+    bus_read(17'o177362);
+    if (acked) begin $display("  FAIL: 0177362 acknowledged with AY2 off"); errors = errors + 1; end
+    else $display("  ok   0177362 times out with AY2 off");
+    bus_read(17'o177360);
+    if (!acked) begin $display("  FAIL: 0177360 not acknowledged with AY2 off"); errors = errors + 1; end
+    bus_read(17'o177364);
+    if (!acked) begin $display("  FAIL: 0177364 not acknowledged with AY2 off"); errors = errors + 1; end
+    check_reg("AY2 R8 cleared by the switch", dut.dd2.ymreg[8], 8'd0);
+    check_reg("AY3 R8 kept", dut.dd3.ymreg[8], 8'd7);
+    // a write aimed at the missing chip must not land
+    ay_set(17'o177362, 8'd8, 8'd9);
+    check_reg("AY2 R8 after a write while off", dut.dd2.ymreg[8], 8'd0);
+    // AY3 alone (amplitude 7, its mixer register still all-on) is heard
+    ay_en = 3'b100;
+    repeat (4) @(posedge clk);
+    lmax = 12'd0;
+    for (i = 0; i < 20000; i = i + 1) begin @(posedge clk); if (m_ch > lmax) lmax = m_ch; end
+    if (lmax == 12'd0) begin $display("  FAIL: m_channel silent with AY3 on"); errors = errors + 1; end
+    else $display("  ok   AY3 alone still reaches the sum (%0d)", lmax);
+    // all three off: nothing, although AY1 was playing a moment ago
+    ay_en = 3'b000;
+    repeat (4) @(posedge clk);
+    lmax = 12'd0;
+    for (i = 0; i < 20000; i = i + 1) begin @(posedge clk); if (m_ch > lmax) lmax = m_ch; end
+    if (lmax != 12'd0) begin $display("  FAIL: m_channel reached %0d with every chip off", lmax); errors = errors + 1; end
+    else $display("  ok   the sum is zero with every chip off");
+    // back on: acknowledged again, silent until reprogrammed
+    ay_en = 3'b111;
+    repeat (4) @(posedge clk);
+    bus_read(17'o177362);
+    if (!acked) begin $display("  FAIL: 0177362 not acknowledged with AY2 back on"); errors = errors + 1; end
+    check_reg("AY1 R8 after the switch", dut.dd1.ymreg[8], 8'd0);
+    ay_set(17'o177362, 8'd8, 8'd9);
+    check_reg("AY2 R8 after the switch", dut.dd2.ymreg[8], 8'd9);
 
     $display("[tb_aberrant] %0d error(s)", errors);
     $finish;

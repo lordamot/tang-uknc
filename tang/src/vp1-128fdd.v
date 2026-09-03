@@ -40,7 +40,8 @@ module vp1_128fdd(
    rdy,
    tr0,
    ind,
-   wrprt_dsk
+   wrprt_dsk,
+   fdd_en
 );
 input        ppu_vm_clk_p;
 
@@ -70,6 +71,12 @@ input            rdy;
 input            tr0;
 input            ind;
 input     [ 3:0] wrprt_dsk;
+// The OSD's "FDD controller" switch (sysctrl 'f', Sep 2026).  Off, the
+// controller is not on the bus: 0177130/0177132 are not acknowledged and
+// the ROM finds no floppy interface, as on a machine without one.  The
+// drives behind it (fdd4.v) keep serving the card; nothing asks them.
+// A level on mist_clk; the tool times the crossing.
+input            fdd_en;
 //---------------------------------------------------------------------------------
 assign ppu_wbm_dat_o =  dout;
 assign ppu_wbm_ack_o =   ask;
@@ -77,7 +84,7 @@ assign step          =   stp;
 
 initial begin data_out = 16'd0; write = 1'b0; end
 
-wire r17713x = ~(|((ppu_wbm_adr_i[15:2] ^ 14'o37626)));
+wire r17713x = ~(|((ppu_wbm_adr_i[15:2] ^ 14'o37626))) & fdd_en;
 
 reg  [15:0] dout = 16'd0;
 reg         ask  =  1'b0;

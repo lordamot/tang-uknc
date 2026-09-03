@@ -297,6 +297,9 @@ void kbd_parse(spi_t *spi, hid_report_t *report, struct hid_kbd_state_S *state,
 	    // check if cursor up/down or space has been pressed
 	    if(buffer[2+i] == 0x51) msg = MENU_EVENT_DOWN;      
 	    if(buffer[2+i] == 0x52) msg = MENU_EVENT_UP;
+	    // cursor left/right step a value entry back and forth (Sep 2026)
+	    if(buffer[2+i] == 0x50) msg = MENU_EVENT_LEFT;
+	    if(buffer[2+i] == 0x4f) msg = MENU_EVENT_RIGHT;
 	    if(buffer[2+i] == 0x4e) msg = MENU_EVENT_PGDOWN;      
 	    if(buffer[2+i] == 0x4b) msg = MENU_EVENT_PGUP;
 	    if((buffer[2+i] == 0x2c) || (buffer[2+i] == 0x28))

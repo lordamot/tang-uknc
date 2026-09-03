@@ -46,7 +46,23 @@ module sysctrl (
   // sector per step - it sets the sample rate of a program that streams
   // its sound out of the sector data (ide.v, Sep 2026)
   output reg [5:0]  system_hdd_delay,
+  // 'p' 'q' 'r' 's' from the OSD "FDD controller" form: one letter a
+  // drive, 1 = write-protected (vp1-128fdd.v).  Until Sep 2026 this was
+  // one letter, 'P', carrying the INDEX of a six-entry list as if it were
+  // a bitmask - "2:" protected drives 0 and 1, "All" protected 0 and 2.
   output reg [3:0]  system_floppy_wprot,
+  // The hardware the OSD can take out of the machine or leave in
+  // (Sep 2026, the "Hardware" form).  A device that is off does not
+  // acknowledge its addresses - a bus timeout, as on a machine without
+  // it - and plays nothing; the beeper is a standard part and only leaves
+  // the mixer.
+  output reg        system_beeper,    // 'b' 0 mute, 1 on
+  output reg [2:0]  system_ay_en,     // '1' '2' '3' the three AY-3-8912s of the Aberrant
+  output reg [1:0]  system_covox,     // 'c' 0 off, 1 at 0177372, 2 at 0177100 (printer port A), 3 both
+  output reg        system_fdd_en,    // 'f' the floppy controller's 0177130/2
+  output reg        system_hdd_en,    // 'e' the IDE cartridge (with an image mounted)
+  output reg        system_mouse_en,  // 'u' the Kakave+ mouse word 0177400
+  output reg        system_rtc_en,    // 't' the Kakave+ clock word 0177410
   // 'M' from usb_host.c: 1 = a USB mouse is attached (the Kakave+ mouse
   // register's "who are you" answer, kakave.v)
   output reg        system_mouse,
@@ -57,7 +73,19 @@ module sysctrl (
   // value beside it; kakave.v takes the flip through two flops.
   output reg        system_rtc_tgl,
   output reg [2:0]  system_rtc_field,
-  output reg [7:0]  system_rtc_val
+  output reg [7:0]  system_rtc_val,
+  // the clock's current reading, from kakave.v, for CMD 6 (the OSD's
+  // "RTC clock" form shows it).  Counted on the PPU clock; sampled here
+  // on mist_clk - both declared, so the tool times the crossing - and
+  // latched once per command so the bytes shifted out belong to one
+  // instant, not to a second that ticked between two of them.
+  input [15:0]      rtc_year,
+  input [3:0]       rtc_month,
+  input [4:0]       rtc_date,
+  input [4:0]       rtc_hour,
+  input [5:0]       rtc_min,
+  input [5:0]       rtc_sec,
+  input [3:0]       rtc_dow
 );
 
 reg [3:0] state;
@@ -69,6 +97,15 @@ wire [7:0] data_in_rev = { data_in[0], data_in[1], data_in[2], data_in[3],
                            data_in[4], data_in[5], data_in[6], data_in[7] };
 
 reg coldboot = 1'b1;
+
+// CMD 6's snapshot of the clock
+reg [15:0] snap_year;
+reg [ 3:0] snap_month;
+reg [ 4:0] snap_date;
+reg [ 4:0] snap_hour;
+reg [ 5:0] snap_min;
+reg [ 5:0] snap_sec;
+reg [ 3:0] snap_dow;
    
 assign int_out_n = (int_in != 8'h00 || coldboot)?1'b0:1'b1;
 
@@ -84,9 +121,18 @@ always @(posedge clk) begin
 
       // OSD value defaults. These should be sane defaults, but the MCU
       // will very likely override these early
-      system_video <= 1'b0;         // color
+      system_video <= 1'b0;         // RGB
       system_volume <= 2'b00;       // mute
       system_floppy_wprot <= 4'b00; // floppy not write protected
+      // the hardware defaults are the OSD's (menu.c, variables_uknc):
+      // everything standard in, the add-ons out, until the MCU says
+      system_beeper   <= 1'b1;
+      system_ay_en    <= 3'b111;
+      system_covox    <= 2'd0;
+      system_fdd_en   <= 1'b1;
+      system_hdd_en   <= 1'b0;
+      system_mouse_en <= 1'b0;
+      system_rtc_en   <= 1'b0;
       system_hdd_spt <= 8'd0;
       system_hdd_heads <= 8'd0;
       system_hdd_flags <= 8'd0;
@@ -108,6 +154,14 @@ always @(posedge clk) begin
         if(data_in_start) begin
             state <= 4'd1;
             command <= data_in;
+            // one instant of the clock for whatever command this is
+            snap_year  <= rtc_year;
+            snap_month <= rtc_month;
+            snap_date  <= rtc_date;
+            snap_hour  <= rtc_hour;
+            snap_min   <= rtc_min;
+            snap_sec   <= rtc_sec;
+            snap_dow   <= rtc_dow;
         end else if(state != 4'd0) begin
             if(state != 4'd15) state <= state + 4'd1;
 
@@ -148,8 +202,21 @@ always @(posedge clk) begin
                     if(id == "R") system_reset <= data_in[1:0];
                     // Value "A": volume mute(0), 33%(1), 66%(2) or 100%(3)
                     if(id == "A") system_volume <= data_in[1:0];
-                    // Value "P": floppy write protecion None(0), A(1), B(2) both(3)
-                    if(id == "P") system_floppy_wprot <= data_in[3:0];
+                    // floppy write protection, one letter a drive
+                    if(id == "p") system_floppy_wprot[0] <= data_in[0];
+                    if(id == "q") system_floppy_wprot[1] <= data_in[0];
+                    if(id == "r") system_floppy_wprot[2] <= data_in[0];
+                    if(id == "s") system_floppy_wprot[3] <= data_in[0];
+                    // the hardware in or out of the machine
+                    if(id == "b") system_beeper      <= data_in[0];
+                    if(id == "1") system_ay_en[0]    <= data_in[0];
+                    if(id == "2") system_ay_en[1]    <= data_in[0];
+                    if(id == "3") system_ay_en[2]    <= data_in[0];
+                    if(id == "c") system_covox       <= data_in[1:0];
+                    if(id == "f") system_fdd_en      <= data_in[0];
+                    if(id == "e") system_hdd_en      <= data_in[0];
+                    if(id == "u") system_mouse_en    <= data_in[0];
+                    if(id == "t") system_rtc_en      <= data_in[0];
                     // IDE image geometry, sent before the INSERTED notice
                     if(id == "S") system_hdd_spt   <= data_in;
                     if(id == "H") system_hdd_heads <= data_in;
@@ -178,6 +245,22 @@ always @(posedge clk) begin
                 // interrupt[0] notifies the MCU of a FPGA cold boot e.g. if
                 // the FPGA has been loaded via USB
                 data_out <= { int_in[7:1], coldboot };
+            end
+
+            // CMD 6: read the Kakave+ clock (Sep 2026).  Eight bytes after
+            // the command's dummy byte, as sys_get_rtc() in mnano/sysctrl.c
+            // reads them: year low, year high, month 1..12, date 1..31,
+            // hour, minute, second, weekday 1 = Sunday .. 7 - the snapshot
+            // taken at the command byte.
+            if(command == 8'd6) begin
+                if(state == 4'd1) data_out <= snap_year[7:0];
+                if(state == 4'd2) data_out <= snap_year[15:8];
+                if(state == 4'd3) data_out <= {4'd0, snap_month};
+                if(state == 4'd4) data_out <= {3'd0, snap_date};
+                if(state == 4'd5) data_out <= {3'd0, snap_hour};
+                if(state == 4'd6) data_out <= {2'd0, snap_min};
+                if(state == 4'd7) data_out <= {2'd0, snap_sec};
+                if(state == 4'd8) data_out <= {4'd0, snap_dow};
             end
          end
       end

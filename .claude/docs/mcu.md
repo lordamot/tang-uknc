@@ -80,10 +80,26 @@ SYS command 4 takes a one-character id and a byte.  Both halves have to
 agree on the letters; `sysctrl.v` decodes:
 
 ```
-'V'  system_video          bit 0     0 = RGB, 1 = BGR (swaps red and green)
+'V'  system_video          bit 0     0 = RGB, 1 = BGR (swaps the red and blue planes; it swapped
+                                     red and GREEN until Sep 2026 - the OSD "Color")
 'R'  system_reset          bits 1:0  0 run, 1 reset, 3 coldboot
 'A'  system_volume         bits 1:0  0 mute, 1 33%, 2 66%, 3 100%
-'P'  system_floppy_wprot   bits 3:0  one bit per drive
+'b'  system_beeper         bit 0     0 mute, 1 on - the beeper leaves the mixer only, it is a standard part
+'1'  system_ay_en[0]       bit 0     } the three AY-3-8912s of the Aberrant (OSD "Aberrant"): off, the
+'2'  system_ay_en[1]       bit 0     } chip's word address is not acknowledged, the chip is held in
+'3'  system_ay_en[2]       bit 0     } reset and adds nothing to the sum
+'c'  system_covox          bits 1:0  0 off, 1 the DAC at 0177372, 2 a DAC on printer port A 0177100,
+                                     3 both (OSD "Covox"); off, 0177372 is a bus timeout
+'f'  system_fdd_en         bit 0     the floppy controller's 0177130/0177132 answer (OSD "FDD controller")
+'p'  system_floppy_wprot[0] bit 0    } one letter a drive, 1 = write-protected (OSD "FDDn write prot.").
+'q'  system_floppy_wprot[1] bit 0    } Until Sep 2026 one letter 'P' carried the INDEX of a six-entry
+'r'  system_floppy_wprot[2] bit 0    } list as if it were the bitmask: "2:" protected 0 and 1, "All"
+'s'  system_floppy_wprot[3] bit 0    } protected 0 and 2 - progress.md's open question, answered
+'e'  system_hdd_en         bit 0     the IDE cartridge exists (with an image in slot 4) - OSD "HDD controller";
+                                     off also hides "HDD0:" on the main form
+'u'  system_mouse_en       bit 0     the Kakave+ mouse word 0177400 answers (OSD "Mouse")
+'t'  system_rtc_en         bit 0     the Kakave+ clock word 0177410 answers (OSD "RTC controller"); the
+                                     clock counts either way
 'S'  system_hdd_spt        bits 7:0  IDE image sectors per track  } sent by sdc.c
 'H'  system_hdd_heads      bits 7:0  IDE image heads              } at mount, from
 'I'  system_hdd_flags      bit 0     IDE image stored inverted    } the image's sector 0
@@ -103,28 +119,71 @@ agree on the letters; `sysctrl.v` decodes:
 Anything the menu offers has to have a letter here, in `variables_uknc[]`
 in `menu.c`, and in the menu form string - three places.
 
+One command reads back: **SYS command 6** returns the Kakave+ clock as
+`kakave.v` holds it - year low, year high, month, date, hour, minute,
+second, weekday (1 = Sunday) - after the usual dummy byte, snapshotted at
+the command byte so the eight bytes are one instant.  `sys_get_rtc()` in
+`sysctrl.c`; the OSD's "RTC clock" form shows it once a second.
+
 ## The menu
 
-`menu.c`, four form strings for УКНЦ:
+`menu.c`, restructured in Sep 2026 (v2.0.0) around one "Hardware" form.
+The caption of the main form carries the version from `../VERSION` at
+its right (`UKNC_VERSION`, read by `CMakeLists.txt`).
 
 ```
-main      FDD 0: fileselector, HDD 0: fileselector (*.img, SD slot 4),
-          Run SAV: fileselector (*.sav, browse-only slot SDC_SLOT_SAV = 5),
-          System, Drives, Settings, Clock, Reset
-System    Video RGB|BGR ('V'), Cold Boot
-Drives    Disk 0:..3: fileselectors, Disk prot. None|0:|1:|2:|3:|All ('P'),
-          HDD image Auto|Plain|Inverted ('J'), HDD prot. Off|On ('K'),
-          HDD delay 0..975 us ('D', default 750 - right for badapple on the board; the value sent is us/25)
-Settings  Volume Mute|33%|66%|100% ('A'), Save settings
-Clock     Year 2020..2039 ('y'), Month ('m'), Day ('d'), Hour ('h'), Minute ('n') -
-          the Kakave+ RTC; saved with the settings, so a saved date is the power-on date
+main          FDD0: fileselector (*.dsk), HDD0: fileselector (*.img, SD slot 4 -
+              shown only while the HDD controller is on), Run SAV: (*.sav,
+              browse-only slot SDC_SLOT_SAV = 5), Reset, Hardware >, About >,
+              Save settings
+Hardware      Volume Mute|33%|66%|100% ('A'), Beeper Mute|On ('b'), Aberrant >,
+              Covox Off|Port 177372|Port 177100 LPT|Both ('c'), FDD controller >,
+              HDD controller >, Mouse Off|On ('u'), RTC clock >, Misc >
+Aberrant      AY1 / AY2 / AY3 Off|On ('1' '2' '3')
+FDD controller  FDD controller Off|On ('f'), then FDD0:..FDD3: fileselectors, each
+              followed by "FDDn write prot." Off|On ('p' 'q' 'r' 's')
+HDD controller  HDD controller Off|On ('e'), HDD0: fileselector, HDD write prot.
+              Off|On ('K'), Image format Auto|Plain|Inversed ('J'), HDD delay
+              0..975 us ('D', default 750 - right for badapple on the board; the value sent is us/25)
+RTC clock     RTC controller Off|On ('t'), Year 2020..2039 ('y'), Month ('m'),
+              Day ('d'), Hour ('h'), Minute ('n'), and an info line
+              "2026-02-23 14:00:01 Thu" read back from the core (SYS command 6)
+              once a second - not selectable
+Misc          Color RGB|BGR ('V'), Cold Boot
+About         a text page: authors and thanks, scrolled with the cursor keys
 ```
 
-The forms' `"0|n"` return entry is counted from 1, 0 being the title;
-the УКНЦ forms said 1, 2, 3 and came back one line above the entry they
-were opened from until Sep 2026.  "Run SAV:" is entry 3, so the four
-submenus return to 4..7; adding a main-form entry means renumbering
-all of them.
+Defaults (`variables_uknc[]`): volume 33%, beeper on, the three AYs on,
+Covox off, FDD controller on, nothing write-protected, HDD controller
+off, mouse off, RTC controller off, colour RGB, the clock 2026-01-01.
+Nothing is mounted until the settings file says so.
+
+Three things about the engine that came with it:
+
+- **Cursor left/right step a value entry** (`L`) back and forth, wrapping;
+  Space and Enter still step it on.  `usb_host.c` maps HID 0x50/0x4f to
+  `MENU_EVENT_LEFT/RIGHT`.
+- **A form returns to the entry that opened it, found by form number**
+  (`menu_parent_entry()`), so the `"parent|entry"` in a form's title is
+  only a fallback now, and a file selector returns to its own entry.
+  Until then every УКНЦ form named a fixed entry, and "Run SAV:" moving
+  the submenus down one had them come back a line high.
+- **Two entry types were added**: `T` opens a text page (`MENU_FORM_TEXT`,
+  paragraphs wrapped to the OSD's width in the menu font when opened),
+  and `I` is a computed, unselectable line that the 25 Hz OSD timer
+  redraws once a second (`info_tick`; the timer is started on a form
+  that has one).  A value that does not fit the right half of the line
+  moves right of its label and left as far as the screen needs.
+- **The main form is built at run time** (`menu_uknc_main()`), because
+  "HDD0:" is only there while 'e' is on.
+
+`make menu-test` runs all of this on the host: `mnano/menu_test.c`
+builds `menu.c` under its `SDL` host switch with u8g2 drawing into a
+bitmap and everything else stubbed, walks every form with the events
+`usb_host.c` would send, asserts what the core was told and where the
+cursor landed, and leaves each screen under `build/menu/` as text and
+PNG (`tools/osd_png.py`).  It is the only place the layout can be seen
+without a board.
 
 **Run SAV:** (Sep 2026) is the one entry that mounts nothing itself.
 It browses the card for `.sav` files through `SDC_SLOT_SAV`, a sixth
@@ -147,10 +206,10 @@ FatFs sector callbacks moved one sector whatever count they were
 given, so the 4 KB copy left seven of every eight sectors unwritten.
 They loop now; the settings file, under 512 bytes, had never shown it.
 
-`variables_uknc[]` gives the defaults: video RGB, volume 33%, no write
-protection.  Note that "Disk prot." offers six choices onto a four-bit
-field, so the values are an index into the list, not a bitmask - the FPGA
-takes all four bits and the correspondence is whatever `menu.c` sends.
+The old "Disk prot." entry offered six choices onto the four-bit `'P'`
+field as an index; the FPGA read it as a bitmask, so "2:" protected
+drives 0 and 1 and "All" protected 0 and 2.  Gone with the restructure:
+one letter a drive.
 
 Disk images are `.dsk`, 819200 bytes (see `.claude/docs/platform.md`).
 `sdc.c` mounts them and `mister/sd_card.v` serves sectors on request.

@@ -12,6 +12,8 @@ module aberrant(
    ppu_wbm_stb_i,
    ppu_wbm_ack_o,
 
+   ay_en,
+
    m_channel
 );
 input        ppu_vm_clk_p;
@@ -26,6 +28,13 @@ input        ppu_wbm_wre_i;
 input  [ 1:0]ppu_wbm_sel_o;
 input        ppu_wbm_stb_i;
 output       ppu_wbm_ack_o;
+
+// One enable a chip, from the OSD's "Aberrant" form (sysctrl '1' '2'
+// '3', Sep 2026).  A chip that is off is not on the bus - its word
+// address is not acknowledged, so software probing for it gets the bus
+// timeout a missing chip gives - it is held in reset, and it adds nothing
+// to the sum below.  A level on mist_clk; the tool times the crossing.
+input  [ 2:0]ay_en;
 
 output [11:0]m_channel;
 
@@ -55,15 +64,17 @@ output [11:0]m_channel;
 wire ceppu = (ppu_wbm_adr_i[15:3] == 13'o17736) &&
              (ppu_wbm_adr_i[ 2:1] != 2'b11);
 //---------------------------------------------------------------------------------
-assign ppu_wbm_ack_o = ceppu && ppu_wbm_stb_i;
+// the acknowledge is the OR of the three chip selects, so a chip that is
+// switched off (ay_en) leaves its address unanswered
+assign ppu_wbm_ack_o = ce0 | ce1 | ce2;
 
 assign ppu_wbm_dat_o = ce0 ? {2{DO_0}}:
                        ce1 ? {2{DO_1}}:
                        ce2 ? {2{DO_2}}: 16'd0;
 
-wire ce0 = ceppu && ppu_wbm_adr_i[2:1]==2'b00 && ppu_wbm_stb_i;
-wire ce1 = ceppu && ppu_wbm_adr_i[2:1]==2'b01 && ppu_wbm_stb_i;
-wire ce2 = ceppu && ppu_wbm_adr_i[2:1]==2'b10 && ppu_wbm_stb_i;
+wire ce0 = ceppu && ppu_wbm_adr_i[2:1]==2'b00 && ppu_wbm_stb_i && ay_en[0];
+wire ce1 = ceppu && ppu_wbm_adr_i[2:1]==2'b01 && ppu_wbm_stb_i && ay_en[1];
+wire ce2 = ceppu && ppu_wbm_adr_i[2:1]==2'b10 && ppu_wbm_stb_i && ay_en[2];
 
 wire nwtbt = &ppu_wbm_sel_o;
 
@@ -130,7 +141,7 @@ wire [7:0]out_c_dd1;
 YM2149 dd1(
     .CLK      (      ppu_vm_clk_p), // Global clock
     .CE       (             ay_ce), // PSG Clock enable, 1.7734 MHz
-    .RESET    (     ppu_vm_init_i), // Chip RESET (set all Registers to '0', active hi)
+    .RESET    (ppu_vm_init_i | ~ay_en[0]), // Chip RESET (set all Registers to '0', active hi); held while the chip is off
     .BDIR     (             bdir1), // Bus Direction (0 - read , 1 - write)
     .BC       (               bc1), // Bus control
     .DI       (ppu_wbm_dat_i[7:0]), // Data In
@@ -158,7 +169,7 @@ wire [7:0]out_c_dd2;
 YM2149 dd2(
     .CLK      (      ppu_vm_clk_p), // Global clock
     .CE       (             ay_ce), // PSG Clock enable, 1.7734 MHz
-    .RESET    (     ppu_vm_init_i), // Chip RESET (set all Registers to '0', active hi)
+    .RESET    (ppu_vm_init_i | ~ay_en[1]), // Chip RESET (set all Registers to '0', active hi); held while the chip is off
     .BDIR     (             bdir2), // Bus Direction (0 - read , 1 - write)
     .BC       (               bc2), // Bus control
     .DI       (ppu_wbm_dat_i[7:0]), // Data In
@@ -188,7 +199,7 @@ wire [7:0]out_c_dd3;
 YM2149 dd3(
     .CLK      (      ppu_vm_clk_p), // Global clock
     .CE       (             ay_ce), // PSG Clock enable, 1.7734 MHz
-    .RESET    (     ppu_vm_init_i), // Chip RESET (set all Registers to '0', active hi)
+    .RESET    (ppu_vm_init_i | ~ay_en[2]), // Chip RESET (set all Registers to '0', active hi); held while the chip is off
     .BDIR     (             bdir3), // Bus Direction (0 - read , 1 - write)
     .BC       (               bc3), // Bus control
     .DI       (ppu_wbm_dat_i[7:0]), // Data In
@@ -218,7 +229,16 @@ reg [11:0]mono_channel  = 12'd0;
 
 assign m_channel =  mono_channel;
 
+// a chip that is off is in reset and its outputs are already zero; the
+// masks make that true on the same clock the enable drops, not a few
+// later, and cost three LUTs a byte
+wire [7:0] m1 = {8{ay_en[0]}};
+wire [7:0] m2 = {8{ay_en[1]}};
+wire [7:0] m3 = {8{ay_en[2]}};
+
 always @(posedge ppu_vm_clk_p)
-        mono_channel  <= out_a_dd1 + out_a_dd2 + out_a_dd3 + out_b_dd1 + out_b_dd2 + out_b_dd3 + out_c_dd1 + out_c_dd2 + out_c_dd3;
+        mono_channel  <= (out_a_dd1 & m1) + (out_a_dd2 & m2) + (out_a_dd3 & m3)
+                       + (out_b_dd1 & m1) + (out_b_dd2 & m2) + (out_b_dd3 & m3)
+                       + (out_c_dd1 & m1) + (out_c_dd2 & m2) + (out_c_dd3 & m3);
 //---------------------------------------------------------------------------------
 endmodule

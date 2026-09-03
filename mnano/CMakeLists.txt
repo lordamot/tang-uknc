@@ -4,6 +4,14 @@ include(proj.conf)
 
 add_definitions(-DU8X8_WITH_USER_PTR)
 
+# The firmware's version is the first line of ../VERSION, shown at the
+# right of the OSD's caption (menu.c).  Read here rather than passed
+# through make, so the quoting survives; a change to the file re-runs
+# cmake.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION UKNC_VERSION LIMIT_COUNT 1)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION)
+add_definitions(-DUKNC_VERSION="${UKNC_VERSION}")
+
 find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
 
 sdk_add_include_directories(. u8g2/csrc)

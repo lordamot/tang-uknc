@@ -18,6 +18,9 @@
 //     31 Dec rolls the year; seven seconds are exactly 21937500 PPU clocks
 //   - the OSD's field-at-a-time set (sysctrl 'y','m','d','h','n')
 //   - a PPU reset clears a pending command and leaves the time alone
+//   - the OSD's two switches (Sep 2026): the mouse word and the clock word
+//     each leave the bus when theirs is off, the clock keeps counting, and
+//     the read-out ports for sysctrl CMD 6 agree with what the bus reads
 //========================================================================
 module tb_kakave;
 
@@ -51,6 +54,9 @@ wire        rep_tgl;
 wire [7:0]  rep_dx, rep_dy;
 
 reg         mouse_present = 1'b0;
+reg         mouse_en  = 1'b1;
+reg         rtc_en    = 1'b1;
+wire [15:0] o_year; wire [3:0] o_month; wire [4:0] o_date, o_hour; wire [5:0] o_min, o_sec; wire [3:0] o_dow;
 reg         set_tgl   = 1'b0;
 reg  [2:0]  set_field = 3'd0;
 reg  [7:0]  set_val   = 8'd0;
@@ -67,7 +73,10 @@ kakave dut (
     .wre(wre), .sel(sel), .stb(stb), .ack(ack),
     .mouse_tgl(rep_tgl), .mouse_dx(rep_dx), .mouse_dy(rep_dy), .mouse_btns(mouse_q[5:4]),
     .mouse_present(mouse_present),
-    .set_tgl(set_tgl), .set_field(set_field), .set_val(set_val));
+    .set_tgl(set_tgl), .set_field(set_field), .set_val(set_val),
+    .mouse_en(mouse_en), .rtc_en(rtc_en),
+    .rtc_year(o_year), .rtc_month(o_month), .rtc_date(o_date), .rtc_hour(o_hour),
+    .rtc_min(o_min), .rtc_sec(o_sec), .rtc_dow(o_dow));
 
 integer errors = 0;
 reg        acked;
@@ -292,7 +301,25 @@ initial begin
     rtc_expect(8'd3, 16'd2026,       "reset: no field pending, time kept");
     rtc_expect(8'd2, {8'd9,  8'd2},  "reset: date kept");
 
-    if(errors == 0) $display("PASS: Kakave+ at 177400/177410 - decode, mouse motion/buttons/clip/commands, RTC set/read/rollover/weekday, exact second, OSD set, reset");
+    //---- the read-out ports agree with the bus ----
+    if(o_year !== 16'd2026 || o_month !== 4'd9 || o_date !== 5'd2 || o_hour !== 5'd13 || o_min !== 6'd45 || o_dow !== 4'd4)
+        begin $display("FAIL: read-out ports %0d-%0d-%0d %0d:%0d dow %0d, expected 2026-9-2 13:45 dow 4", o_year, o_month, o_date, o_hour, o_min, o_dow); errors = errors + 1; end
+
+    //---- the OSD switches ----
+    mouse_en = 1'b0; repeat (2) @(posedge clk);
+    bus_read(17'o177400); if(acked)  begin $display("FAIL: 177400 acknowledged with the mouse off"); errors = errors + 1; end
+    bus_read(17'o177410); if(!acked) begin $display("FAIL: 177410 not acknowledged with only the mouse off"); errors = errors + 1; end
+    rtc_en = 1'b0; repeat (2) @(posedge clk);
+    bus_read(17'o177410); if(acked)  begin $display("FAIL: 177410 acknowledged with the clock off"); errors = errors + 1; end
+    bus_read(17'o177401); if(acked)  begin $display("FAIL: 177401 acknowledged with both off"); errors = errors + 1; end
+    // the clock counts on regardless: a second passes on the read-out port
+    ticks(1);
+    if(o_sec !== 6'd1 && o_sec !== 6'd2) begin $display("FAIL: clock stopped with the port off (sec %0d)", o_sec); errors = errors + 1; end
+    mouse_en = 1'b1; rtc_en = 1'b1; repeat (2) @(posedge clk);
+    bus_read(17'o177400); if(!acked) begin $display("FAIL: 177400 not acknowledged with the mouse back on"); errors = errors + 1; end
+    rtc_expect(8'd3, 16'd2026,       "switch cycle: time kept");
+
+    if(errors == 0) $display("PASS: Kakave+ at 177400/177410 - decode, mouse motion/buttons/clip/commands, RTC set/read/rollover/weekday, exact second, OSD set, reset, the OSD switches");
     else $display("FAIL: %0d errors", errors);
     $finish;
 end

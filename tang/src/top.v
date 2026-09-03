@@ -360,6 +360,24 @@ wire        system_mouse       ;
 wire        system_rtc_tgl     ;
 wire [2:0]  system_rtc_field   ;
 wire [7:0]  system_rtc_val     ;
+// the OSD's "Hardware" switches (Sep 2026): what is in the machine.
+// Levels on mist_clk into the PPU domain; clk_25 and clk_3_12 are both
+// declared in test003.sdc, so the tool times every one of these paths.
+wire        system_beeper      ;
+wire [2:0]  system_ay_en       ;
+wire [1:0]  system_covox       ;
+wire        system_fdd_en      ;
+wire        system_hdd_en      ;
+wire        system_mouse_en    ;
+wire        system_rtc_en      ;
+// the Kakave+ clock as it stands, kakave.v -> sysctrl CMD 6 -> the OSD
+wire [15:0] rtc_year           ;
+wire [ 3:0] rtc_month          ;
+wire [ 4:0] rtc_date           ;
+wire [ 4:0] rtc_hour           ;
+wire [ 5:0] rtc_min            ;
+wire [ 5:0] rtc_sec            ;
+wire [ 3:0] rtc_dow            ;
 
 sysctrl sctl1(
     .clk                (           mist_clk),
@@ -395,7 +413,21 @@ sysctrl sctl1(
     .system_mouse       (       system_mouse),
     .system_rtc_tgl     (     system_rtc_tgl),
     .system_rtc_field   (   system_rtc_field),
-    .system_rtc_val     (     system_rtc_val)
+    .system_rtc_val     (     system_rtc_val),
+    .system_beeper      (      system_beeper),
+    .system_ay_en       (       system_ay_en),
+    .system_covox       (       system_covox),
+    .system_fdd_en      (      system_fdd_en),
+    .system_hdd_en      (      system_hdd_en),
+    .system_mouse_en    (    system_mouse_en),
+    .system_rtc_en      (      system_rtc_en),
+    .rtc_year           (           rtc_year),
+    .rtc_month          (          rtc_month),
+    .rtc_date           (           rtc_date),
+    .rtc_hour           (           rtc_hour),
+    .rtc_min            (            rtc_min),
+    .rtc_sec            (            rtc_sec),
+    .rtc_dow            (            rtc_dow)
 );
 
 wire [5:0] db9_port = 6'd0;
@@ -502,8 +534,11 @@ end
 assign leds[4] = ~mount_dsk[0];
 
 
-wire [ 2:0] red_m   = system_video ? green : red  ;
-wire [ 2:0] green_m = system_video ? red   : green;
+// The OSD's "Color: RGB / BGR" (sysctrl 'V').  BGR means the red and
+// BLUE planes change places; until Sep 2026 this swapped red and GREEN,
+// so the switch did something, but not what its label said.
+wire [ 2:0] red_m   = system_video ? blue  : red  ;
+wire [ 2:0] blue_m  = system_video ? red   : blue ;
 
 
 osd_u8g2 osd1(
@@ -519,8 +554,8 @@ osd_u8g2 osd1(
     .hs            (         hsync),
     .vs            (         vsync),
     .r_in          (  {red_m,3'd0}),
-    .g_in          ({green_m,3'd0}),
-    .b_in          (   {blue,3'd0}),
+    .g_in          (  {green,3'd0}),
+    .b_in          ( {blue_m,3'd0}),
 
     .r_out         (         r_out),
     .g_out         (         g_out),
@@ -843,7 +878,7 @@ ide hdd(
     .cart_sel   (          cart_sel),
     .cart_bank  (         cart_bank),
 
-    .hdd_present(      mount_dsk[4]),
+    .hdd_present(mount_dsk[4] & system_hdd_en),   // an image, and the OSD's "HDD controller" on
     .geo_spt    (    system_hdd_spt),
     .geo_heads  (  system_hdd_heads),
     .geo_inv    ( system_hdd_flags[0]),
@@ -893,7 +928,8 @@ vp1_128fdd vp128(
     .rdy          (         disk_rdy),
     .tr0          (         disk_tr0),
     .ind          (         disk_ind),
-    .wrprt_dsk    (system_floppy_wprot)
+    .wrprt_dsk    (system_floppy_wprot),
+    .fdd_en       (    system_fdd_en)
 );
 //------------------------------------------------------------//
 wire [11:0] mono_channel ;   // all nine AY channels, summed in aberrant
@@ -912,6 +948,8 @@ aberrant ay1(
    .ppu_wbm_stb_i(    ppu_wbm_stb_o),
    .ppu_wbm_ack_o(ppu_wbm_ack_i_abr),
 
+   .ay_en        (     system_ay_en),
+
    .m_channel    (     mono_channel)
 );
 //------------------------------------------------------------//
@@ -922,6 +960,7 @@ wire [7:0] covox_sample;
 covox cvx1(
    .clk   (         ppuclk_n),
    .init  (    ppu_vm_init_o),
+   .en    (  system_covox[0]),   // OSD "Covox": Port 177372 or Both
    .adr   (    ppu_wbm_adr_o),
    .dat_i (    ppu_wbm_dat_o),
    .dat_o (ppu_wbm_dat_i_cvx),
@@ -954,7 +993,16 @@ kakave kkv1(
    .mouse_present(     system_mouse),
    .set_tgl      (   system_rtc_tgl),
    .set_field    ( system_rtc_field),
-   .set_val      (   system_rtc_val)
+   .set_val      (   system_rtc_val),
+   .mouse_en     (  system_mouse_en),
+   .rtc_en       (    system_rtc_en),
+   .rtc_year     (         rtc_year),
+   .rtc_month    (        rtc_month),
+   .rtc_date     (         rtc_date),
+   .rtc_hour     (         rtc_hour),
+   .rtc_min      (          rtc_min),
+   .rtc_sec      (          rtc_sec),
+   .rtc_dow      (          rtc_dow)
 );
 //------------------------------------------------------------//
 cpu_wb cpu1(
@@ -993,6 +1041,7 @@ cpu_wb cpu1(
 );
 //------------------------------------------------------------//
 wire cpu_wbi_stb_o_vp1;   // the CPU's interrupt-ack chain, on to vp65
+wire [7:0] lpt_data;      // port A of the printer port, 0177100 - the older Covox's byte
 
 vp1_120 vp1
 (
@@ -1034,7 +1083,9 @@ vp1_120 vp1
     .ppu_wbi_ack_o( ppu_wbi_ack_i_vp),
     .ppu_wbi_stb_i(ppu_wbi_stb_o_xm2),
 
-    .ppu_wbi_stb_o()
+    .ppu_wbi_stb_o(),
+
+    .lpt_data     (         lpt_data)
 );
 
 //------------------------------------------------------------//
@@ -1093,10 +1144,27 @@ vp065 dd2(
 // bit, and of the beeper's.  With it the sum can reach 34712, so the
 // corner where three chips, the beeper and a DAC peak together is the
 // one case clip() below now really saturates; music does not go there.
+//
+// The OSD's "Hardware" form (Sep 2026) decides what is in the sum: the
+// beeper can be muted here (it is a standard part and stays on the bus),
+// the AYs are masked inside aberrant.v, the Covox at 0177372 holds zero
+// while it is off, and a second DAC hangs on port A of the printer port
+// (0177100, vp1_120's portA) when "Covox" says Port 177100 or Both - the
+// older Covox, which UKNC players fall back to when 0177372 does not
+// answer.  Not inverted, for the reason covox.v gives.  With both DACs
+// the sum can reach 42872; nothing plays them together, and clip() has
+// the corner.  All four levels come from mist_clk; the tool times them.
+// The printer byte is registered onto the PPU clock first, so the adder
+// below sees a settled value whatever clk_25 edge it changed on.
+reg  [7:0] lpt_sample = 8'd0;
+always @(posedge ppuclk_p)
+    lpt_sample <= system_covox[1] ? lpt_data : 8'd0;
+
 wire [15:0] ay_mix = {1'd0, mono_channel, 3'd0};   // 0..18360
-wire [15:0] beeper = {2'd0, sound, 13'd0};         // 0 or 8192
+wire [15:0] beeper = {2'd0, sound & system_beeper, 13'd0};   // 0 or 8192
 wire [15:0] covox  = {3'd0, covox_sample, 5'd0};   // 0..8160
-wire [15:0] mix    = ay_mix + beeper + covox;      // 0..34712
+wire [15:0] lptcvx = {3'd0, lpt_sample, 5'd0};     // 0..8160
+wire [15:0] mix    = ay_mix + beeper + covox + lptcvx;   // 0..42872
 
 // The sum goes out unipolar, as it is.
 //

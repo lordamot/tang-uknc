@@ -1235,6 +1235,43 @@ keyboard and the channel all live at once.  That is the first program
 seen on this hardware that drives the PPU timer and channel 2
 together, and the vector chain is the thing it proves.
 
+### 20. The OSD restructure, v2.0.0 - FLASHED, THE MENU IS UP
+
+3 Sep 2026.  The menu is main / Hardware / Aberrant / FDD controller /
+HDD controller / RTC clock / Misc, an About page and Save settings
+(`.claude/docs/mcu.md` has every form and letter), and every add-on is
+behind a switch that takes it off the PPU bus: the three AYs one by one,
+the Covox at `0177372`, a second Covox on the printer port `0177100`
+(new - `vp1_120.v`'s port A byte mixed in `top.v`, the older DAC that
+players fall back to), the floppy controller, the IDE cartridge, the
+Kakave+ mouse and clock words; the beeper leaves the mixer only.  The
+"RTC clock" form shows the core's clock read back over a new SYS
+command 6 once a second, the cursor keys step values both ways, the
+caption carries `VERSION`, and "Color: RGB / BGR" now swaps red and
+BLUE - it swapped red and green since the beginning, so the switch did
+something but not what it said.  The old "Disk prot." sent a list index
+the FPGA took as a bitmask; four letters now, one a drive.
+
+What was checked, in the order it costs: `make lint`; `make ab-test`,
+`covox-test`, `kakave-test` and the new `hwen-test` each switch their
+device off and on (no acknowledge, no write landing, the sum silent, the
+others untouched, back when on); `make sim` boots to the CPU release
+with the new defaults, reads the clock back right, and compares 200k
+pixels of the RGB/BGR swap; `make menu-test` walks every form on the
+host with the keys the firmware sends, asserts every letter the core is
+told and where the cursor lands, and renders all 23 screens as PNGs
+(that is how "HDD image format" beside "Inversed" was seen not to fit,
+and became "Image format"); `make fw` builds; `make bitstream` passes
+the timing gate with 0 setup and 0 hold - after one failure, the weekday
+arithmetic into the read-back snapshot, fixed with a flop in `kakave.v`.
+Both binaries were flashed the same evening (the Tang over
+`openFPGALoader -f`, the BL616 over its bootloader, SHA verified) and
+the operator reported the new menu up.  Not yet done on the board:
+software against each switch in each position - a player finding the
+Covox absent with it Off and present with it On, the printer-port DAC
+heard, the clock line agreeing with a program's reading, the floppy
+controller gone.
+
 ## Open questions
 
 
@@ -1244,9 +1281,10 @@ together, and the vector chain is the thing it proves.
 - **What made `tang/rom/uknc_rom.mif`?**  It is 16384 words; the `.bin`
   beside it is 32256 bytes.  No converter for that in the repo.
 - **What are `bin2mif`'s arguments?**  Binary only, no source.
-- **Is the "Disk prot." menu value an index or a bitmask?**  The menu
-  offers six choices onto `system_floppy_wprot[3:0]`; `menu.c` decides and
-  the FPGA just takes four bits.  Not traced.
+- **Is the "Disk prot." menu value an index or a bitmask? - ANSWERED,
+  GONE.**  It was an index sent into a bitmask: "0:" and "1:" worked,
+  "2:" protected drives 0 and 1, "3:" protected 2, "All" protected 0 and
+  2.  v2.0.0 (defect 20) replaced it with one letter a drive.
 - **One read-after-write miss at 177 ms - GONE with defect 13.**  `make
   sim` at 300 ms reported `cpu bank1 read 166575 at 014701, wrote 146175`
   on the unmodified tree and after the floppy re-clocking alike; after

@@ -10,6 +10,9 @@
 //   - over the whole 0177360-0177377 range, no address is acknowledged by
 //     both the Covox and the Aberrant, and 0177366/70/74/76 by neither
 //     (a player probing for MIDI or an OPL2 must get its bus timeout)
+//   - with the OSD's Covox switch off (en = 0) 0177372 is not acknowledged
+//     either, a write leaves the sample at zero, and turning it off with a
+//     sample held drops the sample to zero (Sep 2026)
 //========================================================================
 module tb_covox;
 
@@ -17,6 +20,7 @@ reg clk = 1'b0;
 always #159.5 clk = ~clk;
 
 reg         init = 1'b1;
+reg         cvx_en = 1'b1;
 reg  [16:0] adr  = 17'o0;
 reg  [15:0] dat  = 16'o0;
 reg         cyc  = 1'b0;
@@ -29,7 +33,7 @@ wire [ 7:0] sample;
 wire [11:0] m_ch;
 
 covox dut (
-    .clk(clk), .init(init), .adr(adr), .dat_i(dat), .dat_o(cvx_dout),
+    .clk(clk), .init(init), .en(cvx_en), .adr(adr), .dat_i(dat), .dat_o(cvx_dout),
     .wre(wre), .sel(sel), .stb(stb), .ack(cvx_ack), .sample(sample));
 
 aberrant ab (
@@ -37,6 +41,7 @@ aberrant ab (
     .ppu_wbm_adr_i(adr), .ppu_wbm_dat_i(dat), .ppu_wbm_dat_o(ab_dout),
     .ppu_wbm_cyc_i(cyc), .ppu_wbm_wre_i(wre), .ppu_wbm_sel_o(sel),
     .ppu_wbm_stb_i(stb), .ppu_wbm_ack_o(ab_ack),
+    .ay_en(3'b111),
     .m_channel(m_ch));
 
 integer errors = 0;
@@ -102,7 +107,19 @@ initial begin
     bus_read(17'o177400);
     if(acked_cvx) begin $display("FAIL: 177400 acknowledged by the Covox"); errors = errors + 1; end
 
-    if(errors == 0) $display("PASS: Covox at 177372 - word, low and high byte writes, read-back, and no shared ack over 177360-177376");
+    // the OSD switch: off, the port is gone and so is the sample
+    bus_write(17'o177372, 16'o000125, 2'b11);  expect_sample(8'o125, "sample before switching off");
+    @(negedge clk); cvx_en = 1'b0; repeat (2) @(posedge clk);
+    expect_sample(8'o000, "switched off: sample dropped to zero");
+    bus_read(17'o177372);
+    if(acked_cvx) begin $display("FAIL: 177372 acknowledged with the Covox off"); errors = errors + 1; end
+    bus_write(17'o177372, 16'o000252, 2'b11);  expect_sample(8'o000, "switched off: a write leaves zero");
+    @(negedge clk); cvx_en = 1'b1; repeat (2) @(posedge clk);
+    bus_read(17'o177372);
+    if(!acked_cvx) begin $display("FAIL: 177372 not acknowledged with the Covox back on"); errors = errors + 1; end
+    bus_write(17'o177372, 16'o000252, 2'b11);  expect_sample(8'o252, "switched back on: writes land");
+
+    if(errors == 0) $display("PASS: Covox at 177372 - word, low and high byte writes, read-back, no shared ack over 177360-177376, and the OSD switch");
     $finish;
 end
 endmodule

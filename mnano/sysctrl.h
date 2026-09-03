@@ -27,6 +27,13 @@ void sys_set_leds(spi_t *, char);
 void sys_set_rgb(spi_t *, unsigned long);
 unsigned char sys_get_buttons(spi_t *);
 void sys_set_val(spi_t *, char, uint8_t);
+// the UKNC core's clock (kakave.v), as sysctrl.v's CMD 6 reports it:
+// year as is, month 1..12, date 1..31, 24-hour, weekday 1 = Sunday .. 7
+typedef struct {
+  unsigned short year;
+  unsigned char month, date, hour, min, sec, dow;
+} sys_rtc_t;
+void sys_get_rtc(spi_t *, sys_rtc_t *);
 unsigned char sys_irq_ctrl(spi_t *, unsigned char);
 void sys_handle_interrupts(unsigned char);
 

@@ -78,6 +78,21 @@ void sys_set_val(spi_t *spi, char id, uint8_t value) {
   spi_end(spi);  
 }
 
+void sys_get_rtc(spi_t *spi, sys_rtc_t *t) {
+  sys_begin(spi, SPI_SYS_RTC);
+  spi_tx_u08(spi, 0);               // dummy: data_out is a byte behind the command
+  unsigned char lo = spi_tx_u08(spi, 0);
+  unsigned char hi = spi_tx_u08(spi, 0);
+  t->year  = lo | (hi << 8);
+  t->month = spi_tx_u08(spi, 0);
+  t->date  = spi_tx_u08(spi, 0);
+  t->hour  = spi_tx_u08(spi, 0);
+  t->min   = spi_tx_u08(spi, 0);
+  t->sec   = spi_tx_u08(spi, 0);
+  t->dow   = spi_tx_u08(spi, 0);
+  spi_end(spi);
+}
+
 unsigned char sys_irq_ctrl(spi_t *spi, unsigned char ack) {
   sys_begin(spi, SPI_SYS_IRQ_CTRL);
   spi_tx_u08(spi, ack);

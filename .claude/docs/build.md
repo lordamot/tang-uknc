@@ -3,23 +3,19 @@
 Two binaries, two toolchains.  What ships prebuilt is:
 
 ```
-bin/tang.fs      7261987 bytes, Jan 2025   the FPGA bitstream
-bin/bl616.bin     430512 bytes, Aug 2026   the MCU firmware
+bin/tang.fs      7262008 bytes, 3 Sep 2026   the FPGA bitstream   (make bitstream)
+bin/bl616.bin     442016 bytes, 3 Sep 2026   the MCU firmware     (make fw, copied by hand)
 ```
 
-The two are **not at the same point**.  `bin/bl616.bin` is rebuilt from
-`mnano/` whenever the firmware changes, because this host can build it.
-`bin/tang.fs` cannot be rebuilt here at all, so it stays at whatever the
-last Gowin run produced - January 2025 - and does not contain any RTL
-change made since.  `howto.md` says so where a user will see it.
+Both are rebuilt here from the tree - `make bitstream` copies its result
+to `bin/` itself once the timing gate passes, `make fw` leaves it in
+`build/fw/` and it is copied on - and since v2.0.0 (3 Sep 2026) the two
+are the same revision, flashed together.  `bin/tang.fs` IS
+`tang/impl/pnr/test003.fs`; the January 2025 pair that differed in
+content is history.
 
 A user who only wants to run the machine flashes those two and needs no
 toolchain at all.  That is the point of committing them.
-
-> `bin/tang.fs` and `tang/impl/pnr/test003.fs` are the same size and the
-> same date but **not the same file** (different md5).  Which of the two is
-> the one running on a board has not been established.  Treat `bin/` as the
-> shipped one until someone says otherwise.
 
 **Both halves build on this host.**  Everything they need lives under
 `tools/`, fetched by `make toolchain` - about 8 GB including Gowin -
@@ -34,7 +30,9 @@ make ab-test     the Aberrant sound module alone: registers, tone, pitch
 make fdd-test    the floppy controller before and after its re-clocking
 make kbd-test    the keyboard byte queue in xm2-01.v under SPI-speed bursts
 make virq-test   the vector chains, PPU and CPU: a channel interrupt behind a pending timer/key one, two requests at one fetch, no chain strobe moving mid-fetch
-make covox-test  the Covox at 177372 beside the Aberrant: writes, read-back, no shared ack
+make covox-test  the Covox at 177372 beside the Aberrant: writes, read-back, no shared ack, the OSD switch
+make hwen-test   the floppy controller's OSD switch and the printer port A read-out (LPT Covox)
+make menu-test   the OSD menu on the host: every form walked, the core's letters, the screens as PNG
 make ide-test    the IDE cartridge against a stand-in card
 make sdarb-test  the SD path arbiter between floppies and cartridge
 make ide-rom     regenerate src/ide/ide_rom.v from tang/rom/ide_wdromv0110.bin
@@ -212,7 +210,10 @@ knowing because they will look like breakage otherwise:
 The binary that comes out is what `bin/bl616.bin` now is - `make fw`
 copies it to `build/fw/bl616.bin` and it is copied on to `bin/` whenever
 `mnano/` changes, because flashing straight from `bin/` without a
-toolchain is what that directory is for.  It is around 430 KB against the
+toolchain is what that directory is for.  The version it shows in the
+OSD's caption is the first line of `VERSION` at the repository root,
+read by `mnano/CMakeLists.txt` into `UKNC_VERSION`; change the file and
+cmake re-runs on the next `make fw`.  It is around 430 KB against the
 399808 bytes of the August 2024 binary it replaced, and is not
 byte-comparable with it: that one was built against whatever the SDK was
 then.  The old one is in git history.

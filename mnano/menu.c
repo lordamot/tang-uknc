@@ -23,8 +23,6 @@ extern QueueHandle_t xQueue;   // the OSD's event queue (main.c)
 
 #define MENU2U8G2(a)  (&(a->osd->u8g2))
 
-#define MENU_FORM_FSEL           -1
-
 #define MENU_ENTRY_INDEX_ID       0
 #define MENU_ENTRY_INDEX_LABEL    1
 #define MENU_ENTRY_INDEX_FORM     2
@@ -80,47 +78,76 @@ menu_variable_t variables_agat9[] = {
 // ------------------------------------------------------------------
 // ---------------------  UKNC menu -----------------------------
 // ------------------------------------------------------------------
+// Restructured in Sep 2026 (v2.0.0): the main form is the disks, the
+// reset, one "Hardware" form for everything the machine is made of, an
+// "About" text and "Save settings".  Every hardware switch is a letter
+// sysctrl.v decodes; a device that is off is not on the PPU bus at all.
+//
+// A form's title is "name,parent|entry": the parent form and the entry
+// in it to return to.  The entry number is only a fallback now -
+// menu_parent_entry() finds the 'S' entry that opened the form by its
+// form number, so a form can move in its parent without renumbering
+// (which is what used to go wrong here).
+//
+// The main form is built at run time: "HDD0:" is only there while the
+// HDD controller is on.
 
-static const char main_form_uknc[] =
-  "UKNC Nano,;"                        // main form has no parent
-  // --------
-  "F,FDD 0:,0|dsk;"                 // fileselector for Disk 1:
-  "F,HDD 0:,4|img;"                 // the IDE cartridge's disk, SD slot 4
-  "F,Run SAV:,5|sav;"               // a .SAV on the card -> RT11SAV.DSK in FDD 0 (menu_run_sav, slot SDC_SLOT_SAV)
-  "S,System,1;"                         // System submenu is form 1
-  "S,Drives,2;"                         // Storage submenu
-  "S,Settings,3;"                       // Settings submenu is form 3
-  "S,Clock,4;"                          // the Kakave+ RTC, form 4
-  "B,Reset,R;";                         // system reset
+#ifndef UKNC_VERSION
+#define UKNC_VERSION ""                 // ../VERSION, through CMakeLists.txt
+#endif
 
-// a form's "0|n" is the main-form entry to return to, counted from 1
-// (0 is the title); these used to say 1, 2, 3 and came back one line up.
-// "Run SAV:" is entry 3 (MENU_ENTRY_RUNSAV), so the submenus are 4..7.
-#define MENU_ENTRY_RUNSAV 3
-static char sav_status[24];             // what that entry shows instead of "Run SAV:" (menu_run_sav)
-static const char system_form_uknc[] =
-  "System,0|4;"                         // return to form 0, entry 4
-  // --------
-  "L,Video:,RGB|BGR,V;"
-  "B,Cold Boot,B;";                     // system reset with memory reset
+#define UKNC_FORM_MAIN     0
+#define UKNC_FORM_HARDWARE 1
+#define UKNC_FORM_ABERRANT 2
+#define UKNC_FORM_FDD      3
+#define UKNC_FORM_HDD      4
+#define UKNC_FORM_RTC      5
+#define UKNC_FORM_MISC     6
 
-static const char storage_form_uknc[] =
-  "Drives,0|5;"                         // return to form 0, entry 5
-  // --------
-  "F,Disk 0:,0|dsk;"                     // fileselector for Disk 0:
-  "F,Disk 1:,1|dsk;"                     // fileselector for Disk 1:
-  "F,Disk 2:,2|dsk;"                     // fileselector for Disk 2:
-  "F,Disk 3:,3|dsk;"                     // fileselector for Disk 3:
-  "L,Disk prot.:,None|0:|1:|2:|3:|All,P;"   // Enable/Disable Floppy write protection
-  "L,HDD image:,Auto|Plain|Inverted,J;"       // how the IDE image's bytes are read (see sdc.c)
-  "L,HDD prot.:,Off|On,K;"                    // write-protect the IDE image
-  "L,HDD delay:,0|25|50|75|100|125|150|175|200|225|250|275|300|325|350|375|400|425|450|475|500|525|550|575|600|625|650|675|700|725|750|775|800|825|850|875|900|925|950|975,D;";  // ~us added per sector, spread over its reads; sets a streamed demo's sample rate
-  
-static const char settings_form_uknc[] =
-  "Settings,0|6;"                       // return to form 0, entry 6
+static char main_form_uknc[192];        // menu_uknc_main() writes it
+static char sav_status[24];             // what "Run SAV:" shows instead of its label (menu_run_sav)
+
+static const char hardware_form_uknc[] =
+  "Hardware,0|5;"                       // return to the main form
   // --------
   "L,Volume:,Mute|33%|66%|100%,A;"
-  "B,Save settings,S;";
+  "L,Beeper:,Mute|On,b;"                // a standard part: stays on the bus, leaves the mixer
+  "S,Aberrant,2;"
+  "L,Covox:,Off|Port 177372|Port 177100 LPT|Both,c;"   // bit 0 the Aberrant's DAC, bit 1 the printer port
+  "S,FDD controller,3;"
+  "S,HDD controller,4;"
+  "L,Mouse:,Off|On,u;"                  // the Kakave+ mouse word 0177400
+  "S,RTC clock,5;"
+  "S,Misc,6;";
+
+static const char aberrant_form_uknc[] =
+  "Aberrant,1|3;"                       // return to Hardware
+  // --------
+  "L,AY1:,Off|On,1;"                    // 0177360
+  "L,AY2:,Off|On,2;"                    // 0177362
+  "L,AY3:,Off|On,3;";                   // 0177364
+
+static const char fdd_form_uknc[] =
+  "FDD controller,1|5;"
+  // --------
+  "L,FDD controller:,Off|On,f;"         // 0177130/0177132
+  "F,FDD0:,0|dsk;"
+  "L,FDD0 write prot.:,Off|On,p;"
+  "F,FDD1:,1|dsk;"
+  "L,FDD1 write prot.:,Off|On,q;"
+  "F,FDD2:,2|dsk;"
+  "L,FDD2 write prot.:,Off|On,r;"
+  "F,FDD3:,3|dsk;"
+  "L,FDD3 write prot.:,Off|On,s;";
+
+static const char hdd_form_uknc[] =
+  "HDD controller,1|6;"
+  // --------
+  "L,HDD controller:,Off|On,e;"         // the IDE cartridge; off also hides HDD0: on the main form
+  "F,HDD0:,4|img;"                      // the cartridge's disk, SD slot 4
+  "L,HDD write prot.:,Off|On,K;"
+  "L,Image format:,Auto|Plain|Inversed,J;"   // how the image's bytes are read (see sdc.c); "HDD image format" does not fit beside "Inversed"
+  "L,HDD delay:,0|25|50|75|100|125|150|175|200|225|250|275|300|325|350|375|400|425|450|475|500|525|550|575|600|625|650|675|700|725|750|775|800|825|850|875|900|925|950|975,D;";  // ~us added per sector, spread over its reads; sets a streamed demo's sample rate
 
 // The Kakave+ real-time clock (kakave.v) has no battery behind it, so this
 // is where its time comes from at power-up: every variable is sent to the
@@ -129,39 +156,101 @@ static const char settings_form_uknc[] =
 // minutes also restart the seconds.  The letters are sysctrl.v's:
 // 'y' year-2020, 'm' month-1, 'd' date-1, 'h' hours, 'n' minutes.  The
 // machine can set the same clock itself through the cartridge's own
-// protocol (RT-11's KKVRTC), which this menu does not see.
-static const char clock_form_uknc[] =
-  "Clock,0|7;"                          // return to form 0, entry 7
+// protocol (RT-11's KKVRTC); the last line reads the clock back from the
+// core (sysctrl CMD 6) once a second, so that shows too.
+static const char rtc_form_uknc[] =
+  "RTC clock,1|8;"
   // --------
+  "L,RTC controller:,Off|On,t;"         // the clock word 0177410; the clock counts either way
   "L,Year:,2020|2021|2022|2023|2024|2025|2026|2027|2028|2029|2030|2031|2032|2033|2034|2035|2036|2037|2038|2039,y;"
   "L,Month:,1|2|3|4|5|6|7|8|9|10|11|12,m;"
   "L,Day:,1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31,d;"
   "L,Hour:,0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23,h;"
-  "L,Minute:,0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59,n;";
+  "L,Minute:,0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59,n;"
+  "I,rtc,;";                            // "2026-02-23 14:00:01 Thu", not selectable
+
+static const char misc_form_uknc[] =
+  "Misc,1|9;"
+  // --------
+  "L,Color:,RGB|BGR,V;"                 // swaps the red and blue planes (top.v)
+  "B,Cold Boot,B;";                     // system reset with memory reset
 
 static const char *forms_uknc[] = {
   main_form_uknc,
-  system_form_uknc,
-  storage_form_uknc,
-  settings_form_uknc,
-  clock_form_uknc
+  hardware_form_uknc,
+  aberrant_form_uknc,
+  fdd_form_uknc,
+  hdd_form_uknc,
+  rtc_form_uknc,
+  misc_form_uknc
 };
 
-// variable ids must match the ones in the menu string
+// the "About" text, one paragraph a string, wrapped to the OSD's width
+// when it is opened (menu_text_open); "" is an empty line
+static const char *about_uknc[] = {
+  "UKNC Nano author: Alex Gurov",
+  "",
+  "v2.x update authors: Sergei Lemeshev, ClaudeCode",
+  "",
+  "Greets and big thanks to:",
+  "",
+  "nzeemin - specially for his great UKNCBTL emulator and programs",
+  "blairecas - specially for his programs and BadApple demo for UKNC",
+  "reddie - heavy support with everything - programming, testing help, and lots of ideas and advices during this so-called-development",
+  "xrust - specially for great efforts on creating and redesigining peripherals",
+  "",
+  "And all our community who made it real, after all",
+  NULL
+};
+
+// variable ids must match the ones in the menu string, and sysctrl.v's
 menu_variable_t variables_uknc[] = {
-  { 'V', { 0 }},    // default video = RGB
-  { 'A', { 1 }},    // default volume = 33%
-  { 'P', { 0 }},    // default no floppy write protected
-  { 'J', { 0 }},    // default HDD image form = auto-detected from sector 0
-  { 'K', { 0 }},    // default HDD writable
-  { 'D', { 30 }},   // default HDD delay 750 us a sector: badapple's Covox right on the board (index x 25 us)
+  { 'A', { 1 }},    // Volume 33%
+  { 'b', { 1 }},    // Beeper on
+  { '1', { 1 }},    // AY1 on
+  { '2', { 1 }},    // AY2 on
+  { '3', { 1 }},    // AY3 on
+  { 'c', { 0 }},    // Covox off
+  { 'f', { 1 }},    // FDD controller on
+  { 'p', { 0 }},    // FDD0..3 not write protected
+  { 'q', { 0 }},
+  { 'r', { 0 }},
+  { 's', { 0 }},
+  { 'e', { 0 }},    // HDD controller off
+  { 'K', { 0 }},    // HDD writable
+  { 'J', { 0 }},    // HDD image form auto-detected from sector 0
+  { 'D', { 30 }},   // HDD delay 750 us a sector: badapple's Covox right on the board (index x 25 us)
+  { 'u', { 0 }},    // Mouse off
+  { 't', { 0 }},    // RTC controller off
   { 'y', { 6 }},    // the clock, until it is set or saved: 2026-01-01 00:00 (year index 6 = 2026)
   { 'm', { 0 }},
   { 'd', { 0 }},
   { 'h', { 0 }},
   { 'n', { 0 }},
+  { 'V', { 0 }},    // Color RGB
   { '\0',{ 0 }}
 };
+
+// the value of a variable by id, or -1
+static int menu_var_value(menu_t *menu, char id) {
+  for(int i=0;menu->vars[i].id;i++)
+    if(menu->vars[i].id == id) return menu->vars[i].value;
+  return -1;
+}
+
+// (re)build the main form: HDD0: only while the HDD controller ('e') is on
+static void menu_uknc_main(menu_t *menu) {
+  snprintf(main_form_uknc, sizeof(main_form_uknc),
+	   "UKNC Nano,;"
+	   "F,FDD0:,0|dsk;"
+	   "%s"
+	   "F,Run SAV:,5|sav;"               // a .SAV on the card -> RT11SAV.DSK in FDD0 (menu_run_sav, slot SDC_SLOT_SAV)
+	   "B,Reset,R;"
+	   "S,Hardware,1;"
+	   "T,About,;"
+	   "B,Save settings,S;",
+	   menu_var_value(menu, 'e') > 0 ? "F,HDD0:,4|img;" : "");
+}
 // ------------------------------------------------------------------
 // ---------------------  UNEON menu -----------------------------
 // ------------------------------------------------------------------
@@ -465,6 +554,7 @@ static void menu_goto_form(menu_t *menu, int form, int entry) {
   menu->entry = entry;
   menu->entries = -1;
   menu->offset = 0;
+  menu->info_tick = 0;
 }
 
 // Indexed by core_id, so the order here has to match the CORE_ID_*
@@ -752,6 +842,9 @@ menu_t *menu_init(u8g2_t *u8g2)
   }
   } else
     printf("SD wasn't ready, not loading settings\r\n");
+
+  // the UKNC's main form depends on a setting, so it is built now
+  if(core_id == CORE_ID_UKNC) menu_uknc_main(&menu);
    
   // send initial values for all variables
   for(int i=0;menu.vars[i].id;i++)
@@ -852,6 +945,9 @@ static void menu_variable_set(menu_t *menu, const char *s, int val) {
       // also set this in the core
       sys_set_val(menu->osd->spi, id, val);
 
+      // the UKNC's HDD controller switch adds or removes HDD0: on the main form
+      if(core_id == CORE_ID_UKNC && id == 'e') menu_uknc_main(menu);
+
       if(core_id == CORE_ID_ATARI_ST) {      
 	// trigger cold reset if memory, chipset or TOS have been changed a
 	// video change will also trigger a reset, but that's handled by
@@ -887,6 +983,37 @@ static int menu_get_options(menu_t *menu, const char *s, int n) {
   return num;
 }
 
+// the n'th entry of a form (1 = the first after the title), or NULL
+static const char *menu_entry_at(menu_t *menu, const char *form, int n) {
+  const char *s = form;
+  for(int i=0;i<n;i++) {
+    s = strchr(s, ';');
+    if(!s) return NULL;
+    s++;
+  }
+  return *s ? s : NULL;
+}
+
+// the entry in `parent` whose submenu is `form`, for returning to it;
+// the number the form's title names is the fallback
+static int menu_parent_entry(menu_t *menu, int parent, int form, int fallback) {
+  for(int n=1;;n++) {
+    const char *e = menu_entry_at(menu, menu->forms[parent], n);
+    if(!e) return fallback;
+    if(e[0] == 'S' && menu_get_int(menu, e, MENU_ENTRY_INDEX_FORM) == form) return n;
+  }
+}
+
+// width of a ';', ',' or '|' terminated string in the current font
+static int menu_strw(menu_t *menu, const char *s) {
+  int n = 0;
+  while(s[n] && s[n] != ';' && s[n] != ',' && s[n] != '|') n++;
+  char buffer[n+1];
+  strncpy(buffer, s, n);
+  buffer[n] = '\0';
+  return u8g2_GetStrWidth(MENU2U8G2(menu), buffer);
+}
+
 // various 8x8 icons
 const static unsigned char icn_right_bits[]  = { 0x00,0x04,0x0c,0x1c,0x3c,0x1c,0x0c,0x04 };
 const static unsigned char icn_left_bits[]   = { 0x00,0x20,0x30,0x38,0x3c,0x38,0x30,0x20 };
@@ -917,6 +1044,13 @@ static void menu_draw_title(menu_t *menu, const char *s) {
     x = 8;
   }
 
+  // the version (../VERSION) at the right of the main form's caption
+  if(!menu->form && core_id == CORE_ID_UKNC && UKNC_VERSION[0]) {
+    u8g2_SetFont(MENU2U8G2(menu), font_helvR08_te);
+    int w = u8g2_GetStrWidth(MENU2U8G2(menu), UKNC_VERSION);
+    u8g2_DrawStr(MENU2U8G2(menu), u8g2_GetDisplayWidth(MENU2U8G2(menu)) - w - 1, 9, UKNC_VERSION);
+  }
+
   // draw title in bold and seperator line
   u8g2_SetFont(MENU2U8G2(menu), u8g2_font_helvB08_tr);
   u8g2_DrawStrT(MENU2U8G2(menu), x, 9, menu_get_str(menu, s, 0));
@@ -929,12 +1063,35 @@ static void menu_draw_title(menu_t *menu, const char *s) {
   u8g2_SetFont(MENU2U8G2(menu), font_helvR08_te);
 }
 
+// An 'I' (info) entry shows a value the menu computes rather than a
+// label, and cannot be selected.  The label names what: "rtc" is the
+// UKNC core's clock, read back over SPI and redrawn once a second.
+static void menu_info_text(menu_t *menu, const char *s, char *buf, int len) {
+  const char *what = menu_get_str(menu, s, MENU_ENTRY_INDEX_LABEL);
+  if(!strncmp(what, "rtc", 3)) {
+    static const char *dow_name[] = { "---", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    sys_rtc_t t;
+    sys_get_rtc(menu->osd->spi, &t);
+    snprintf(buf, len, "%04d-%02d-%02d %02d:%02d:%02d %s",
+	     t.year, t.month, t.date, t.hour, t.min, t.sec,
+	     dow_name[(t.dow >= 1 && t.dow <= 7) ? t.dow : 0]);
+  } else
+    strncpy(buf, what, len);
+}
+
 static void menu_draw_entry(menu_t *menu, int y, const char *s) {
   const char *buf = menu_get_str(menu, s, MENU_ENTRY_INDEX_LABEL);
+  char info[32];
 
   // the "Run SAV:" line carries its progress instead of its label
   if(s[0] == 'F' && sav_status[0] && menu_get_subint(menu, s, 2, 0) == SDC_SLOT_SAV)
     buf = sav_status;
+
+  // an info line is computed
+  if(s[0] == 'I') {
+    menu_info_text(menu, s, info, sizeof(info));
+    buf = info;
+  }
 
   int ypos = 13 + 12 * y;
   int width = u8g2_GetDisplayWidth(MENU2U8G2(menu));
@@ -950,16 +1107,26 @@ static void menu_draw_entry(menu_t *menu, int y, const char *s) {
   if(s[0] == 'L') {
     // get variable
     int value = menu_variable_get(menu, s);
+    const char *val = menu_get_substr(menu, s, MENU_ENTRY_INDEX_OPTIONS, value);
 
-    u8g2_DrawStrT(MENU2U8G2(menu), width/2, ypos, 
-		  menu_get_substr(menu, s, MENU_ENTRY_INDEX_OPTIONS, value));
+    // The value sits in the right half unless the label or the value is
+    // too wide for that: then it moves right of the label, and left as
+    // far as it needs to fit the screen, never over the label.
+    int lw = menu_strw(menu, buf) + 5;
+    int vw = val ? menu_strw(menu, val) + 1 : 0;
+    int vx = width/2;
+    if(vx < lw) vx = lw;
+    if(vx + vw > width) vx = width - vw;
+    if(vx < lw) vx = lw;
+
+    if(val) u8g2_DrawStrT(MENU2U8G2(menu), vx, ypos, val);
 		  
-    hl_x = width/2;
-    hl_w = width/2;
+    hl_x = vx;
+    hl_w = width - vx;
   }
   
   // some entries have a small icon to the right    
-  if(s[0] == 'S')
+  if(s[0] == 'S' || s[0] == 'T')
     u8g2_DrawXBM(MENU2U8G2(menu), hl_w-8, ypos-8, 8, 8, icn_right_bits);    
   if(s[0] == 'F' && menu_get_subint(menu, s, 2, 0) != SDC_SLOT_SAV) {
     // icon depends if floppy is inserted; the "Run SAV:" browser mounts
@@ -968,7 +1135,7 @@ static void menu_draw_entry(menu_t *menu, int y, const char *s) {
 	sdc_get_image_name(menu_get_subint(menu, s, 2, 0))?icn_floppy_bits:icn_empty_bits);
   }
   
-  if(y+menu->offset == menu->entry)
+  if(y+menu->offset == menu->entry && s[0] != 'I')
     u8g2_DrawButtonFrame(MENU2U8G2(menu), hl_x, ypos, U8G2_BTN_INV, hl_w, 1, 1);
 }
 
@@ -1042,6 +1209,93 @@ static void menu_fs_draw_entry(menu_t *menu, int row, sdc_dir_entry_t *entry) {
 }
 
 // ------------------------------------------------------------------
+// The text view: a 'T' entry opens a page of text (the UKNC's "About")
+// that scrolls with the cursor keys and returns on Space, Enter or the
+// title.  The paragraphs are wrapped to the OSD's width in the menu font
+// when the page is opened; MENU_TEXT_LINES lines of MENU_TEXT_COLS at most.
+// ------------------------------------------------------------------
+#define MENU_TEXT_LINES 48
+#define MENU_TEXT_COLS  40
+#define MENU_TEXT_ROWS  4               // lines under the title
+
+static char  text_lines[MENU_TEXT_LINES][MENU_TEXT_COLS];
+static int   text_nlines;
+static int   text_parent, text_entry;   // where to return to
+static const char *text_title;
+
+static void menu_text_add(menu_t *menu, const char *line) {
+  if(text_nlines >= MENU_TEXT_LINES) return;
+  strncpy(text_lines[text_nlines], line, MENU_TEXT_COLS-1);
+  text_lines[text_nlines][MENU_TEXT_COLS-1] = 0;
+  text_nlines++;
+}
+
+// wrap one paragraph on spaces; a word wider than the screen is cut
+static void menu_text_wrap(menu_t *menu, const char *para) {
+  int width = u8g2_GetDisplayWidth(MENU2U8G2(menu)) - 2;
+  char line[MENU_TEXT_COLS];
+  int len = 0;
+  line[0] = 0;
+
+  if(!*para) { menu_text_add(menu, ""); return; }
+
+  while(*para) {
+    // the next word
+    const char *w = para;
+    while(*para && *para != ' ') para++;
+    int wl = para - w;
+    while(*para == ' ') para++;
+
+    char cand[MENU_TEXT_COLS];
+    int cl = 0;
+    if(len) { memcpy(cand, line, len); cand[len++] = ' '; }
+    cl = len;
+    int take = wl;
+    if(cl + take >= MENU_TEXT_COLS) take = MENU_TEXT_COLS - 1 - cl;
+    if(take < 0) take = 0;
+    memcpy(cand+cl, w, take); cand[cl+take] = 0;
+
+    if(take == wl && u8g2_GetStrWidth(MENU2U8G2(menu), cand) <= width) {
+      memcpy(line, cand, cl+take+1); len = cl+take;
+      continue;
+    }
+    // the word does not fit after what is there: flush the line
+    if(len) { menu_text_add(menu, line); len = 0; line[0] = 0; }
+    // and start a new one with as much of the word as fits
+    take = wl < MENU_TEXT_COLS-1 ? wl : MENU_TEXT_COLS-1;
+    memcpy(line, w, take); line[take] = 0;
+    while(take > 1 && u8g2_GetStrWidth(MENU2U8G2(menu), line) > width) line[--take] = 0;
+    len = take;
+    if(take < wl) { menu_text_add(menu, line); len = 0; line[0] = 0; }   // the rest of a giant word is dropped
+  }
+  if(len) menu_text_add(menu, line);
+}
+
+static void menu_text_open(menu_t *menu, const char *title, const char **paras) {
+  u8g2_SetFont(MENU2U8G2(menu), font_helvR08_te);
+  text_nlines = 0;
+  for(int i=0;paras[i];i++) menu_text_wrap(menu, paras[i]);
+  text_title  = title;
+  text_parent = menu->form;
+  text_entry  = menu->entry;
+  menu_goto_form(menu, MENU_FORM_TEXT, 0);
+}
+
+static void menu_text_draw(menu_t *menu) {
+  menu_draw_title(menu, text_title);
+  for(int i=0;i<MENU_TEXT_ROWS && i+menu->offset<text_nlines;i++)
+    u8g2_DrawStr(MENU2U8G2(menu), 1, 13 + 12 * (i+1), text_lines[i+menu->offset]);
+}
+
+static void menu_text_scroll(menu_t *menu, int step) {
+  int max = text_nlines - MENU_TEXT_ROWS;
+  if(max < 0) max = 0;
+  menu->offset += step;
+  if(menu->offset < 0) menu->offset = 0;
+  if(menu->offset > max) menu->offset = max;
+}
+
+// ------------------------------------------------------------------
 // "Run SAV:" - a .SAV picked in the file selector becomes a bootable
 // RT-11 floppy in FDD 0 (rt11sav.c).  The main-form entry shows the
 // progress in place of its label: "making DSK" while the card is being
@@ -1053,6 +1307,7 @@ static void menu_fs_draw_entry(menu_t *menu, int row, sdc_dir_entry_t *entry) {
 // settings" would record, if asked.
 // ------------------------------------------------------------------
 static void menu_draw_form(menu_t *menu, const char *s);
+static int fsel_entry = 1;   // the entry the file selector was opened from, to return to it
 
 static unsigned menu_rt11_date(menu_t *menu) {
   int y = 0, m = 0, d = 0;
@@ -1073,7 +1328,7 @@ static void menu_run_sav(menu_t *menu, int parent, const char *name) {
 
   // back on the "Run SAV:" line, saying what is going on, before the
   // long part starts
-  menu_goto_form(menu, parent, MENU_ENTRY_RUNSAV);
+  menu_goto_form(menu, parent, fsel_entry);
   strcpy(sav_status, "making DSK");
   menu_draw_form(menu, menu->forms[menu->form]);
 
@@ -1118,6 +1373,7 @@ static void menu_fileselector(menu_t *menu, int event) {
     // init
     s = menu->forms[menu->form];
     for(int i=0;i<menu->entry;i++) s = strchr(s, ';')+1;
+    fsel_entry = menu->entry;
 
     // get extensions
     exts = menu_get_substr(menu, s, 2, 1);
@@ -1164,7 +1420,7 @@ static void menu_fileselector(menu_t *menu, int event) {
   } else if(event == FSEL_SELECT) {
 
     if(!menu->entry)
-      menu_goto_form(menu, parent, 1);
+      menu_goto_form(menu, parent, fsel_entry);
     else {
       sdc_dir_entry_t *entry = &(dir->files[menu->entry - 1]);
 
@@ -1172,7 +1428,7 @@ static void menu_fileselector(menu_t *menu, int event) {
 	if(entry->name[0] == '/') {
 	  // User selected the "No Disk" entry
 	  // Eject it and return to parent menu
-	  menu_goto_form(menu, parent, 1);
+	  menu_goto_form(menu, parent, fsel_entry);
 	  if(drive == SDC_SLOT_SAV) sdc_set_image_name(drive, NULL);  // nothing mounted there to eject
 	  else                      sdc_image_open(drive, NULL);
 	} else {	
@@ -1213,7 +1469,7 @@ static void menu_fileselector(menu_t *menu, int event) {
 	// request insertion of this image
 	sdc_image_open(drive, entry->name);
 	// return to parent form
-	menu_goto_form(menu, parent, 1);
+	menu_goto_form(menu, parent, fsel_entry);
       }
     }
   }   
@@ -1251,19 +1507,58 @@ static void menu_draw_form(menu_t *menu, const char *s) {
     
     // walk over menu string
     int y = 1;
+    int has_info = 0;
     while(*s) {
+      if(s[0] == 'I') has_info = 1;
       menu_draw_entry(menu, y++, s);    
       s = strchr(s, ';')+1;      // skip to next entry
     }
+
+#ifndef SDL
+    // a form with an info line is redrawn on the timer (menu_do); the
+    // timer does not exist yet at the very first draw (osd_task)
+    if(menu->osd->timer) {
+      if(has_info) xTimerStart(menu->osd->timer, 0);
+      else         xTimerStop(menu->osd->timer, 0);
+    }
+#endif
   } else if(menu->form == MENU_FORM_FSEL)
     menu_fileselector(menu, FSEL_DRAW);
+  else if(menu->form == MENU_FORM_TEXT)
+    menu_text_draw(menu);
   
   u8g2_SendBuffer(MENU2U8G2(menu));
+}
+
+// does the form being shown carry an info line?
+static int menu_form_has_info(menu_t *menu) {
+  if(menu->form < 0) return 0;
+  for(int n=1;;n++) {
+    const char *e = menu_entry_at(menu, menu->forms[menu->form], n);
+    if(!e) return 0;
+    if(e[0] == 'I') return 1;
+  }
+}
+
+// step an 'L' entry's value by +-1, wrapping (Space steps on; the cursor
+// keys step either way)
+static void menu_step_value(menu_t *menu, const char *s, int step) {
+  int max_value = menu_get_options(menu, s, MENU_ENTRY_INDEX_OPTIONS)-1;
+  int value = menu_variable_get(menu, s) + step;
+  if(value > max_value) value = 0;
+  if(value < 0) value = max_value;
+  menu_variable_set(menu, s, value);
 }
 
 static void menu_select(menu_t *menu) {
   if(menu->form == MENU_FORM_FSEL) {
     menu_fileselector(menu, FSEL_SELECT);
+    return;
+  }
+
+  // the text view returns on select
+  if(menu->form == MENU_FORM_TEXT) {
+    menu_goto_form(menu, text_parent, text_entry);
     return;
   }
     
@@ -1273,10 +1568,12 @@ static void menu_select(menu_t *menu) {
   
   printf("Selected: %s\r\n", s);
 
-  // if the title was selected, then goto parent form
+  // if the title was selected, then goto parent form - to the entry
+  // that opened this one, found by form number
   if(!menu->entry) {
     printf("parent\n");
-    menu_goto_form(menu, menu_get_subint(menu, s, 1,0), menu_get_subint(menu, s, 1,1));
+    int parent = menu_get_subint(menu, s, 1,0);
+    menu_goto_form(menu, parent, menu_parent_entry(menu, parent, menu->form, menu_get_subint(menu, s, 1,1)));
     return;
   }
   
@@ -1291,13 +1588,15 @@ static void menu_select(menu_t *menu) {
     menu_goto_form(menu, menu_get_int(menu, s, MENU_ENTRY_INDEX_FORM), 1);
     break;
 
-  case 'L': {
+  case 'T':
+    // a page of text
+    if(core_id == CORE_ID_UKNC) menu_text_open(menu, menu_get_str(menu, s, MENU_ENTRY_INDEX_LABEL), about_uknc);
+    break;
+
+  case 'L':
     // user has choosen a selection list
-    int value = menu_variable_get(menu, s) + 1;
-    int max_value = menu_get_options(menu, s, MENU_ENTRY_INDEX_OPTIONS)-1;
-    if(value > max_value) value = 0;    
-    menu_variable_set(menu, s, value);
-  } break;
+    menu_step_value(menu, s, 1);
+    break;
 
   case 'B': {
     // user has choosen a button
@@ -1334,8 +1633,13 @@ static void menu_select(menu_t *menu) {
 }
 
 static int menu_entry_is_usable(menu_t *menu) {
-  // check if the current entry in the menu is actually selectable
-  // (currently only the title of the start form is not)
+  // check if the current entry in the menu is actually selectable:
+  // the title of the start form is not, and neither is an info line
+
+  if(menu->form >= 0 && menu->entry > 0) {
+    const char *e = menu_entry_at(menu, menu->forms[menu->form], menu->entry);
+    if(e && e[0] == 'I') return 0;
+  }
 
   // not start form? -> ok
   if(menu->form) return 1;
@@ -1344,6 +1648,12 @@ static int menu_entry_is_usable(menu_t *menu) {
 }
 
 static void menu_entry_go(menu_t *menu, int step) {
+  // the text view scrolls instead
+  if(menu->form == MENU_FORM_TEXT) {
+    menu_text_scroll(menu, step);
+    return;
+  }
+
   do {
     menu->entry += step;
 
@@ -1383,12 +1693,23 @@ static void menu_entry_go(menu_t *menu, int step) {
   } while(!menu_entry_is_usable(menu));
 }
 
+// the cursor keys on an 'L' entry step its value back or forth
+static void menu_left_right(menu_t *menu, int step) {
+  if(menu->form < 0 || !menu->entry) return;
+  const char *e = menu_entry_at(menu, menu->forms[menu->form], menu->entry);
+  if(e && e[0] == 'L') menu_step_value(menu, e, step);
+}
+
 void menu_do(menu_t *menu, int event) {
   // -1 is a timer event used to scroll the current file name if it's to long
-  // for the OSD
+  // for the OSD, and to redraw a form with an info line once a second
   if(event < 0) {
     if((menu->form == MENU_FORM_FSEL) && (menu->fs_scroll_entry))
       menu_fs_scroll_entry(menu, menu->fs_scroll_entry);
+    else if(menu_form_has_info(menu) && ++menu->info_tick >= 25) {
+      menu->info_tick = 0;
+      menu_draw_form(menu, menu->forms[menu->form]);
+    }
     
     return;
   }
@@ -1406,8 +1727,11 @@ void menu_do(menu_t *menu, int event) {
     if(event == MENU_EVENT_PGUP)   menu_entry_go(menu, -4);
     if(event == MENU_EVENT_PGDOWN) menu_entry_go(menu,  4);
 
+    if(event == MENU_EVENT_LEFT)   menu_left_right(menu, -1);
+    if(event == MENU_EVENT_RIGHT)  menu_left_right(menu,  1);
+
     if(event == MENU_EVENT_SELECT) menu_select(menu);
   }  
-  menu_draw_form(menu, menu->forms[menu->form]);
+  menu_draw_form(menu, menu->form >= 0 ? menu->forms[menu->form] : NULL);
 }
 

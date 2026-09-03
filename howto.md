@@ -9,25 +9,28 @@ You do not need either toolchain for this.  Both binaries are committed:
 
 | file | size | date | what it is |
 |---|---|---|---|
-| `bin/tang.fs` | 7 262 008 | Aug 2026 | the FPGA bitstream, for the Tang Nano 20K |
-| `bin/bl616.bin` | 430 512 | Aug 2026 | the MCU firmware, for the BL616 companion board |
+| `bin/tang.fs` | 7 262 008 | 3 Sep 2026 | the FPGA bitstream, for the Tang Nano 20K |
+| `bin/bl616.bin` | 442 016 | 3 Sep 2026 | the MCU firmware, for the BL616 companion board |
 
 ### What is in them
 
-Both are built from the sources in this repository as they stand, and both
-are newer than the versions shipped before August 2026.
+Both are **v2.0.0 alpha** (the `VERSION` file), built from the sources
+in this repository as they stand.
 
-The bitstream carries the four upstream 1801BM1/cpu11 fixes to the VM2
-processor core, an AY chipselect that no longer aliases into МХ2-01's
-address range, stereo audio, and the first timing constraints this design
-has ever had.  The firmware carries the settings-file fix, so it reads and
-writes `/uknc.ini` on the card.
+The bitstream carries the two VM2 cores with the upstream cpu11 fixes,
+the Aberrant's three AYs, a Covox at `177372` and another on the printer
+port, the IDE cartridge with its WD ROM, the Kakave+ mouse and clock,
+HDMI with sound, timing constraints on every crossing, and an OSD switch
+for each of those devices.  The firmware carries the restructured menu
+of section 7, the "Run SAV:" disk maker, the keyboard matrix filter and
+the settings file `/uknc.ini`.
 
-> **Neither has been tested on hardware.**  They are built and they pass
-> what can be checked without a board - the design lints clean, boots in
-> simulation, and meets every timing constraint - but nobody has run this
-> exact pair on a real Tang Nano.  The previous versions of both are in
-> git history (`git log -- bin/`) if you need to fall back.
+> **This pair was flashed on 3 Sep 2026 and the new menu came up.**  The
+> individual pieces had been on a board before - the sound, the floppies,
+> the keyboard, the hard disk, MKLAD - and every hardware switch has been
+> checked in simulation; what has not been done on a board is running
+> software against each switch in each position.  The previous versions
+> of both are in git history (`git log -- bin/`) if you need to fall back.
 
 Building either from source is a different document -
 `.claude/docs/build.md`.
@@ -452,35 +455,63 @@ You should see the УКНЦ start-up screen on HDMI.
 | key | does |
 |---|---|
 | **Cursor up / down** | move between entries |
+| **Cursor left / right** | step a value back or forth |
 | **Space** or **Enter** | select, or step a value on |
+| **Page up / down** | four entries at a time |
 | **ESC** | close the menu |
 | **F12** | close the menu |
 
 F12 never reaches the machine - it belongs to the menu.  Everything else
 does, so close the menu before typing.
 
-The menu is four screens:
+The version of the firmware sits at the right of the caption.  The
+screens (v2.0.0, September 2026):
 
 ```
-UKNC Nano
-  FDD 0:                 mount an image on drive 0 (the quick way in)
-  System           >     Video: RGB / BGR
-                         Cold Boot
-  Drives           >     Disk 0:  Disk 1:  Disk 2:  Disk 3:
-                         Disk prot.: None / 0: / 1: / 2: / 3: / All
-  Settings         >     Volume: Mute / 33% / 66% / 100%
-                         Save settings
+UKNC Nano                              2.0.0 alpha
+  FDD0:                  mount an image on drive 0
+  HDD0:                  the hard disk image - only shown while the HDD controller is on
+  Run SAV:               pick a .SAV: it becomes a bootable RT-11 disk in FDD0
   Reset
+  Hardware         >     Volume: Mute / 33% / 66% / 100%
+                         Beeper: Mute / On
+                         Aberrant        >  AY1: AY2: AY3:  Off / On
+                         Covox: Off / Port 177372 / Port 177100 LPT / Both
+                         FDD controller  >  FDD controller: Off / On
+                                            FDD0:  FDD0 write prot.: Off / On
+                                            ... the same for FDD1 to FDD3
+                         HDD controller  >  HDD controller: Off / On
+                                            HDD0:
+                                            HDD write prot.: Off / On
+                                            Image format: Auto / Plain / Inversed
+                                            HDD delay: 0 .. 975
+                         Mouse: Off / On
+                         RTC clock       >  RTC controller: Off / On
+                                            Year: Month: Day: Hour: Minute:
+                                            2026-02-23 14:00:01 Thu   (the clock as it runs)
+                         Misc            >  Color: RGB / BGR
+                                            Cold Boot
+  About            >     who made it, and thanks
+  Save settings
 ```
 
 Entries marked `>` open a sub-screen; the top line of a sub-screen takes
-you back.
+you back to the entry you came from.
+
+**A device that is *Off* is not in the machine.**  Its addresses answer
+nothing - a bus timeout, as on a real УКНЦ without that board - so a
+program that probes for it finds it absent.  That is what the switches
+are for: a program that misbehaves with a Covox or a mouse present can be
+run without one.  The defaults are a plain machine with the Aberrant's
+three AYs: floppy controller on, everything else that is an add-on off,
+and nothing mounted.
 
 ### 7.2 Running a disk
 
 1. **F12** to open the menu.
-2. **Drives -> Disk 0:** and pick your `.dsk`.  The selector browses the
-   card, so images can live in folders.
+2. **FDD0:** and pick your `.dsk`.  The selector browses the card, so
+   images can live in folders.  Drives 1 to 3 are under **Hardware ->
+   FDD controller**.
 3. **ESC** back out, then **Reset** on the main screen.
 4. The machine restarts and boots from drive 0.
 
@@ -490,22 +521,31 @@ but software that has already booted will not notice a new system disk
 until you reset.
 
 **Reset** restarts the processors and leaves memory alone.  **Cold Boot**
-(under *System*) is the power-on path and clears it.  Use Cold Boot when
-something has wedged badly, or when a program has left the machine in a
-state a plain reset does not clear.
+(under *Hardware -> Misc*) is the power-on path and clears it.  Use Cold
+Boot when something has wedged badly, or when a program has left the
+machine in a state a plain reset does not clear.
 
-**Disk prot.** write-protects drives: `None`, one of `0:` to `3:`, or
-`All`.  Set it before you boot something you do not trust; the images on
-the card are ordinary files and a running program can write to them.
+**FDDn write prot.** (under *Hardware -> FDD controller*) write-protects
+one drive.  Set it before you boot something you do not trust; the images
+on the card are ordinary files and a running program can write to them.
+
+**HDD0:** is the IDE cartridge's disk, an `.img` file.  It appears on the
+main screen once *Hardware -> HDD controller* is on, and the cartridge
+exists only while both are true.
 
 ### 7.3 Sound
 
-**Settings -> Volume**: Mute, 33%, 66%, 100%.  It starts muted-ish until
+**Hardware -> Volume**: Mute, 33%, 66%, 100%.  It starts muted-ish until
 the MCU sends its defaults, and the default for this core is 33%.
 
-The machine has two AY-3-8910s and a one-bit beeper.  The AYs are panned
-the usual ABC way - channel A left, C right, B in the middle - and the
-beeper sits in the centre.
+The machine has the Aberrant sound module's three AY-3-8912s, a one-bit
+beeper, and two places a Covox can hang: the Aberrant's own DAC at
+`177372` and port A of the printer port at `177100`, the older one that
+players fall back to.  All of it is one mono sum to both channels.  Each
+AY can be switched off (*Hardware -> Aberrant*), the beeper can be muted
+(*Beeper*; it stays in the machine, it only leaves the sound), and
+*Covox* picks which of the two DACs exist - *Off* is the default, and a
+player that probes `177372` then finds nothing there.
 
 There are two outputs, and they carry the same thing:
 
@@ -518,18 +558,16 @@ There are two outputs, and they carry the same thing:
 
 The Volume setting works on both.
 
-> **The HDMI audio has never been played on a real display.**  It is built
-> and it decodes correctly in simulation - the packets come out, their
-> error-correction checks, and the samples in them are the right ones -
-> but no television has been asked what it thinks.  If the picture is
-> there and the sound is not, that is the most likely thing in this
-> release to be wrong, and the I²S output is unaffected either way.
+The HDMI audio has played on a television since 1 Sep 2026 (the AYs,
+at every volume setting).  The Covox and the printer-port DAC have been
+checked in simulation only.
 
 ### 7.4 Video
 
-**System -> Video: RGB / BGR** swaps the red and blue components.  If the
-colours look wrong on your display, this is the switch.  Output is HDMI
-from the Tang Nano 20K.
+**Hardware -> Misc -> Color: RGB / BGR** swaps the red and blue planes.
+If the colours look wrong on your display, this is the switch.  (Until
+v2.0.0 it swapped red and green, whatever its label said.)  Output is
+HDMI from the Tang Nano 20K.
 
 ### 7.5 Keyboard
 
@@ -560,12 +598,22 @@ easy to read and easy to change.
 
 ### 7.6 Keeping your setup
 
-**Settings -> Save settings** writes an `.ini` at the root of the card
-with the mounted images and the menu values in it, and it is read back at
-the next power-up.  See section 3 for which name it uses - that depends on
+**Save settings** on the main screen writes an `.ini` at the root of the
+card with the mounted images and the menu values in it - every hardware
+switch, the write protections, the clock - and it is read back at the
+next power-up.  See section 3 for which name it uses - that depends on
 which firmware you flashed.
 
-### 7.7 Swapping cards
+### 7.7 The clock and the mouse
+
+*Hardware -> RTC clock* is the Kakave+ cartridge's real-time clock.  There
+is no battery: the time you set here (or save) is where the clock starts
+at power-up, and the last line of that screen shows it running.  *RTC
+controller* puts the clock's register into the machine; *Mouse* does the
+same for the cartridge's mouse register, fed from a USB mouse on the
+BL616.
+
+### 7.8 Swapping cards
 
 Power off before pulling the card.  The MCU holds the filesystem open, and
 there is no eject in the menu.

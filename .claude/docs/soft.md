@@ -150,8 +150,10 @@ and the board's PPU is known to run such loops faster (the HDD delay
 story in `platform.md`), so the notes are higher there; it is a test
 that the port carries sound, not a tuner.  `177100` answers on every
 machine because it is a register in the ВП1-120; on the Tang Nano build
-no DAC is behind it (`platform.md`), so that half is expected to be
-silent on the board.
+a DAC is behind it only when the OSD's "Covox" says *Port 177100 LPT* or
+*Both* (Sep 2026, `platform.md`), and `177372` answers only on *Port
+177372* or *Both* - so which halves COVTST finds and which are heard
+is the OSD setting.  Nothing but the AYs has been heard on a board.
 
 **RTCTST** - probes the Kakave+ words `177400` and `177410`, asks the
 mouse word for the RTC-installed flag (command 0) and the firmware

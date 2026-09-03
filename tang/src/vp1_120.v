@@ -43,7 +43,9 @@ module vp1_120
     ppu_wbi_ack_o,
     ppu_wbi_stb_i,
 
-    ppu_wbi_stb_o
+    ppu_wbi_stb_o,
+
+    lpt_data
 );
 input        clk;
 //input        cpu_vm_clk_p;
@@ -83,6 +85,12 @@ output [15:0]ppu_wbi_dat_o;
 output       ppu_wbi_ack_o;
 input        ppu_wbi_stb_i;
 output       ppu_wbi_stb_o;
+// Port A of the printer port, 0177100, as last written: the byte a
+// Covox on the printer connector would convert (blairecas/badapple, "LPT
+// port A 177100", UKNCBTL's Covox).  Read by top.v's mixer when the OSD
+// puts a DAC there (Sep 2026).  The register itself is unchanged - it is
+// a plain port on every machine - only its value is brought out.
+output [ 7:0]lpt_data;
 //______________________________________________________________________________
 
 wire ceppu = (ppu_wbm_adr_i[15:7]== 9'o774 && ppu_wbm_stb_i);
@@ -106,6 +114,7 @@ reg  [ 7:0]portA = 0;
 reg  [ 7:0]portB = 0;
 reg  [ 7:0]portC = 0;
 reg  [ 7:0]portW = 0;
+assign lpt_data = portA;
 
 // The CPU runs on clk4, whose edges land on a clk_25 edge or 20 ns from
 // one depending on the power-up (test003.sdc).  In the coincident case

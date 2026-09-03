@@ -72,7 +72,21 @@ module kakave(
    // the OSD's clock setting, from sysctrl.v
    input             set_tgl,      // flips once per field written
    input      [ 2:0] set_field,    // 0 year-2020  1 month-1  2 date-1  3 hours  4 minutes
-   input      [ 7:0] set_val
+   input      [ 7:0] set_val,
+   // the OSD's "Hardware" switches (sysctrl 'u' and 't', Sep 2026): each
+   // word is on the bus only while its switch is on - off, it is a bus
+   // timeout, as on a machine without the cartridge.  The clock counts
+   // either way.  Levels on mist_clk; the tool times the crossing.
+   input             mouse_en,
+   input             rtc_en,
+   // the clock as it stands, for the OSD to show (sysctrl CMD 6)
+   output     [15:0] rtc_year,
+   output     [ 3:0] rtc_month,
+   output     [ 4:0] rtc_date,
+   output     [ 4:0] rtc_hour,
+   output     [ 5:0] rtc_min,
+   output     [ 5:0] rtc_sec,
+   output     [ 3:0] rtc_dow
 );
 
 //------------------------------------------------------------------------
@@ -128,6 +142,22 @@ wire [15:0] dow_sum = {11'd0, date} + {7'd0, days_before} + {15'd0, (month > 4'd
 wire [ 2:0] dow_m   = mod7(dow_sum);
 wire [ 3:0] dow     = {1'b0, dow_m} + 4'd1;
 
+// The weekday is ~30 ns of arithmetic behind the year register, and
+// sysctrl samples these on clk_25, 20 ns after a PPU edge (test003.sdc):
+// taken combinationally it was the one setup violation of the Sep 2026
+// layout.  A PPU clock of lag on a value that changes at midnight costs
+// nothing; the counters themselves are flops and go out as they are.
+reg  [3:0] dow_r = 4'd1;
+always @(posedge clk) dow_r <= dow;
+
+assign rtc_year  = year;
+assign rtc_month = month;
+assign rtc_date  = date;
+assign rtc_hour  = hour;
+assign rtc_min   = min;
+assign rtc_sec   = sec;
+assign rtc_dow   = dow_r;
+
 // the second
 wire [24:0] frac_n  = frac + TICK_NUM;
 wire        tick    = (frac_n >= TICK_DEN);
@@ -135,8 +165,8 @@ wire        tick    = (frac_n >= TICK_DEN);
 //------------------------------------------------------------------------
 // Bus
 //------------------------------------------------------------------------
-wire ce_mouse = ({adr[15:1], 1'b0} == 16'o177400) && stb;
-wire ce_rtc   = ({adr[15:1], 1'b0} == 16'o177410) && stb;
+wire ce_mouse = ({adr[15:1], 1'b0} == 16'o177400) && stb && mouse_en;
+wire ce_rtc   = ({adr[15:1], 1'b0} == 16'o177410) && stb && rtc_en;
 wire ce       = ce_mouse | ce_rtc;
 reg  ce_old   = 1'b0;
 wire cyc_go   = ce & ~ce_old;     // the first clock of an access, as xm2-01.v takes it

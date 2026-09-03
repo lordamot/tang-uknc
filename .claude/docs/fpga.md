@@ -167,6 +167,18 @@ peripherals answering the same address is silent**: the lower-priority one
 still sees the strobe and still updates its own state.  That is the shape
 of the AY aliasing bug in `CLAUDE.md`.
 
+Since v2.0.0 (Sep 2026) every add-on's chip select is ANDed with a level
+from `sysctrl.v` - the OSD's "Hardware" switches: `aberrant.v` per chip,
+`covox.v`, `vp1-128fdd.v`, `ide.v` (through `hdd_present`), `kakave.v`
+per word - so a device that is off is a bus timeout at its addresses,
+as on a machine without it.  `vp1_120.v` brings its printer port A byte
+out as `lpt_data`, which `top.v` mixes as a second Covox when the switch
+says so, and `kakave.v` brings its counters out for `sysctrl.v`'s
+command 6, the clock read-back; the weekday goes through a flop first,
+because the 20 ns from a PPU edge to the clk_25 edge that samples it
+does not hold 30 ns of arithmetic.  `.claude/docs/platform.md` has the
+table.
+
 ## Memory
 
 `sdram2.v` is both the SDRAM controller and the video generator - see
@@ -373,6 +385,12 @@ the Covox and the Kakave+ mouse and clock (`kakave.v`): Logic 10603/20736
 52%, Register 4402/15915 28%, BSRAM 30/46 66%.  The mouse and clock alone
 were 48% → 52% of the logic, mostly the calendar's weekday arithmetic
 and the ±63 accumulators; no BSRAM.
+
+3 Sep 2026, v2.0.0 - the OSD's hardware switches, the printer-port
+Covox and the clock read-back: Logic 10750/20736 52%, Register
+4480/15915 29%, BSRAM 30/46 66%.  About 150 LUTs and 80 flops, most of
+them the read-back snapshot in `sysctrl.v` and the second DAC in the
+mixer.  0 setup and 0 hold violations.
 
 ## Pins
 
