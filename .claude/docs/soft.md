@@ -59,6 +59,30 @@ labelled the empties "tentative".  RT-11 file names are **six characters
 and three**, RAD50, so `COVOXTST.SAV` was never a possible name; the
 Covox test is `COVTST.SAV`.
 
+## Running a .SAV from the OSD
+
+Since 3 Sep 2026 the OSD's main form has **Run SAV:** under HDD 0
+(`.claude/docs/mcu.md`).  It needs the base disk on the card as
+`/sd/RT11BASE.DSK` (`BASERT11.DSK`, the name it has here, is accepted
+too) and any number of `.SAV` files anywhere on the card, long FAT
+names included.  Picking one makes `/sd/RT11SAV.DSK`: a copy of the
+base, the program added under a six-character name - uppercase, RAD50
+letters and digits only, the last extension dropped, `PROG` if nothing
+is left, and five letters plus a digit if the base already has a file
+of that name, so a program called `dir.sav` never lands on `DIR.SAV` -
+and `STARTS.COM` rewritten with `R NAME` after whatever the base had in
+it.  The disk goes into FDD 0 and the machine is reset, so RT-11 boots
+and STARTS.COM runs the program; when it exits, the `.` prompt.
+
+The image code is `mnano/rt11sav.c`, the same directory format as
+`tools/rt11fs.py`, over two block callbacks so `make sav-test` can run
+it on the host: `soft/RTCTST.SAV` under the name `Real Time Clock test
+(Kakave+).SAV` becomes `REALTI.SAV` on `build/sav/RT11SAV.DSK`, reads
+back identical, and STARTS.COM ends in `R REALTI`; booted in UKNCBTL
+that disk goes straight into RTCTST's clock display.  On the board the
+copy is 1600 sectors read and written over SPI while the OSD says
+`making DSK`; how long that takes has not been measured.
+
 ## How a program reaches the hardware
 
 Every device these programs test is on the **PPU** bus.  An RT-11
@@ -138,6 +162,29 @@ KKVTST prints 1 as Monday and is a day off on the real cartridge too.
 
 **MOUTST** is yrust's, unchanged, from the same disk the system came
 from.
+
+## Seeing what a program does with the hardware
+
+The quickest instrument for "it runs in the emulator and not on the
+board" (3 Sep 2026, MKLAD): in a scratch copy of UKNCBTL's `emubase`,
+put a call at the top of `GetPortWord`, `SetPortWord` and
+`SetPortByte` of both `CFirstMemoryController` (CPU) and
+`CSecondMemoryController` (PPU) that records `{side, direction,
+address, PC}` in a set and prints each new combination once, switched
+on by a script command after RT-11 is up.  PPU accesses with a PC
+below `0100000` are the program's own PPU code; CPU accesses with a
+PC below the program's high limit are its own.  The resulting list is
+short - a few dozen lines for a game - and every line is a register
+whose behaviour has to match `tang/src/`.  `soft/uknc-iolog.py
+<workdir>` builds that runner (the first copy lived in /tmp and went
+with a host restart), with `iolog`, `pputrace`, `pregs`, `disppu` and
+`discpu` commands and a script that boots `build/MKLAD.DSK` into the
+game.  For MKLAD the log plus a disassembly of its PPU code (a jump
+table at `023666`, the timer handler at `024222`) showed a handler
+that stops the timer, writes the next period and spins on `177714`
+until it reads back - and, once the register model was cleared, left
+the interrupt chain as the only suspect, which it was: with the chain
+decision latched the game runs on the board.
 
 ## What was checked, and where
 

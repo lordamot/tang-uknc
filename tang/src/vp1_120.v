@@ -150,8 +150,22 @@ reg        C177564 = 1'b0;
 reg        C176664 = 1'b0;
 reg        C176674 = 1'b0;
 
-assign cpu_wbi_stb_o = |setVIRQCrx || |setVIRQCtx ? 1'b0 : cpu_wbi_stb_i;
-assign ppu_wbi_stb_o = |setVIRQPtx || |setVIRQPrx ? 1'b1 : ppu_wbi_stb_i;
+// The vector-fetch strobes pass on down the chain (the CPU's to vp65;
+// nothing hangs off the PPU's) unless this chip is the one answering,
+// and which vector that is - ppu_own / cpu_own - is decided while the
+// strobe is LOW and held for the whole fetch.  It used to be gated on
+// "set" alone, so a channel whose vector had been taken but whose data
+// had not been read blocked every device behind it; then on the VIRQ
+// condition, combinational, so the strobe to the next chip rose in the
+// middle of a fetch this chip had just answered and that chip answered
+// too, losing its request.  Both are xm2-01.v's faults, and the account
+// is there (3 Sep 2026, sim/tb/tb_virq.v).  The CPU side passes the
+// SYNCHRONISED strobe on: the raw one would run 80 ns ahead of the
+// decision, which is latched against the synchronised copy.
+reg  [2:0] ppu_own = 3'd0;   // 1..6 = 314,320,324,330,334,340; 0 = pass it on
+reg  [2:0] cpu_own = 3'd0;   // 1..5 = 60,64,460,464,474; 0 = pass it on
+assign cpu_wbi_stb_o = cpu_wbi_s[1] & (cpu_own == 3'd0);
+assign ppu_wbi_stb_o = ppu_wbi_stb_i & (ppu_own == 3'd0);
 
 assign cpu_vm_virq_o = (|{setVIRQCrx[1]&enVIRQCrx[1],setVIRQCrx[0]&enVIRQCrx[0],setVIRQCtx[2]&enVIRQCtx[2],setVIRQCtx[1]&enVIRQCtx[1],setVIRQCtx[0]&enVIRQCtx[0]});
 assign ppu_vm_virq_o = (|{setVIRQPtx[1]&enVIRQPtx[1],setVIRQPtx[0]&enVIRQPtx[0],setVIRQPrx[3]&enVIRQPrx[3],setVIRQPrx[2]&enVIRQPrx[2],setVIRQPrx[1]&enVIRQPrx[1],setVIRQPrx[0]&enVIRQPrx[0]});
@@ -189,6 +203,7 @@ always @(posedge clk)begin
                 portW <= 0;
                 enVIRQPtx <= 2'b11;
                 enVIRQPrx <= 4'b1111;
+                ppu_own <= 3'd0;
             end else begin
                 ceppu_old <= ceppu;
 					 if(!ppu_wbm_stb_i)begin
@@ -265,15 +280,23 @@ always @(posedge clk)begin
 					 if(!ppu_wbi_stb_i)begin
 						  ppu_wbi_dat_o <= 16'o0;
                     ppu_wbi_ack_o <= 1'b0;
+                    ppu_own <= (setVIRQPrx[3] & enVIRQPrx[3]) ? 3'd1 :
+                               (setVIRQPrx[0] & enVIRQPrx[0]) ? 3'd2 :
+                               (setVIRQPtx[0] & enVIRQPtx[0]) ? 3'd3 :
+                               (setVIRQPrx[1] & enVIRQPrx[1]) ? 3'd4 :
+                               (setVIRQPtx[1] & enVIRQPtx[1]) ? 3'd5 :
+                               (setVIRQPrx[2] & enVIRQPrx[2]) ? 3'd6 : 3'd0;
 					 end else
                 if(~ppu_wbi_stb_i_old & ppu_wbi_stb_i)begin
-							if(setVIRQPrx[3] && enVIRQPrx[3]) begin ppu_wbi_dat_o <= 16'o314; enVIRQPrx[3] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
-							else if(setVIRQPrx[0] && enVIRQPrx[0]) begin ppu_wbi_dat_o <= 16'o320; enVIRQPrx[0] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
-								else if(setVIRQPtx[0] && enVIRQPtx[0])begin ppu_wbi_dat_o <= 16'o324; enVIRQPtx[0] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
-									else if(setVIRQPrx[1] && enVIRQPrx[1]) begin ppu_wbi_dat_o <= 16'o330; enVIRQPrx[1] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
-										else if(setVIRQPtx[1] && enVIRQPtx[1])begin ppu_wbi_dat_o <= 16'o334; enVIRQPtx[1] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
-											else if(setVIRQPrx[2] && enVIRQPrx[2]) begin ppu_wbi_dat_o <= 16'o340; enVIRQPrx[2] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
-												else begin ppu_wbi_ack_o <= 1'b0; ppu_wbi_dat_o <= 16'o0; end
+                    case(ppu_own)
+                    3'd1: begin ppu_wbi_dat_o <= 16'o314; enVIRQPrx[3] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
+                    3'd2: begin ppu_wbi_dat_o <= 16'o320; enVIRQPrx[0] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
+                    3'd3: begin ppu_wbi_dat_o <= 16'o324; enVIRQPtx[0] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
+                    3'd4: begin ppu_wbi_dat_o <= 16'o330; enVIRQPrx[1] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
+                    3'd5: begin ppu_wbi_dat_o <= 16'o334; enVIRQPtx[1] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
+                    3'd6: begin ppu_wbi_dat_o <= 16'o340; enVIRQPrx[2] <= 1'b0; ppu_wbi_ack_o <= 1'b1; end
+                    default: begin ppu_wbi_ack_o <= 1'b0; ppu_wbi_dat_o <= 16'o0; end
+                    endcase
                 end
             end
             if(cpu_vm_init_i)begin
@@ -288,6 +311,7 @@ always @(posedge clk)begin
                 enVIRQCrx <= 2'b11;
                 enVIRQCtx <= 3'b111;
                 enVIRQPrx[3] <= 1'b1;
+                cpu_own <= 3'd0;
             end else begin
                 cecpu_old <= cecpu;
 					 if(!cpu_stb_s[1])begin
@@ -373,14 +397,21 @@ always @(posedge clk)begin
 					 if(!cpu_wbi_s[1])begin
 						  cpu_wbi_dat_o <= 16'o0;
                     cpu_wbi_ack_r <= 1'b0;
+                    cpu_own <= (setVIRQCrx[0] & enVIRQCrx[0]) ? 3'd1 :
+                               (setVIRQCtx[0] & enVIRQCtx[0]) ? 3'd2 :
+                               (setVIRQCrx[1] & enVIRQCrx[1]) ? 3'd3 :
+                               (setVIRQCtx[1] & enVIRQCtx[1]) ? 3'd4 :
+                               (setVIRQCtx[2] & enVIRQCtx[2]) ? 3'd5 : 3'd0;
 					 end else
                 if(~cpu_wbi_stb_i_old & cpu_wbi_s[1])begin
-                     if(setVIRQCrx[0] && enVIRQCrx[0])begin cpu_wbi_dat_o <= 16'o60; enVIRQCrx[0] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
-							else if(setVIRQCtx[0] && enVIRQCtx[0])begin cpu_wbi_dat_o <= 16'o64; enVIRQCtx[0] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
-								else if(setVIRQCrx[1] && enVIRQCrx[1])begin cpu_wbi_dat_o <= 16'o460; enVIRQCrx[1] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
-									else if(setVIRQCtx[1] && enVIRQCtx[1])begin cpu_wbi_dat_o <= 16'o464; enVIRQCtx[1] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
-										else if(setVIRQCtx[2] && enVIRQCtx[2])begin cpu_wbi_dat_o <= 16'o474; enVIRQCtx[2] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
-											else begin cpu_wbi_ack_r <= 1'b0; cpu_wbi_dat_o <= 16'o0; end
+                    case(cpu_own)
+                    3'd1: begin cpu_wbi_dat_o <= 16'o60;  enVIRQCrx[0] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+                    3'd2: begin cpu_wbi_dat_o <= 16'o64;  enVIRQCtx[0] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+                    3'd3: begin cpu_wbi_dat_o <= 16'o460; enVIRQCrx[1] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+                    3'd4: begin cpu_wbi_dat_o <= 16'o464; enVIRQCtx[1] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+                    3'd5: begin cpu_wbi_dat_o <= 16'o474; enVIRQCtx[2] <= 1'b0; cpu_wbi_ack_r <= 1'b1; end
+                    default: begin cpu_wbi_ack_r <= 1'b0; cpu_wbi_dat_o <= 16'o0; end
+                    endcase
                 end
             end
         end

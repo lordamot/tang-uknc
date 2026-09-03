@@ -1,0 +1,29 @@
+continue from last unfinished feature. currently (after applying some timing fixes - all those flashed; changes not committed yet) MKLAD.DSK can not run MKLAD.SAV - game starts, draws part of first tile line and hangs without errors (during test on board). Need fix for it (sorry for one more restart - host machine quite unstable)
+
+****
+
+Found and fixed: the morning's chain fix had turned the halt into a silent hang. Built through the timing gate into bin/tang.fs, not flashed - the host sees no Tang on USB (no FTDI device, no /dev/ttyUSB). Replug it, flash, power-cycle, and try MKLAD.
+
+What the game does. Rebuilt the instrumented emulator (the copy was in /tmp and went with the restart) and read MKLAD's PPU code instead of the summary: it installs a timer handler at vector 304 and a key handler at 300, and every tile of the level is a four-byte channel-2 "call" from the CPU, which spins on the ready bit of 176674 between bytes. The morning's claim that the timer handler never reads 177714 was wrong - it stops the timer, writes the next period into 177712 and spins on CMP R0,@#177714 until the counter reads it back, and that loop exits on the FPGA's timer model as well. So the timer re-arm change fixed nothing by itself; it stays because it is what UKNCBTL does.
+
+The fault. The vector-fetch strobe is a daisy chain, core -> xm2-01 -> vp1_120, and after the morning each chip gated it with its live VIRQ condition: pin_wbi_stb_o = virq ? 0 : strobe, combinational. xm2-01 answers 304 on the strobe's first clock and its request drops on the next, so the strobe to vp1_120 rose in the middle of the same fetch. vp1_120 edge-detects that strobe, took it for a fresh fetch, and with a channel-2 byte waiting - during the draw there always is one - answered 340 to nobody (top.v's mux hands the core xm2-01's word) and cleared its enable. The channel-2 request was gone with the byte unread; the PPU never took it; the CPU spun on the ready bit for ever. The first timer tick of the draw, 5 ms in, is where the picture stops. Before the morning the same moment was the halt, because the gate on "set" alone blocked the chain instead. vp1_120's own chain output to vp65 had the same gate on the CPU side.
+
+The fix. Each chip decides while the strobe is low which vector, if any, it will answer, and holds that for the whole fetch: vec_own in xm2-01.v, ppu_own and cpu_own in vp1_120.v. The chain strobe is the incoming one ANDed with "not mine"; the CPU side passes the synchronised strobe on, so it cannot run ahead of the decision. Nothing else changed.
+
+Evidence. tb_virq gained the pair - a channel-2 byte waiting and the timer overflowing, fetch 304 then 340 and read the byte - plus a monitor that fails on any chain strobe changing during a fetch, and a CPU-side fetch through vp1_120 to the vp65 chain. The morning's RTL fails it nine ways: the chain rose mid-fetch on every timer and key vector, the channel-2 request vanished, its fetch timed out. This RTL passes all nine, kbd-test still passes, lint is clean, make bitstream 15:18 with 0 setup and 0 hold violations, logic 52% / registers 28% / BSRAM 66%.
+
+Also: soft/uknc-iolog.py rebuilds the instrumented UKNCBTL runner anywhere (iolog, pputrace, pregs, disppu, discpu, and a script that boots build/MKLAD.DSK into the game), so the next restart costs nothing. Written up as the rest of progress.md 19, the CLAUDE.md trap, platform.md, build.md and soft.md. Staged, not committed.
+
+If it still stops on the board after this, the two things in the log left unmatched by reading alone are the game's key handler at vector 300 and the draw routine's byte read-modify-write of 177024, both of which agree with UKNCBTL on paper.
+
+tang connected - flash it onto flash
+
+****
+
+Flashed: bin/tang.fs (the 15:18 build with the latched chain decision, md5 ebed395b) written to the Tang's SPI flash with make flash-fpga-flash, erase and write both reported Done. Power-cycle the board before testing - openFPGALoader's reconfigure after a flash write is not reliable, so without the cycle you are still running the previous bitstream. Then MKLAD.DSK or Run SAV.
+
+all works now - finalize docs
+
+****
+
+Done. progress.md 19 is now "FIXED, MKLAD RUNS ON THE BOARD" with the confirmation paragraph, the CLAUDE.md trap says the latched chain decision is board-proven, and soft.md's instrument section closes the same way. Everything is staged, not committed; say the word and it goes in as one commit, "fix vector chain: decide before the strobe, run sav from osd", or split as you prefer.

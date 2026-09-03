@@ -93,6 +93,37 @@ from breaking the start screen or the floppy again.
   `xm2-01.v` resets to `16'o40` = DCLO asserted, and its bits drive
   `cpu1`'s DCLO/ACLO/HALT.  A CPU that never starts is a PPU that never got
   to that register.
+- **"ЗАВИСАНИЕ ПРИ ПРИЕМЕ А.В.П." is a vector fetch nobody answered,
+  not a floppy fault - and a vector fetch answered TWICE is a silent
+  hang.**  А.В.П. is the interrupt vector address; the ROM prints it
+  when the PPU takes an interrupt and the fetch cycle times out.  The
+  strobe runs core → `xm2-01.v` → `vp1_120.v` (and the CPU's core →
+  `vp1_120.v` → `vp65.v`), and each chip either answers or passes it
+  on.  **Which one it does is decided while the strobe is LOW and held
+  for the whole fetch** (`vec_own`, `ppu_own`, `cpu_own`, 3 Sep 2026).
+  Two wrong gates preceded that, and MKLAD hit both in one day.  Gated
+  on "set" alone, a timer or key request is set-but-disabled between
+  its vector being taken and the handler reading `177714`/`177702`, so
+  a channel byte from the CPU in that window reached nobody and the
+  ROM halted.  Gated on the VIRQ condition combinationally, the chip
+  answers on the strobe's first clock and its request drops on the
+  next, so the strobe to the next chip ROSE in the middle of the same
+  fetch; with a channel byte waiting `vp1_120` answered too, to nobody,
+  and cleared its enable - the channel interrupt was lost with the byte
+  unread, the PPU never took it, the CPU spun on the ready bit: part of
+  a tile row, then silence, on the first timer tick of the draw.
+  progress.md 19, `make virq-test` - which now also fails on any chain
+  strobe that moves during a fetch.  MKLAD runs on the board with the
+  latched decision (3 Sep 2026), so this one is not a theory.  A "works once, then hangs" or a
+  "draws a bit, then stops" on anything that uses the timer and the
+  channel together is this shape of fault before it is a timing one.
+  The timer also requests on every overflow now, as UKNCBTL does; the
+  morning's claim that MKLAD's handler never reads `177714` was wrong
+  (it spins on it, `CMP R0,@#177714` at its 024312), so that change
+  fixed nothing by itself but stays, being the emulator's behaviour.
+  The fastest way to see what a program really does with the hardware
+  is the emulator with a unique {side, dir, address, PC} log on both
+  port controllers - `.claude/docs/soft.md` - not the board.
 - **`P177076[2]` makes channel 0 stop acking.**  When it is set the CPU's
   accesses to `0177560`-`0177566` get no ack at all, which on a 1801 is a
   bus timeout, not a read of zero.
@@ -168,6 +199,20 @@ from breaking the start screen or the floppy again.
 - **A menu value needs three edits, not one**: the letter in the form
   string in `menu.c`, an entry in `variables_uknc[]`, and a case in
   `sysctrl.v`.  Miss the third and the menu moves but nothing happens.
+  **A main-form entry needs the submenus renumbered**: each form's
+  `"0|n"` is the main-form line it returns to, counted from 1, and
+  "Run SAV:" (Sep 2026, entry 3) moved System/Drives/Settings/Clock to
+  4..7.  That entry is also the one fileselector that mounts nothing:
+  it browses through `SDC_SLOT_SAV` and hands the file to `rt11sav.c`,
+  which writes the card - `make sav-test` runs that code on the host,
+  and it is the only place it can be watched.  **`sdc.c`'s FatFs
+  `disk_read`/`disk_write` ignored the sector count until 3 Sep 2026**:
+  one sector moved, success reported, and every file the firmware had
+  ever touched was under 512 bytes so nobody saw it.  The first 4 KB
+  `f_read`/`f_write` left seven of every eight sectors of RT11SAV.DSK
+  unwritten, and an unreadable directory came back as "err: disk full"
+  on the board.  Fixed with a loop; anything that reads or writes more
+  than a sector at a time depends on it.
 - **Flashing the BL616 needs no `PATH` and no install.**
   `tools/bouffalo_sdk/tools/bflb_tools/bouffalo_flash_cube/BLFlashCommand-ubuntu`
   is a self-contained PyInstaller bundle; an absolute path to it is the

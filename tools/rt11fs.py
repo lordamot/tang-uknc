@@ -308,4 +308,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except OSError as e:
+        # a message, not a traceback: on Ubuntu an uncaught exception in
+        # a script also opens apport's crash-report window
+        raise SystemExit(f"rt11fs: {e.filename or ''}: {e.strerror or e}")

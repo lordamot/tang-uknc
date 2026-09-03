@@ -316,6 +316,15 @@ kbd-test: $(VERILATOR)
 	  sim/tb/tb_kbd.v tang/src/xm2-01.v >/dev/null
 	$(BUILD)/sim/kbd/tb_kbd
 
+# The PPU's interrupt-vector chain, xm2-01 in front of vp1_120 as top.v
+# wires them: a channel interrupt taken while a timer or key request is
+# set but disabled must still get its vector (sim/tb/tb_virq.v).
+virq-test: $(VERILATOR)
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_virq -Mdir $(BUILD)/sim/virq -o tb_virq \
+	  sim/tb/tb_virq.v tang/src/xm2-01.v tang/src/vp1_120.v >/dev/null
+	$(BUILD)/sim/virq/tb_virq
+
 # The floppy controller before and after its re-clocking (Sep 2026): the
 # old module comes out of git as fdd4_old and runs beside the new one.
 fdd-test: $(VERILATOR) mif
@@ -388,6 +397,22 @@ $(BUILD)/RT11TST.DSK: soft/BASERT11.DSK $(SOFTALL) $(TOOLS)/rt11fs.py
 	@for f in $(SOFTALL); do \
 	  $(PYTHON) $(TOOLS)/rt11fs.py put $@ $$(basename $$f) $$f || exit 1; done
 	$(PYTHON) $(TOOLS)/rt11fs.py ls $@
+
+# The OSD's "Run SAV:" image maker (mnano/rt11sav.c) built for the host
+# over plain files: the base disk plus one .SAV under a long FAT name
+# becomes build/sav/RT11SAV.DSK, listed back by rt11fs.py.  The same
+# code writes the card on the BL616; this is the only place it can be
+# watched.
+sav-test: soft/BASERT11.DSK soft/RTCTST.SAV $(TOOLS)/rt11fs.py
+	@mkdir -p $(BUILD)/sav
+	$(CC) -O1 -Wall -Wextra -DRT11SAV_HOST -o $(BUILD)/sav/rt11sav mnano/rt11sav.c
+	cp soft/RTCTST.SAV "$(BUILD)/sav/Real Time Clock test (Kakave+).SAV"
+	$(BUILD)/sav/rt11sav soft/BASERT11.DSK "$(BUILD)/sav/Real Time Clock test (Kakave+).SAV" $(BUILD)/sav/RT11SAV.DSK
+	$(PYTHON) $(TOOLS)/rt11fs.py ls $(BUILD)/sav/RT11SAV.DSK | grep -E "REALTI|STARTS"
+	$(PYTHON) $(TOOLS)/rt11fs.py get $(BUILD)/sav/RT11SAV.DSK REALTI.SAV $(BUILD)/sav/back.sav
+	cmp $(BUILD)/sav/back.sav soft/RTCTST.SAV
+	$(PYTHON) $(TOOLS)/rt11fs.py get $(BUILD)/sav/RT11SAV.DSK STARTS.COM $(BUILD)/sav/starts.com
+	@grep -a -q "^R REALTI" $(BUILD)/sav/starts.com && echo "sav-test: ok"
 
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out

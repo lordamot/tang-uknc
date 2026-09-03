@@ -7,6 +7,12 @@
 // floppy disks and two ACSI hard drives
 #define MAX_DRIVES  5
 
+// One more slot that is browsed but never mounted: the OSD's "Run SAV:"
+// entry (menu.c) walks the card for .SAV files through it, so it has a
+// working directory and a remembered name like a drive, but no open
+// image, no core-side drive and no line in the settings file.
+#define SDC_SLOT_SAV  MAX_DRIVES
+
 // fatfs mounts the card under /sd
 #define CARD_MOUNTPOINT "/sd"
 
@@ -31,5 +37,6 @@ void sdc_unlock(void);
 char *sdc_get_image_name(int drive);
 char *sdc_get_cwd(int drive);
 void sdc_set_default(int drive, const char *name);
+void sdc_set_image_name(int drive, const char *name);
 
 #endif // SDC_H

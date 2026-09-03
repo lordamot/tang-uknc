@@ -10,6 +10,12 @@
 #include "sdc.h"
 #include "menu.h"
 #include "sysctrl.h"
+#include "rt11sav.h"
+
+#ifndef SDL
+#include <queue.h>
+extern QueueHandle_t xQueue;   // the OSD's event queue (main.c)
+#endif
 
 // this is the u8g2_font_helvR08_te with any trailing
 // spaces removed
@@ -80,6 +86,7 @@ static const char main_form_uknc[] =
   // --------
   "F,FDD 0:,0|dsk;"                 // fileselector for Disk 1:
   "F,HDD 0:,4|img;"                 // the IDE cartridge's disk, SD slot 4
+  "F,Run SAV:,5|sav;"               // a .SAV on the card -> RT11SAV.DSK in FDD 0 (menu_run_sav, slot SDC_SLOT_SAV)
   "S,System,1;"                         // System submenu is form 1
   "S,Drives,2;"                         // Storage submenu
   "S,Settings,3;"                       // Settings submenu is form 3
@@ -87,15 +94,18 @@ static const char main_form_uknc[] =
   "B,Reset,R;";                         // system reset
 
 // a form's "0|n" is the main-form entry to return to, counted from 1
-// (0 is the title); these used to say 1, 2, 3 and came back one line up
+// (0 is the title); these used to say 1, 2, 3 and came back one line up.
+// "Run SAV:" is entry 3 (MENU_ENTRY_RUNSAV), so the submenus are 4..7.
+#define MENU_ENTRY_RUNSAV 3
+static char sav_status[24];             // what that entry shows instead of "Run SAV:" (menu_run_sav)
 static const char system_form_uknc[] =
-  "System,0|3;"                         // return to form 0, entry 3
+  "System,0|4;"                         // return to form 0, entry 4
   // --------
   "L,Video:,RGB|BGR,V;"
   "B,Cold Boot,B;";                     // system reset with memory reset
 
 static const char storage_form_uknc[] =
-  "Drives,0|4;"                         // return to form 0, entry 4
+  "Drives,0|5;"                         // return to form 0, entry 5
   // --------
   "F,Disk 0:,0|dsk;"                     // fileselector for Disk 0:
   "F,Disk 1:,1|dsk;"                     // fileselector for Disk 1:
@@ -107,7 +117,7 @@ static const char storage_form_uknc[] =
   "L,HDD delay:,0|25|50|75|100|125|150|175|200|225|250|275|300|325|350|375|400|425|450|475|500|525|550|575|600|625|650|675|700|725|750|775|800|825|850|875|900|925|950|975,D;";  // ~us added per sector, spread over its reads; sets a streamed demo's sample rate
   
 static const char settings_form_uknc[] =
-  "Settings,0|5;"                       // return to form 0, entry 5
+  "Settings,0|6;"                       // return to form 0, entry 6
   // --------
   "L,Volume:,Mute|33%|66%|100%,A;"
   "B,Save settings,S;";
@@ -121,7 +131,7 @@ static const char settings_form_uknc[] =
 // machine can set the same clock itself through the cartridge's own
 // protocol (RT-11's KKVRTC), which this menu does not see.
 static const char clock_form_uknc[] =
-  "Clock,0|6;"                          // return to form 0, entry 6
+  "Clock,0|7;"                          // return to form 0, entry 7
   // --------
   "L,Year:,2020|2021|2022|2023|2024|2025|2026|2027|2028|2029|2030|2031|2032|2033|2034|2035|2036|2037|2038|2039,y;"
   "L,Month:,1|2|3|4|5|6|7|8|9|10|11|12,m;"
@@ -922,6 +932,10 @@ static void menu_draw_title(menu_t *menu, const char *s) {
 static void menu_draw_entry(menu_t *menu, int y, const char *s) {
   const char *buf = menu_get_str(menu, s, MENU_ENTRY_INDEX_LABEL);
 
+  // the "Run SAV:" line carries its progress instead of its label
+  if(s[0] == 'F' && sav_status[0] && menu_get_subint(menu, s, 2, 0) == SDC_SLOT_SAV)
+    buf = sav_status;
+
   int ypos = 13 + 12 * y;
   int width = u8g2_GetDisplayWidth(MENU2U8G2(menu));
 
@@ -947,8 +961,9 @@ static void menu_draw_entry(menu_t *menu, int y, const char *s) {
   // some entries have a small icon to the right    
   if(s[0] == 'S')
     u8g2_DrawXBM(MENU2U8G2(menu), hl_w-8, ypos-8, 8, 8, icn_right_bits);    
-  if(s[0] == 'F') {
-    // icon depends if floppy is inserted
+  if(s[0] == 'F' && menu_get_subint(menu, s, 2, 0) != SDC_SLOT_SAV) {
+    // icon depends if floppy is inserted; the "Run SAV:" browser mounts
+    // nothing, so it shows neither
     u8g2_DrawXBM(MENU2U8G2(menu), hl_w-9, ypos-8, 8, 8,
 	sdc_get_image_name(menu_get_subint(menu, s, 2, 0))?icn_floppy_bits:icn_empty_bits);
   }
@@ -1026,6 +1041,64 @@ static void menu_fs_draw_entry(menu_t *menu, int row, sdc_dir_entry_t *entry) {
     u8g2_DrawButtonFrame(MENU2U8G2(menu), 0, y, U8G2_BTN_INV, width, 1, 1);     
 }
 
+// ------------------------------------------------------------------
+// "Run SAV:" - a .SAV picked in the file selector becomes a bootable
+// RT-11 floppy in FDD 0 (rt11sav.c).  The main-form entry shows the
+// progress in place of its label: "making DSK" while the card is being
+// written, then "err: ..." or "done: RT11SAV.DSK", until the OSD is
+// closed.  The work runs right here in the OSD task, so no other menu
+// event is served until it is over, and whatever was typed meanwhile
+// is dropped; the picked name is remembered in SDC_SLOT_SAV only, which
+// the settings file never sees - FDD 0's new image is what "Save
+// settings" would record, if asked.
+// ------------------------------------------------------------------
+static void menu_draw_form(menu_t *menu, const char *s);
+
+static unsigned menu_rt11_date(menu_t *menu) {
+  int y = 0, m = 0, d = 0;
+  for(int i=0;menu->vars[i].id;i++) {
+    if(menu->vars[i].id == 'y') y = menu->vars[i].value;
+    if(menu->vars[i].id == 'm') m = menu->vars[i].value;
+    if(menu->vars[i].id == 'd') d = menu->vars[i].value;
+  }
+  return rt11sav_date(2020 + y, m + 1, d + 1);
+}
+
+static void menu_run_sav(menu_t *menu, int parent, const char *name) {
+  // the directory listing that owns 'name' is rebuilt by the next
+  // readdir, so keep a copy
+  char fname[strlen(name)+1];
+  strcpy(fname, name);
+  sdc_set_image_name(SDC_SLOT_SAV, fname);
+
+  // back on the "Run SAV:" line, saying what is going on, before the
+  // long part starts
+  menu_goto_form(menu, parent, MENU_ENTRY_RUNSAV);
+  strcpy(sav_status, "making DSK");
+  menu_draw_form(menu, menu->forms[menu->form]);
+
+  // FDD 0 is about to be overwritten (it may be RT11SAV.DSK itself)
+  sdc_image_open(0, NULL);
+
+  char err[16];
+  if(rt11sav_make(sdc_get_cwd(SDC_SLOT_SAV), fname, menu_rt11_date(menu), err, sizeof(err)) < 0)
+    snprintf(sav_status, sizeof(sav_status), "err: %s", err);
+  else {
+    strcpy(sav_status, "done: " RT11SAV_DISK);
+    char disk[] = RT11SAV_DISK;
+    sdc_set_default(0, RT11SAV_DIR "/" RT11SAV_DISK);
+    sdc_image_open(0, disk);
+    // and boot it
+    sys_set_val(menu->osd->spi, 'R', 1);
+    sys_set_val(menu->osd->spi, 'R', 0);
+  }
+
+#ifndef SDL
+  // keys pressed while the card was being written are not commands
+  xQueueReset(xQueue);
+#endif
+}
+
 // file selector events
 #define FSEL_INIT   0
 #define FSEL_DRAW   1
@@ -1100,7 +1173,8 @@ static void menu_fileselector(menu_t *menu, int event) {
 	  // User selected the "No Disk" entry
 	  // Eject it and return to parent menu
 	  menu_goto_form(menu, parent, 1);
-	  sdc_image_open(drive, NULL);
+	  if(drive == SDC_SLOT_SAV) sdc_set_image_name(drive, NULL);  // nothing mounted there to eject
+	  else                      sdc_image_open(drive, NULL);
 	} else {	
 	  // check if we are going up one dir and try to select the
 	  // directory we are coming from
@@ -1132,6 +1206,9 @@ static void menu_fileselector(menu_t *menu, int event) {
 	    }
 	  }
 	}
+      } else if(drive == SDC_SLOT_SAV) {
+	// not a disk to mount: a program to build a disk around
+	menu_run_sav(menu, parent, entry->name);
       } else {
 	// request insertion of this image
 	sdc_image_open(drive, entry->name);
@@ -1318,7 +1395,10 @@ void menu_do(menu_t *menu, int event) {
   
   if(event)  {
     if(event == MENU_EVENT_SHOW)   osd_enable(menu->osd, OSD_VISIBLE);
-    if(event == MENU_EVENT_HIDE)   osd_enable(menu->osd, OSD_INVISIBLE);
+    if(event == MENU_EVENT_HIDE) {
+      osd_enable(menu->osd, OSD_INVISIBLE);
+      sav_status[0] = 0;    // "Run SAV:" reads as itself again next time
+    }
     
     if(event == MENU_EVENT_UP)     menu_entry_go(menu, -1);
     if(event == MENU_EVENT_DOWN)   menu_entry_go(menu,  1);

@@ -117,6 +117,21 @@ CPU-side interrupt vectors, taken straight from the RTL:
                             474  channel 2 transmitter
 ```
 
+PPU-side vectors: `300` key and `304` timer from `xm2-01.v`, `314`,
+`320`, `324`, `330`, `334`, `340` the channels from `vp1_120.v`.  The
+core's vector-fetch strobe is a daisy chain, `xm2-01` first, and a chip
+either answers it or passes it on - a decision each chip takes while
+the strobe is low and holds for the whole fetch (`vec_own` in
+`xm2-01.v`, `ppu_own`/`cpu_own` in `vp1_120.v`; the CPU's chain runs
+`vp1_120` → `vp65` the same way).  Two earlier gates were wrong
+(3 Sep 2026, `make virq-test`): on a merely *set* request the channels
+starved whenever a timer or key handler had not yet read its register,
+which the ROM reports as `ЗАВИСАНИЕ ПРИ ПРИЕМЕ А.В.П.`; on the live
+VIRQ condition the strobe to the next chip rose in the middle of a
+fetch the first chip had just answered, the next chip answered as well
+and dropped its request - a channel byte left unread for ever, which
+is a silent hang.
+
 `vp1_120.v` also carries four 8-bit ports `portA`/`portB`/`portC`/`portW`
 on the PPU side at `0177100`/`0177102` (`adr[6:1]` = `'o40`/`'o41`), byte
 selected by `adr[0]`.
@@ -130,7 +145,7 @@ Chip-selected by `&adr[15:6]`, i.e. **`0177700`-`0177777`**, decoded on
 |---|---|---|
 | `0177700` | `R177700` | keyboard control; bit 6 enables the key interrupt |
 | `0177702` | `R177702` | keyboard scan code, 8 bits |
-| `0177710` | `R177710` | timer control: bit 0 run, bits 2:1 prescale, bit 3 overflow-seen, bit 4, bit 6 IRQ enable, bit 7 zero |
+| `0177710` | `R177710` | timer control: bit 0 run, bits 2:1 prescale, bit 3 overflow-seen, bit 4, bit 6 IRQ enable, bit 7 zero.  Every overflow is a new vector-304 request while bit 6 is set (as UKNCBTL does it); a read of `177714` clears bit 7 |
 | `0177712` | `R177712` | timer reload, 12 bits |
 | `0177714` | `R177714` | timer count, 12 bits, read-only |
 | `0177716` | `R177716` | system: bit 4 → HALT, bit 5 → DCLO, bit 15 → ACLO (inverted), bit 7 beeper enable, bits 12:8 beeper tone select |

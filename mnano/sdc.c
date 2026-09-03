@@ -131,15 +131,24 @@ static int sdc_initialize() {
   return 0;
 }
 
+// FatFs asks for 'count' sectors at a time whenever a read or write
+// spans whole sectors - an f_read of 4 KB is one call for eight.  Until
+// Sep 2026 both of these moved the first sector only and reported
+// success, which nothing noticed while every file the firmware touched
+// was under 512 bytes; the "Run SAV:" copy of a floppy image was the
+// first larger one, and it came out with seven of every eight sectors
+// untouched.
 static int sdc_read(BYTE *buff, LBA_t sector, UINT count) {
-  printf("sdc_read(%p,%d,%d)\r\n", buff, sector, count);  
-  sdc_read_sector(sector, buff);
+  printf("sdc_read(%p,%d,%d)\r\n", buff, sector, count);
+  for(UINT i = 0; i < count; i++)
+    sdc_read_sector(sector + i, buff + i * 512);
   return 0;
 }
 
 static int sdc_write(const BYTE *buff, LBA_t sector, UINT count) {
-  printf("sdc_write(%p,%d,%d)\r\n", buff, sector, count);  
-  sdc_write_sector(sector, buff);
+  printf("sdc_write(%p,%d,%d)\r\n", buff, sector, count);
+  for(UINT i = 0; i < count; i++)
+    sdc_write_sector(sector + i, buff + i * 512);
   return 0;
 }
 
@@ -209,9 +218,16 @@ static int fs_init() {
 
 // -------------- higher layer routines provided to the firmware ----------------
  
-// keep track of working directory for each drive
-static char *cwd[MAX_DRIVES] = { NULL, NULL, NULL, NULL };
-static char *image_name[MAX_DRIVES] = { NULL, NULL, NULL, NULL };
+// keep track of working directory for each drive, and for the
+// browse-only SDC_SLOT_SAV after them
+static char *cwd[MAX_DRIVES + 1] = { NULL, NULL, NULL, NULL };
+static char *image_name[MAX_DRIVES + 1] = { NULL, NULL, NULL, NULL };
+
+// remember a name for a slot without opening anything (SDC_SLOT_SAV)
+void sdc_set_image_name(int drive, const char *name) {
+  if(image_name[drive]) free(image_name[drive]);
+  image_name[drive] = name ? strdup(name) : NULL;
+}
 
 void sdc_set_default(int drive, const char *name) {
   // a valid filename will currently always begin with /sd

@@ -109,7 +109,23 @@ assign pin_wbm_ack_o = ask;// & pin_wbm_stb_i;
 assign pin_vm_virq_o = (|{setVIRQtm & enVIRQtm, setVIRQbt & enVIRQbt});
 assign pin_vm_aclo_o =~R177716[15];
 assign pin_vm_dclo_o = R177716[5];
-assign pin_wbi_stb_o = setVIRQtm|setVIRQbt ? 1'b0 : pin_wbi_stb_i;
+// The vector-fetch strobe goes on down the chain (to vp1_120, the
+// channels) unless THIS chip is the one answering.  Which chip that is
+// gets decided while the strobe is LOW - vec_own, below - and held for
+// the whole fetch.  Two faults lived here before (3 Sep 2026, MKLAD;
+// sim/tb/tb_virq.v).  Until the morning the gate was "set" alone, and a
+// timer or key request is set-but-disabled from the moment its vector
+// is taken until the handler reads 177714 or 177702, so a channel
+// interrupt taken in that window reached nobody, the fetch timed out
+// and the ROM halted with "ЗАВИСАНИЕ ПРИ ПРИЕМЕ А.В.П.".  Then the gate
+// was the VIRQ condition, combinational: this chip answers 304 on the
+// strobe's first clock and its request drops on the next, so the strobe
+// to vp1_120 ROSE in the middle of the same fetch; with a channel byte
+// waiting vp1_120 answered too, to nobody, and cleared its enable - the
+// channel interrupt was lost with the byte unread, the PPU never took
+// it and the CPU waited on the ready bit forever, silently.
+assign pin_wbi_stb_o = pin_wbi_stb_i & (vec_own == 2'd0);
+reg  [1:0] vec_own = 2'd0;   // 1 = the timer's 304, 2 = the key's 300, 0 = pass it on
 assign pin_vm_halt_o = R177716[4];
 assign setVIRQtm     = &R177710[7:6];
 assign setVIRQbt     = press_btn & R177700;
@@ -171,6 +187,7 @@ always @(posedge pin_vm_clk_p)
         pin_wbi_ack_o <= 1'b0;
         enVIRQtm      <= 1'b1;
         enVIRQbt      <= 1'b1;
+        vec_own       <= 2'd0;
         zero_tmr_old  <= 1'b0;
         kbd_last      <= but_data;
         kbd_wr        <= 3'd0;
@@ -180,7 +197,14 @@ always @(posedge pin_vm_clk_p)
         kbd_last <= but_data;
         if(but_data != kbd_last && !kbd_full)begin kbd_q[kbd_wr] <= but_data; kbd_wr <= kbd_wr + 3'd1; end
         zero_tmr_old <= zero_tmr;
-        if(!zero_tmr_old && zero_tmr)begin R177710[3] <= R177710[7]; R177710[7] <= 1'b1;end
+        // Every overflow is a fresh interrupt request, whether or not the
+        // handler cleared the last one by reading 177714 - UKNCBTL raises
+        // vector 304 on each one (Board.cpp TimerTick); until 3 Sep 2026
+        // enVIRQtm came back only with that read.  (Written for MKLAD in
+        // the belief that its handler never reads 177714; it does, and its
+        // hang was the chain gate above.  Kept because it is what the
+        // emulator does.)  A coinciding acknowledge, below, still wins.
+        if(!zero_tmr_old && zero_tmr)begin R177710[3] <= R177710[7]; R177710[7] <= 1'b1; enVIRQtm <= 1'b1; end
         R177714 <= R177710[7] ? R177714 : count_tmr;
         if(!pin_wbm_stb_i)begin
             wbm_dat_o    <= 16'o0;
@@ -270,10 +294,15 @@ always @(posedge pin_vm_clk_p)
         if(!pin_wbi_stb_i)begin
             pin_wbi_ack_o <= 1'b0;
             pin_wbi_dat_o <= 16'o0;
+            // the decision for the next fetch, taken only while no fetch
+            // is running; the enables change only through this chip's
+            // own bus cycles and the answer below, so it holds
+            vec_own <= (setVIRQtm & enVIRQtm) ? 2'd1 :
+                       (setVIRQbt & enVIRQbt) ? 2'd2 : 2'd0;
         end else
         if(!wbi_stb_i_old&&pin_wbi_stb_i)begin
-            if(setVIRQtm && enVIRQtm)begin pin_wbi_dat_o <= 16'o304; enVIRQtm <= 1'b0; pin_wbi_ack_o <= 1'b1; end
-            else if(setVIRQbt && enVIRQbt)begin pin_wbi_dat_o <= 16'o300; enVIRQbt <= 1'b0; pin_wbi_ack_o <= 1'b1; end
+            if(vec_own == 2'd1)begin pin_wbi_dat_o <= 16'o304; enVIRQtm <= 1'b0; pin_wbi_ack_o <= 1'b1; end
+            else if(vec_own == 2'd2)begin pin_wbi_dat_o <= 16'o300; enVIRQbt <= 1'b0; pin_wbi_ack_o <= 1'b1; end
         end
     end
 //========================================================================================

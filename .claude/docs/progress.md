@@ -1145,6 +1145,96 @@ the emulator next door has no Kakave.  The decode was also walked in
 python over `0177000`-`0177777` against every PPU-bus decode in the
 tree: nothing else answers these two words.
 
+### 19. "ЗАВИСАНИЕ ПРИ ПРИЕМЕ А.В.П." - a vector fetch nobody answered, then one answered twice - FIXED, MKLAD RUNS ON THE BOARD
+
+3 Sep 2026.  A game (MKLAD, 1991) started from RT-11 crashed at once
+on the board, and the same disk rebooted later gave the ROM's
+`ЗАВИСАНИЕ ПРИ ПРИЕМЕ А.В.П.` - which is not the floppy message it was
+taken for on 2 Sep but the PPU's halt text for a **bus timeout while
+receiving the interrupt vector address**: an interrupt was taken and
+the vector-fetch cycle got no acknowledge.  It ran once and then not,
+which is the CPU and PPU racing.
+
+The cause is in the vector chain.  `top.v` runs the PPU's fetch strobe
+through `xm2-01.v` (timer 304, key 300) and on to `vp1_120.v` (the
+channels); a chip must let the strobe pass unless it is the one with
+an enabled request.  `xm2-01.v` stopped it on `setVIRQtm|setVIRQbt` -
+"set" alone - while it acknowledges only on set AND enabled, and a
+timer or key request is set-but-disabled from the moment its vector is
+taken until the handler reads `177714` or `177702`.  A channel
+interrupt taken in that window - the CPU's byte arriving while the
+PPU is in the first instructions of its timer handler - reached
+nobody.  `vp1_120.v` gated its own chain outputs the same way (and
+drove the PPU one to 1), which would starve `vp65` on the CPU side in
+the same fashion.  Both gates are the VIRQ condition now.
+
+`sim/tb/tb_virq.v` (`make virq-test`) wires the two chips as `top.v`
+does and takes four vectors: timer, channel 0 with the timer flag
+still up, key, channel 1 with the key unread.  Against the previous
+RTL the two channel fetches time out; against this they answer 320
+and 330.  Lint clean, bitstream built, timing gate passed, resources
+unchanged, flashed to the Tang.  **On the board the halt was gone**
+and the game drew part of its first tile row and waited forever,
+silently.
+
+The second fault was next door.  Logging every I/O register the game
+touches in UKNCBTL (a unique {processor, direction, address, PC} set,
+switched on once RT-11 is up) showed its PPU code reading `177714`
+exactly once, at start-up, and never again - its timer handler does
+not read the counter.  `xm2-01.v` re-armed the timer's request only on
+that read, so the game got one tick and no more; UKNCBTL raises 304 on
+every overflow while interrupts are enabled (`Board.cpp` TimerTick).
+Every overflow re-arms the request now; the testbench's fifth vector
+is a second timer tick with the counter unread.  Bitstream rebuilt
+(logic 52%, +52 cells), gate passed, not yet flashed at the time of
+writing - the Tang's FTDI wanted a replug.  Same log for the CPU side:
+the program probes `177546`, `177570`, `177746`, `177760`, `172540`,
+`160000` and writes sixteen words at `172100`, all of which the
+emulator answers with a bus error too, so those are the same trap on
+both.  If the game still stops after this, the log's remaining
+differences to check are the byte writes to `177024` (a pixel through
+the colour registers) and the 16-bit values it writes to `177016`,
+which both implementations keep to three bits.
+
+**Afternoon, the same day: the silent stop was the fix itself.**  With
+both changes flashed the game still drew part of its first tile row
+and stopped.  Rebuilt the emulator log (the instrumented copy had gone
+with a host restart) and read the game's PPU code properly: its timer
+handler *does* read `177714` - it stops the timer, writes the next
+period to `177712` and spins on `CMP R0,@#177714` until the counter
+reads it back - so the "one tick" theory above was wrong, and the
+re-arm change, though it matches UKNCBTL, fixed nothing.  What the
+morning's chain fix had done was replace the halt with a hang: the
+gate `pin_wbi_stb_o = virq ? 0 : strobe` is combinational, xm2-01
+answers 304 on the strobe's first clock and its request drops on the
+next, so the strobe to `vp1_120` *rose* in the middle of the fetch;
+`vp1_120` edge-detects that strobe, saw a fresh fetch, and if a
+channel-2 byte was waiting - during the tile draw one always is, the
+CPU sends every tile as a four-byte call - answered 340 to nobody
+(top.v's mux hands the core xm2-01's word) and cleared `enVIRQPrx[2]`.
+The channel-2 request was gone with the byte unread; the PPU never
+took it, the CPU spun on the ready bit.  The first timer tick of the
+draw, 5 ms in, is the end of the picture.  `vp1_120`'s own chain
+output to `vp65` had the same gate.
+
+Now each chip decides *while the strobe is low* which vector, if any,
+it will answer, and holds that for the whole fetch (`vec_own`,
+`ppu_own`, `cpu_own`); the chain strobe is the incoming one ANDed with
+"not mine", and the CPU side passes the synchronised strobe on rather
+than the raw one, so it cannot run ahead of the decision.
+`tb_virq` gained the pair - a channel-2 byte waiting and the timer
+overflowing, fetch 304 then 340 - plus a monitor that fails on any
+chain strobe changing during a fetch, and a CPU-side fetch through to
+the vp65 chain.  The morning's RTL fails nine ways on it; this passes.
+Lint clean; `make bitstream` 15:18, timing gate passed (0 setup, 0
+hold), logic 52% / registers 28% / BSRAM 66%, `bin/tang.fs` updated.
+**Confirmed on the board the same afternoon**: flashed to the SPI
+flash, power-cycled, and MKLAD runs - from MKLAD.DSK and through Run
+SAV - the level draws whole and the game plays, with the timer, the
+keyboard and the channel all live at once.  That is the first program
+seen on this hardware that drives the PPU timer and channel 2
+together, and the vector chain is the thing it proves.
+
 ## Open questions
 
 

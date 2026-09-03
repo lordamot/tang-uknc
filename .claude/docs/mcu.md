@@ -109,7 +109,8 @@ in `menu.c`, and in the menu form string - three places.
 
 ```
 main      FDD 0: fileselector, HDD 0: fileselector (*.img, SD slot 4),
-          System, Drives, Settings, Reset
+          Run SAV: fileselector (*.sav, browse-only slot SDC_SLOT_SAV = 5),
+          System, Drives, Settings, Clock, Reset
 System    Video RGB|BGR ('V'), Cold Boot
 Drives    Disk 0:..3: fileselectors, Disk prot. None|0:|1:|2:|3:|All ('P'),
           HDD image Auto|Plain|Inverted ('J'), HDD prot. Off|On ('K'),
@@ -121,7 +122,30 @@ Clock     Year 2020..2039 ('y'), Month ('m'), Day ('d'), Hour ('h'), Minute ('n'
 
 The forms' `"0|n"` return entry is counted from 1, 0 being the title;
 the УКНЦ forms said 1, 2, 3 and came back one line above the entry they
-were opened from until Sep 2026.
+were opened from until Sep 2026.  "Run SAV:" is entry 3, so the four
+submenus return to 4..7; adding a main-form entry means renumbering
+all of them.
+
+**Run SAV:** (Sep 2026) is the one entry that mounts nothing itself.
+It browses the card for `.sav` files through `SDC_SLOT_SAV`, a sixth
+slot in `sdc.c` that has a working directory and a remembered name
+like a drive but no open image and no line in the settings file.
+Picking a file runs `menu_run_sav()`: the entry's label becomes
+`making DSK` and the OSD is redrawn, FDD 0 is ejected, and
+`rt11sav_make()` (`rt11sav.c`) copies `/sd/RT11BASE.DSK` (or
+`BASERT11.DSK`) to `/sd/RT11SAV.DSK`, adds the program under a
+six-letter RT-11 name and appends `R NAME` to `STARTS.COM`; then the
+label reads `err: <reason>` or `done: RT11SAV.DSK`, in which case the
+new disk is mounted in FDD 0 and the core is reset to boot it.  The
+whole thing runs inside the OSD task, so the menu is blocked until
+the label changes, and the event queue is emptied afterwards so keys
+pressed during the copy do nothing.  The label goes back to
+"Run SAV:" when the OSD is closed.  `make sav-test` runs the same
+image code on the host; `.claude/docs/soft.md` has the RT-11 side.
+The first board run (3 Sep 2026) said `err: disk full`: `sdc.c`'s
+FatFs sector callbacks moved one sector whatever count they were
+given, so the 4 KB copy left seven of every eight sectors unwritten.
+They loop now; the settings file, under 512 bytes, had never shown it.
 
 `variables_uknc[]` gives the defaults: video RGB, volume 33%, no write
 protection.  Note that "Disk prot." offers six choices onto a four-bit

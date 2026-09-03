@@ -33,6 +33,7 @@ make sim         run the machine, boot and all
 make ab-test     the Aberrant sound module alone: registers, tone, pitch
 make fdd-test    the floppy controller before and after its re-clocking
 make kbd-test    the keyboard byte queue in xm2-01.v under SPI-speed bursts
+make virq-test   the vector chains, PPU and CPU: a channel interrupt behind a pending timer/key one, two requests at one fetch, no chain strobe moving mid-fetch
 make covox-test  the Covox at 177372 beside the Aberrant: writes, read-back, no shared ack
 make ide-test    the IDE cartridge against a stand-in card
 make sdarb-test  the SD path arbiter between floppies and cartridge

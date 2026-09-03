@@ -62,3 +62,101 @@ Done: UCL.SAV is on soft/BASERT11.DSK (block 260, after RESORC) and in build/RT1
 Where it came from: none of the floppies here had one, only KMON's own reference to the name inside RT11SJ.SYS. Partition 0 of build/WDC170inv_P.img has a two-block UCL.SAV dated 31 Dec 1999, and that is the one. It is twenty words: load the address of a message, .PRINT, .EXIT - the message being "!UCL-E-Bad command or file name". It defines no commands; it just replaces "?KMON-F-File not found SY:UCL.SAV" with a friendlier line.
 
 Checked in the emulator on the rebuilt image: FOO now answers "!UCL-E-Bad command or file name", and a bare RTCTST still runs. Documented in .claude/docs/soft.md and the Makefile comment; staged, not committed.
+
+new cool fature: add ability to run .SAV files:
+- separate OSD menu entry (right after FDD0 HDD0 options) which browses SD for .SAV files
+- applying it should copy RT11BASE.DSK to RT11SAV.DSK, add target SAV into it, add it autorun (to starts script, for example), mount RT11SAV.DSK as FDD0
+- lets try to be informative here: as soon as user selected SAV file - OSD menu option should change to "making DSK" - then if no RT11 base image - "err: no RT11 base" - then "done: RT11SAV.DSK" message
+- consider that sav names on FAT32 might be long ones - so should be shortened
+- OSD menu should be blocked till error shown or success
+- this option is not subject to save settings, till final step when DSK mounted
+
+****
+
+Built, not run on a board. The firmware is in bin/bl616.bin (437776 bytes); the image code was run on the host and its product booted in the emulator.
+
+What it does. The main OSD form has "Run SAV:" right after HDD 0:, a file selector over *.sav anywhere on the card. Picking a file: the entry's label becomes "making DSK" and the OSD redraws; FDD 0 is ejected; /sd/RT11BASE.DSK (BASERT11.DSK is accepted too) is copied to /sd/RT11SAV.DSK; the program is added under a six-letter RT-11 name; "R NAME" is appended to STARTS.COM after whatever the base had; then the label reads "err: no RT11 base" (or another short reason: bad RT11 base, no SAV file, empty SAV, cannot write, copy failed, disk full, dir full, name taken) or "done: RT11SAV.DSK", and in that case the disk is mounted in FDD 0 and the core is reset so it boots into the program. The label goes back to "Run SAV:" when the OSD closes.
+
+Names: uppercase, RAD50 letters and digits only, the last extension dropped, cut to six; "PROG" if nothing is left; if the base already has a file of that name (dir.sav -> DIR.SAV) it becomes five letters and a digit, so a system program is never overwritten. "Real Time Clock test (Kakave+).SAV" becomes REALTI.SAV.
+
+Blocking: the copy runs inside the OSD task, so no menu event is served until it is over, and the event queue is emptied afterwards - keys pressed during the copy do nothing. The selection lives in a sixth SD slot that the settings file never sees; only FDD 0's mounted image would be saved, and only if Save settings is pressed afterwards.
+
+What was checked. make sav-test builds mnano/rt11sav.c for the host and runs it over soft/BASERT11.DSK with RTCTST.SAV under the long name: the result lists REALTI.SAV, reads back byte-identical, STARTS.COM ends in "R REALTI", and booted in UKNCBTL the disk goes straight into the clock display. The firmware builds without a warning in the changed files. Not measured: how long 1600 sectors each way over SPI take on the board - that is the "making DSK" time.
+
+One thing to decide: the reset after "done" is mine, not in the list; without it the machine keeps running whatever it was running. Easy to take out. Staged, not committed.
+
+BL companion board connected
+
+****
+
+Flashed. bin/bl616.bin (437776 bytes) went to the BL616 over /dev/ttyACM0 with make flash-mcu; the tool read the SHA-256 back from the flash and it matched the host's, "All programming completed successfully".
+
+To try it: take the board out of boot mode (tap RESET), put soft/BASERT11.DSK on the card root as RT11BASE.DSK (the shipped name BASERT11.DSK works as well) with a few .SAV files anywhere on it - soft/AYTEST.SAV, COVTST.SAV, RTCTST.SAV are the ones already known to run - then F12, Run SAV:, pick one. The line should read "making DSK" for as long as the copy takes, then "done: RT11SAV.DSK", and the machine resets into the program.
+
+checked interface - it starts process and then says "err: Disk full" - seems like a problem with RT11BASE.dsk?
+
+****
+
+Not the base disk - the same code over every RT-11 disk in this tree, RT11BASE included, makes a good image on the host. It is the firmware's FatFs glue: sdc_read and sdc_write in sdc.c take a sector count and ignored it, moving one sector and reporting success. The copy goes 4 KB at a time, so RT11SAV.DSK got one sector in eight; its directory was among the missing ones, and an unreadable directory is "no empty area", which the code reports as disk full. Nothing had noticed in two years because every file the firmware ever read or wrote - the settings file - is under 512 bytes.
+
+Both callbacks loop over the count now. Firmware rebuilt (bin/bl616.bin, 437824 bytes), the fix noted in CLAUDE.md and mcu.md, staged. The board is not in boot mode at the moment (no /dev/ttyACM0), so it is not flashed yet: hold BOOT, tap RESET, release BOOT, and say so.
+
+BL companion board connected
+
+****
+
+Flashed: bin/bl616.bin with the sector-count fix, SHA-256 read back from the flash matches. Tap RESET, then F12, Run SAV:, pick a file. The stale RT11SAV.DSK from the first try is overwritten by the next run.
+
+works almost everything except that program started and immediately crashed. check yourself please - ./build/RT11BASE.dsk and MKLAD.SAV exact files I was testing against. One more thing - remove Floppy icon from run sav option - it confuses with X or Flop icon indicating mounted or not fdd / hdd options above
+
+I see rt11fs.py crashed with ubunty gui crashreport window - this is also to fix
+
+****
+
+The image is right; the crash is somewhere the emulator does not reach. build/RT11BASE.DSK is byte-identical to soft/BASERT11.DSK, and the disk my code makes from it with MKLAD.SAV (39 blocks, a real LINK product, bitmap and all) lists MKLAD.SAV at block 262 and STARTS.COM ending in R MKLAD - booted in UKNCBTL it goes straight into the game, level 1, still running 200 frames later. So the RT-11 side and the copy are fine on the board too (RT-11 itself loaded from that copy and ran STARTS.COM), and what crashes is MKLAD on this machine. It loads its own PPU code through channel 2, like the test programs.
+
+To separate the two possibilities: build/MKLAD.DSK is the base plus MKLAD.SAV with no autorun. Mount it as FDD 0 the ordinary way, boot, type R MKLAD. If it crashes the same way, the game and the FPGA disagree and Run SAV is not the cause; if it runs, the difference is the autorun start and I dig there. Either way, what does the crash look like - a halt with СТОП and an address, a hang, garbage on the screen?
+
+Done meanwhile: the Run SAV: line has no floppy/empty icon any more, and rt11fs.py answers a missing file with "rt11fs: <name>: No such file or directory" instead of a traceback (which is what opened apport's window). Firmware rebuilt into bin/bl616.bin; the board is not in boot mode, so not flashed yet.
+
+MKLAD.DSK worked just fine once; now errors with "Зависание при приёме А.В.Р." - something related to timings, again. Same for Run SAV option - seems working ok, but no success runs of mklad itself. try find reason of it - something related to timings between CPU / PPU it seems
+
+****
+
+Found, fixed, built and flashed to the Tang - power-cycle it and try MKLAD again. Not yet seen working on the board.
+
+What the message is. Searching the ROM for it: the text sits between ДВОЙНОЕ ЗАВИСАНИЕ and СТОП, and it reads А.В.П., not А.В.Р. - the PPU's halt text for a bus timeout while receiving the interrupt vector address. So not the floppy: the PPU took an interrupt, ran its vector-fetch cycle, and no device answered in time. Once vs. hang is the CPU and PPU racing, as you said.
+
+Why nobody answered. The PPU's vector strobe is a daisy chain in top.v: core -> xm2-01 (timer 304, keyboard 300) -> vp1_120 (the channels). A chip must pass the strobe on unless it is the one with an enabled request. xm2-01 stopped it whenever its request was merely set, but it acknowledges only when set AND enabled - and a timer or key request is set-but-disabled from the moment its vector is taken until the handler reads 177714 or 177702. A channel interrupt taken in that window - the CPU's byte landing while the PPU is in the first instructions of its timer handler - reached nobody; the fetch timed out; the ROM halted. MKLAD drives the PPU timer and the channel together, so it lives in that window. vp1_120 gated its own chain outputs the same way (its CPU-side one feeds vp65). Both gates are the VIRQ condition now: one line each.
+
+Evidence. sim/tb/tb_virq.v (make virq-test) wires the two chips exactly as top.v does and takes four vectors: the timer, a channel-0 byte with the timer flag still up, a key, a channel-1 byte with the key unread. Against yesterday's RTL the two channel fetches time out - the testbench prints the ROM's message for them - and against the fix they answer 320 and 330. Lint clean; make bitstream 59 s, timing gate passed, resources unchanged (52/28/66); openFPGALoader wrote it and said Done. Written up as progress.md 19, a CLAUDE.md trap, and notes in platform.md and build.md.
+
+If the same message comes back after the power cycle, the next two suspects are named in progress.md 19: a channel request that vanishes between VIRQ and the fetch (one of them follows the CPU's INIT line directly), and the strobe's crossing into vp1_120's 25 MHz domain.
+
+Staged, not committed - bin/tang.fs, tang/impl/pnr and the two RTL files included.
+
+BL companion board connected - lets flash recent there also
+
+****
+
+Flashed: bin/bl616.bin (the icon change and the rt11fs-era build, 437856 bytes), SHA-256 read back from the flash matches. Tap RESET on the BL616; with the Tang power-cycled onto the new bitstream, both halves are current.
+
+hm. MKLAD.SAV (no matter from which version it runs - MKLAD.DSK or RT11SAV.DSK autostart) now do not crash but game itself is not run also - it draws part of upper tile line and hangs forver silently with no crashes
+
+****
+
+Second fault found, right behind the first. Fixed, built through the gate, not flashed yet - the Tang's FTDI answered "device not found", so replug its cable and say so.
+
+How it was found. The emulator runs the game, so I logged every I/O register it touches there: a unique {processor, direction, address, PC} set on both port controllers, switched on once RT-11 is up. Its PPU code uses the window, the colour registers 177016/020/022 and byte writes to 177024, the timer and 177716; its CPU side probes a handful of other machines' registers, which the emulator also answers with a bus error. One line stood out: the PPU code reads 177714 exactly once, at start-up, and never again - the game's timer handler does not read the counter.
+
+Why that hangs on the board. xm2-01.v re-armed the timer's interrupt request only on a read of 177714, so this game got one tick and then none; UKNCBTL raises vector 304 on every overflow while the enable is set. The drawing is paced by that tick: one row's worth, then a wait for a tick that never comes - silent, because nothing faults. Before the chain fix the same moment was the crash: the first tick's acknowledge left the chain blocked.
+
+Fix: every overflow re-arms the request, a coinciding acknowledge still wins. tb_virq's fifth vector is now a second timer tick with the counter unread - it fails on the previous RTL, passes now. Lint clean, bitstream 52/28/66 with 52 more logic cells, timing gate passed, bin/tang.fs updated.
+
+If it still stops after this, the two remaining differences in the log are named in progress.md 19: the byte writes to 177024 and the 16-bit values written to 177016.
+
+tang reconnected
+
+****
+
+Not flashed - the host does not see the Tang at all: lsusb lists only the root hubs, no FTDI 0403:6010, no /dev/ttyUSB*, and openFPGALoader says "unable to open ftdi device". That is the USB link, not the flasher: a cable that carries power only, a port that has not enumerated, or the board not yet up. Give it a few seconds on a data cable and say when lsusb should see it; the bitstream is waiting in bin/tang.fs.
