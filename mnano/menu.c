@@ -83,16 +83,19 @@ static const char main_form_uknc[] =
   "S,System,1;"                         // System submenu is form 1
   "S,Drives,2;"                         // Storage submenu
   "S,Settings,3;"                       // Settings submenu is form 3
+  "S,Clock,4;"                          // the Kakave+ RTC, form 4
   "B,Reset,R;";                         // system reset
 
+// a form's "0|n" is the main-form entry to return to, counted from 1
+// (0 is the title); these used to say 1, 2, 3 and came back one line up
 static const char system_form_uknc[] =
-  "System,0|1;"                         // return to form 0, entry 3
+  "System,0|3;"                         // return to form 0, entry 3
   // --------
   "L,Video:,RGB|BGR,V;"
   "B,Cold Boot,B;";                     // system reset with memory reset
 
 static const char storage_form_uknc[] =
-  "Drives,0|2;"                         // return to form 0, entry 3
+  "Drives,0|4;"                         // return to form 0, entry 4
   // --------
   "F,Disk 0:,0|dsk;"                     // fileselector for Disk 0:
   "F,Disk 1:,1|dsk;"                     // fileselector for Disk 1:
@@ -104,16 +107,34 @@ static const char storage_form_uknc[] =
   "L,HDD delay:,0|25|50|75|100|125|150|175|200|225|250|275|300|325|350|375|400|425|450|475|500|525|550|575|600|625|650|675|700|725|750|775|800|825|850|875|900|925|950|975,D;";  // ~us added per sector, spread over its reads; sets a streamed demo's sample rate
   
 static const char settings_form_uknc[] =
-  "Settings,0|3;"                       // return to form 0, entry 4
+  "Settings,0|5;"                       // return to form 0, entry 5
   // --------
   "L,Volume:,Mute|33%|66%|100%,A;"
   "B,Save settings,S;";
+
+// The Kakave+ real-time clock (kakave.v) has no battery behind it, so this
+// is where its time comes from at power-up: every variable is sent to the
+// core at start (below, "send initial values"), so the saved values land
+// in the clock then, and changing one here sets that field at once -
+// minutes also restart the seconds.  The letters are sysctrl.v's:
+// 'y' year-2020, 'm' month-1, 'd' date-1, 'h' hours, 'n' minutes.  The
+// machine can set the same clock itself through the cartridge's own
+// protocol (RT-11's KKVRTC), which this menu does not see.
+static const char clock_form_uknc[] =
+  "Clock,0|6;"                          // return to form 0, entry 6
+  // --------
+  "L,Year:,2020|2021|2022|2023|2024|2025|2026|2027|2028|2029|2030|2031|2032|2033|2034|2035|2036|2037|2038|2039,y;"
+  "L,Month:,1|2|3|4|5|6|7|8|9|10|11|12,m;"
+  "L,Day:,1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31,d;"
+  "L,Hour:,0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23,h;"
+  "L,Minute:,0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59,n;";
 
 static const char *forms_uknc[] = {
   main_form_uknc,
   system_form_uknc,
   storage_form_uknc,
-  settings_form_uknc
+  settings_form_uknc,
+  clock_form_uknc
 };
 
 // variable ids must match the ones in the menu string
@@ -124,6 +145,11 @@ menu_variable_t variables_uknc[] = {
   { 'J', { 0 }},    // default HDD image form = auto-detected from sector 0
   { 'K', { 0 }},    // default HDD writable
   { 'D', { 30 }},   // default HDD delay 750 us a sector: badapple's Covox right on the board (index x 25 us)
+  { 'y', { 6 }},    // the clock, until it is set or saved: 2026-01-01 00:00 (year index 6 = 2026)
+  { 'm', { 0 }},
+  { 'd', { 0 }},
+  { 'h', { 0 }},
+  { 'n', { 0 }},
   { '\0',{ 0 }}
 };
 // ------------------------------------------------------------------

@@ -356,6 +356,10 @@ wire [1:0]  system_hdd_mode    ;
 wire [15:0] system_hdd_cyl     ;
 wire        system_hdd_wprot   ;
 wire [5:0]  system_hdd_delay   ;
+wire        system_mouse       ;
+wire        system_rtc_tgl     ;
+wire [2:0]  system_rtc_field   ;
+wire [7:0]  system_rtc_val     ;
 
 sysctrl sctl1(
     .clk                (           mist_clk),
@@ -387,11 +391,18 @@ sysctrl sctl1(
     .system_hdd_mode    (    system_hdd_mode),
     .system_hdd_cyl     (     system_hdd_cyl),
     .system_hdd_wprot   (   system_hdd_wprot),
-    .system_hdd_delay   (   system_hdd_delay)
+    .system_hdd_delay   (   system_hdd_delay),
+    .system_mouse       (       system_mouse),
+    .system_rtc_tgl     (     system_rtc_tgl),
+    .system_rtc_field   (   system_rtc_field),
+    .system_rtc_val     (     system_rtc_val)
 );
 
 wire [5:0] db9_port = 6'd0;
 wire [7:0] keycode  ;   // the UKNC scan code, translated on the MCU
+wire [5:0] mouse_q  ;   // hid.v's {buttons, x, y}: only the buttons are read
+wire       mouse_rep_tgl;
+wire [7:0] mouse_rep_dx, mouse_rep_dy;
 
 hid hd1(
     .clk           (      mist_clk),
@@ -408,10 +419,13 @@ hid hd1(
     .iack          (    int_ack[1]),
 
 // output HID data received from USB
-    .mouse         (              ),   // the UKNC has no mouse or joystick port
+    .mouse         (       mouse_q),   // the quadrature outputs go nowhere; the buttons to kakave
     .keyboard      (       keycode),
-    .joystick0     (              ),
-    .joystick1     (              )
+    .joystick0     (              ),   // the UKNC has no joystick port
+    .joystick1     (              ),
+    .mouse_rep_tgl ( mouse_rep_tgl),
+    .mouse_rep_dx  (  mouse_rep_dx),
+    .mouse_rep_dy  (  mouse_rep_dy)
 );
 
 
@@ -560,6 +574,9 @@ wire       ppu_wbm_ack_i_abr;
 //covox
 wire [15:0]ppu_wbm_dat_i_cvx;
 wire       ppu_wbm_ack_i_cvx;
+//kakave+ mouse and RTC
+wire [15:0]ppu_wbm_dat_i_kkv;
+wire       ppu_wbm_ack_i_kkv;
 
 
 assign ppu_vm_virq_i = ppu_vm_virq_i_xm2|ppu_vm_virq_i_vp;
@@ -569,9 +586,10 @@ assign ppu_wbm_dat_i = ppu_wbm_ack_i_xm2 ? ppu_wbm_dat_i_xm2 :
                        ppu_wbm_ack_i_128 ? ppu_wbm_dat_i_128 : 
                        ppu_wbm_ack_i_abr ? ppu_wbm_dat_i_abr :
                        ppu_wbm_ack_i_cvx ? ppu_wbm_dat_i_cvx :
+                       ppu_wbm_ack_i_kkv ? ppu_wbm_dat_i_kkv :
                        ppu_wbm_ack_i_ide ? ppu_wbm_dat_i_ide : 16'o0;
 
-assign ppu_wbm_ack_i = ppu_wbm_ack_i_xm2|ppu_wbm_ack_i_vp|ppu_wbm_ack_i_128|ppu_wbm_ack_i_abr|ppu_wbm_ack_i_cvx|ppu_wbm_ack_i_ide;
+assign ppu_wbm_ack_i = ppu_wbm_ack_i_xm2|ppu_wbm_ack_i_vp|ppu_wbm_ack_i_128|ppu_wbm_ack_i_abr|ppu_wbm_ack_i_cvx|ppu_wbm_ack_i_kkv|ppu_wbm_ack_i_ide;
 
 assign ppu_wbi_dat_i = ppu_wbi_ack_i_xm2 ? ppu_wbi_dat_i_xm2 :
                        ppu_wbi_ack_i_vp  ? ppu_wbi_dat_i_vp  : 16'o0;
@@ -912,6 +930,31 @@ covox cvx1(
    .stb   (    ppu_wbm_stb_o),
    .ack   (ppu_wbm_ack_i_cvx),
    .sample(     covox_sample)
+);
+//------------------------------------------------------------------------//
+// The Kakave+ cartridge's mouse (0177400) and real-time clock (0177410)
+// registers (Sep 2026).  The mouse is the USB one, one report at a time
+// from hid.v on mist_clk; the clock counts on the PPU clock and is set
+// by the machine or by the OSD through sysctrl.  Neither reset touches
+// the time.
+kakave kkv1(
+   .clk          (         ppuclk_n),
+   .init         (    ppu_vm_init_o),
+   .adr          (    ppu_wbm_adr_o),
+   .dat_i        (    ppu_wbm_dat_o),
+   .dat_o        (ppu_wbm_dat_i_kkv),
+   .wre          (    ppu_wbm_wre_o),
+   .sel          (    ppu_wbm_sel_o),
+   .stb          (    ppu_wbm_stb_o),
+   .ack          (ppu_wbm_ack_i_kkv),
+   .mouse_tgl    (    mouse_rep_tgl),
+   .mouse_dx     (     mouse_rep_dx),
+   .mouse_dy     (     mouse_rep_dy),
+   .mouse_btns   (     mouse_q[5:4]),
+   .mouse_present(     system_mouse),
+   .set_tgl      (   system_rtc_tgl),
+   .set_field    ( system_rtc_field),
+   .set_val      (   system_rtc_val)
 );
 //------------------------------------------------------------//
 cpu_wb cpu1(

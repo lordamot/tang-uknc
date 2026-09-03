@@ -1107,6 +1107,44 @@ emulator's model, and 750 (index 30) is the default now on both
 sides.  The menu shows microseconds; "index 8, 9" in the earlier notes
 are that number divided by 25.  The voice is fine at 750.
 
+### 18. Kakave+ mouse and real-time clock - ADDED, NOT ON A BOARD
+
+2 Sep 2026.  The mouse/RTC half of yrust's Kakave+ cartridge (the IDE
+half is item 14), from the files in `build/rtc_kkve/`: the ATmega sketch
+is the protocol, the RT-11 programs KKVTST/KKVRTC/KKVDTS are how it is
+used, and the Quartus archive (a zlib container with a name header per
+entry; `build/rtc_kkve/x/qar.py` unpacks it) only confirmed that the
+CPLD is a plain decoder.  `kakave.v` on the PPU bus at `0177400` and
+`0177410`, `.claude/docs/platform.md` has the register description.
+
+What was decided and why:
+
+- **The mouse is the USB one.**  `usb_host.c` already sends every report
+  over SPI; `hid.v` now exports one report with a toggle and `kakave.v`
+  accumulates it on the PPU clock, clipped to ±63 as the sketch clips.
+  Y is negated: PS/2 counts up, USB counts down, and KKVTST subtracts.
+  A first version negated in eight bits and -128 stayed -128; the
+  testbench caught it, so the negation is nine bits wide.
+- **The clock counts in the FPGA.**  No battery, no time source on the
+  BL616, so the calendar is a counter on the PPU clock with an exact
+  second (7 s = 21937500 cycles, a phase accumulator), set by the
+  machine through the cartridge protocol or by the OSD's new Clock form
+  whose values are saved with the settings and re-sent at power-up.
+  The reset lines do not touch it.
+- **Weekday 1 = Sunday**, the library's convention, not the RT-11
+  programs' printout; documented in `platform.md`.
+- **'M' from the MCU** says whether a mouse is attached, so KKVTST's
+  "who are you" gets `00AA` only when there is one.
+
+Checked: `make lint`, `make kakave-test` (decode over the whole I/O
+page, motion, buttons, clipping, commands, set/read, leap and year
+rollover, weekday, the exact second, the OSD path, reset), `make fw`
+builds, `make bitstream` builds and meets the timing gate.  Not checked:
+a board, and any real software beyond reading the three RT-11 sources -
+the emulator next door has no Kakave.  The decode was also walked in
+python over `0177000`-`0177777` against every PPU-bus decode in the
+tree: nothing else answers these two words.
+
 ## Open questions
 
 

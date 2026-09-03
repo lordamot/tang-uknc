@@ -22,7 +22,15 @@ module hid (
     mouse,
     keyboard,
     joystick0,
-    joystick1
+    joystick1,
+
+// one USB mouse report as it arrived, for the Kakave+ register (kakave.v):
+// dx/dy are the report's signed bytes (USB: right and DOWN positive),
+// mouse_rep_tgl flips once per report after both have been written, and
+// the buttons are mouse[5:4] above
+    mouse_rep_tgl,
+    mouse_rep_dx,
+    mouse_rep_dy
 );
 input         clk;
 input         reset;
@@ -42,6 +50,9 @@ output [5:0]     mouse;
 output reg [7:0] keyboard;
 output reg [7:0] joystick0;
 output reg [7:0] joystick1;
+output reg       mouse_rep_tgl = 1'b0;
+output reg [7:0] mouse_rep_dx  = 8'd0;
+output reg [7:0] mouse_rep_dy  = 8'd0;
 
 
 reg [1:0] mouse_btns;
@@ -112,6 +123,9 @@ always @(posedge clk) begin
                 if(state == 4'd1) mouse_btns <= data_in[1:0];
                 if(state == 4'd2) mouse_x_cnt <= mouse_x_cnt + data_in;
                 if(state == 4'd3) mouse_y_cnt <= mouse_y_cnt + data_in;
+                // the same report, unprocessed, for kakave.v
+                if(state == 4'd2) mouse_rep_dx <= data_in;
+                if(state == 4'd3) begin mouse_rep_dy <= data_in; mouse_rep_tgl <= ~mouse_rep_tgl; end
             end
 
             // CMD 3: receive digital joystick data

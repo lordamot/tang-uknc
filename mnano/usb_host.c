@@ -544,6 +544,16 @@ static void usbh_update(struct usb_config *usb) {
   extern void set_led(int pin, int on);
   set_led(GPIO_PIN_27, mice);
   set_led(GPIO_PIN_28, keyboards);
+
+  // The UKNC core's Kakave+ mouse register answers "who are you" with a
+  // PS/2 mouse only while one is attached (kakave.v, sysctrl 'M'); tell
+  // it when that changes.  The static starts at -1 so the first pass
+  // after every MCU start sends the state whatever the FPGA holds.
+  static int mice_last = -1;
+  if(core_id == CORE_ID_UKNC && mice != mice_last) {
+    mice_last = mice;
+    sys_set_val(usb->spi, 'M', mice ? 1 : 0);
+  }
 }
 
 static void hid_parse(struct hid_info_S *hid) {

@@ -42,7 +42,7 @@ the numbering:
 | target | Verilog | commands |
 |---|---|---|
 | 0 SYS | `mister/sysctrl.v` | 0 status, 1 leds, 2 rgb, 3 buttons, 4 set value, 5 irq control |
-| 1 HID | `mister/hid.v` | 0 status, 1 keyboard, 2 mouse, 3 joystick, 4 get db9 |
+| 1 HID | `mister/hid.v` | 0 status, 1 keyboard, 2 mouse (buttons, dx, dy - one report to `kakave.v`), 3 joystick, 4 get db9 |
 | 2 OSD | `mister/osd_u8g2.v` | 1 enable, 2 write |
 | 3 SDC | `mister/sd_card.v` | 1 status, 2 core read/write, 3 MCU read, 4 image inserted, 5 MCU write |
 
@@ -92,6 +92,12 @@ agree on the letters; `sysctrl.v` decodes:
 'Y'  system_hdd_cyl[15:8]  bits 7:0  IDE image cylinders, high byte  } for IDENTIFY
 'K'  system_hdd_wprot      bit 0     IDE image write-protected (OSD "HDD prot.")
 'D'  system_hdd_delay      bits 5:0  stretch of IDE data reads, ~25 us a sector per step (OSD "HDD delay")
+'M'  system_mouse          bit 0     a USB mouse is attached - sent by usb_host.c when the count changes
+'y'  year - 2020           bits 7:0  } the Kakave+ clock (kakave.v), one field a letter,
+'m'  month - 1             bits 7:0  } from the OSD "Clock" form; each is applied as it
+'d'  date - 1              bits 7:0  } arrives, 'n' also zeroes the seconds.  sysctrl.v
+'h'  hours                 bits 7:0  } passes them on as {field, value} with a toggle
+'n'  minutes               bits 7:0  }
 ```
 
 Anything the menu offers has to have a letter here, in `variables_uknc[]`
@@ -109,7 +115,13 @@ Drives    Disk 0:..3: fileselectors, Disk prot. None|0:|1:|2:|3:|All ('P'),
           HDD image Auto|Plain|Inverted ('J'), HDD prot. Off|On ('K'),
           HDD delay 0..975 us ('D', default 750 - right for badapple on the board; the value sent is us/25)
 Settings  Volume Mute|33%|66%|100% ('A'), Save settings
+Clock     Year 2020..2039 ('y'), Month ('m'), Day ('d'), Hour ('h'), Minute ('n') -
+          the Kakave+ RTC; saved with the settings, so a saved date is the power-on date
 ```
+
+The forms' `"0|n"` return entry is counted from 1, 0 being the title;
+the УКНЦ forms said 1, 2, 3 and came back one line above the entry they
+were opened from until Sep 2026.
 
 `variables_uknc[]` gives the defaults: video RGB, volume 33%, no write
 protection.  Note that "Disk prot." offers six choices onto a four-bit

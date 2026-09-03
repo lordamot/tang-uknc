@@ -6,6 +6,7 @@
     <FileList>
         <File path="/var/www/own/tang-uknc/tang/src/aberrant.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/covox.v" type="verilog"/>
+        <File path="/var/www/own/tang-uknc/tang/src/kakave.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/audio.v" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/ay/ym2149.sv" type="verilog"/>
         <File path="/var/www/own/tang-uknc/tang/src/cpu.v" type="verilog"/>

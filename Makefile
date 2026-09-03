@@ -296,6 +296,16 @@ covox-test: $(VERILATOR)
 	  sim/tb/tb_covox.v tang/src/covox.v tang/src/aberrant.v tang/src/ay/ym2149.sv >/dev/null
 	$(BUILD)/sim/covox/tb_covox
 
+# The Kakave+ mouse and RTC registers at 0177400/0177410 (kakave.v) with
+# hid.v in front: decode over the whole I/O page, motion, buttons, clipping,
+# the command answers, the clock's set/read protocol, calendar rollover and
+# weekday, the exact second, the OSD set path, reset.  sim/tb/tb_kakave.v.
+kakave-test: $(VERILATOR)
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_kakave -Mdir $(BUILD)/sim/kakave -o tb_kakave \
+	  sim/tb/tb_kakave.v tang/src/kakave.v tang/src/mister/hid.v >/dev/null
+	$(BUILD)/sim/kakave/tb_kakave
+
 # The keyboard byte queue in xm2-01.v: a burst of bytes at SPI speed
 # against a PPU that reads slowly must come out complete and in order.
 kbd-test: $(VERILATOR)

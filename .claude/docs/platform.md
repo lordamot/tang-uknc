@@ -403,3 +403,76 @@ So the raw sum is kept for one more build as the known-playing form, with
 the layout fix the only change; then the blocker (`git show f2bb44b^`)
 should go back, because its motive was never wrong.  The beeper stays at
 8192 until then.  At 33% the beeper is -24 dBFS and inaudible.
+
+## Mouse and real-time clock (`kakave.v`)
+
+The **Kakave+** cartridge (yrust, oshwlab.com/yrust/uknz_kakave_mouse_rtc_ide;
+its attachments are in `build/rtc_kkve/`) is a CPLD and an ATmega324 on
+the PPU bus carrying a PS/2 mouse and a DS3231 clock, beside the same IDE
+interface as the cartridge above.  The mouse and clock half is
+implemented in `kakave.v` since Sep 2026: two words on the PPU bus, the
+protocol read out of the sketch (`kakave_m_ide_rtc_v3_6.ino`) and the
+three RT-11 programs beside it (KKVTST, KKVRTC, KKVDTS).  Nothing in the
+boot ROM touches them, and the cartridge is a real product on real
+machines, so acknowledging the two addresses changes nothing that ran
+before.
+
+| address | role |
+|---|---|
+| `0177400` | mouse: read motion, or write a command and read its answer |
+| `0177410` | RTC: write a selector, then read a pair or write a field |
+
+**The mouse.**  A read returns `[dy7..1 L dx7..1 R]`: the motion since
+the previous read as two signed 7-bit counts, each clipped to ±63, the
+left button in bit 8 and the right in bit 0 - the current button state,
+not an event.  The counts are in the **PS/2 sense, Y up is positive**,
+which is why KKVTST does `sub R1, MouY`; a USB report has Y down
+positive and `kakave.v` negates it.  A read clears the counts.  A write
+leaves a command whose answer the next read returns in place of motion:
+0 → `0001` (RTC present), 1 → `00AA` (a standard PS/2 mouse) if a USB
+mouse is attached and `0000` if not, 7 → `3336` (the sketch's version
+"3.6"), anything else is echoed.  KKVTST's sequence is write 7 / read,
+write 0 / read, write 1 / read, then the motion loop once per vsync.
+
+The report comes from the BL616: `usb_host.c` sends every USB mouse
+report over SPI as buttons, dx, dy (HID target, command 2), `hid.v`
+hands one report at a time to `kakave.v` with a toggle, and the counts
+accumulate there on the PPU clock until the machine reads them.  Whether
+a mouse is attached is `sysctrl.v`'s `'M'`, sent by the MCU when the
+number of mice changes.
+
+**The clock.**  A write of 0..3 selects what the next reads return -
+0 `{minutes, seconds}`, 1 `{weekday, hours}`, 2 `{month, date}`, 3 the
+year (e.g. 2026) - all binary, 24-hour, months 1..12.  A write of 4..7
+makes the next write the data for one field - 4 year, 5 `{month, date}`,
+6 hours, 7 `{minutes, seconds}`; the sketch's comments say otherwise, its
+code does this and KKVRTC agrees - and the clock loads when all four have
+been given, seconds restarting at that instant.  Other selectors are
+ignored.  **The weekday is 1 = Sunday .. 7 = Saturday**, which is what the
+sketch's `microDS3231::getWeekDay()` computes; the bundled RT-11 programs
+print index 1 as "Monday", so on the real cartridge the printed name is
+one day off, and `kakave.v` follows the hardware rather than the printout.
+
+There is no battery anywhere on this board and no time source on the
+BL616, so the calendar counts in the FPGA on the PPU clock and starts
+from whatever the MCU sends at power-up: the OSD's **Clock** form
+(`menu.c`; letters `'y'` year-2020, `'m'` month-1, `'d'` date-1, `'h'`
+hours, `'n'` minutes, applied one field at a time, minutes also zeroing
+the seconds) has its values saved with the rest of the settings and
+re-sent at every start, so a saved date is the power-on date.  The
+machine's own KKVRTC sets the same clock from RT-11's date and time and
+KKVDTS reads it back into RT-11.  The second is exact by construction:
+the PPU clock is 27 MHz × 13 / 7 / 16, so seven seconds are 21937500 of
+its cycles, and `kakave.v` adds 7 per cycle and takes a second every
+21937500 - the crystal is the only error.  Neither the PPU reset nor a
+cold boot touches the time.  Leap years are `year % 4` (right until
+2100).
+
+`make kakave-test` (`sim/tb/tb_kakave.v`) drives `hid.v` and `kakave.v`
+together: the decode over the whole I/O page (only `0177400/1` and
+`0177410/1` answer), motion, buttons, clipping, the command answers, the
+four-field set and the read-back, 28 Feb into 29 Feb in 2024 and into 1
+Mar in 2023, the year end, the weekday against known dates, seven
+seconds counted as exactly 21937500 clocks, the OSD set path, and that a
+reset clears a pending command and leaves the time.  It takes about
+three minutes, most of it the seven seconds.

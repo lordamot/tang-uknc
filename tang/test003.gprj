@@ -7,6 +7,7 @@
     <FileList>
         <File path="src/aberrant.v" type="file.verilog" enable="1"/>
         <File path="src/covox.v" type="file.verilog" enable="1"/>
+        <File path="src/kakave.v" type="file.verilog" enable="1"/>
         <File path="src/audio.v" type="file.verilog" enable="1"/>
         <File path="src/ay/ym2149.sv" type="file.verilog" enable="1"/>
         <File path="src/cpu.v" type="file.verilog" enable="1"/>

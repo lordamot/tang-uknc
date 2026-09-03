@@ -1,0 +1,33 @@
+Lets add RTC clock and mouse support (from usb hid connected to companion board). Base info is here: https://oshwlab.com/yrust/uknz_kakave_mouse_rtc_ide and as it does not allow to download non-auth - all files from attachments section placed at ./build/rtc_kkve/
+
+****
+
+Done: the Kakave+ cartridge's mouse and real-time-clock registers are in the FPGA, the MCU feeds them, and both shipped binaries are rebuilt. Built, linted, simulated and timed; not run on a board.
+
+What the attachments said. The cartridge is a CPLD decoding two PPU-bus words for an ATmega324 with a PS/2 mouse and a DS3231. The sketch (kakave_m_ide_rtc_v3_6.ino) is the protocol, the RT-11 programs in RTC.zip (KKVTST, KKVRTC, KKVDTS) are how software uses it, and the Quartus archive is a zlib container (build/rtc_kkve/x/qar.py unpacks it) that only confirmed the CPLD is a plain decoder.
+
+  0177400  mouse: a read gives [dy7..1 L dx7..1 R], motion since the last read, clipped to +-63, Y up positive; a write leaves a command (0 RTC present, 1 who are you, 7 version, else echo) that the next read answers.
+  0177410  RTC: write 0..3 then read {min,sec} / {weekday,hours} / {month,date} / year; write 4..7 then the data for one field, the clock loading once all four are in.
+
+What was built.
+- tang/src/kakave.v, new, on the PPU clock beside the Covox: both registers, a +-63 accumulator per axis fed by USB reports, and a calendar counter with an exact second (the PPU clock is 27 MHz x 13 / 7 / 16, so 7 s is exactly 21937500 cycles; a phase accumulator). The weekday is computed as the sketch's microDS3231 library does it.
+- tang/src/mister/hid.v exports one mouse report with a toggle; sysctrl.v takes 'M' (a mouse is attached) and the clock letters y m d h n; top.v wires it into the ack OR and data mux; test003.gprj lists the file.
+- mnano/usb_host.c sends 'M' when the number of USB mice changes; mnano/menu.c gets a Clock form (year, month, day, hour, minute), saved with the settings and re-sent at every power-up, and the UKNC forms' return entries are fixed (they came back one line too high).
+- sim/tb/tb_kakave.v and make kakave-test: decode over the whole I/O page, motion, buttons, clipping, commands, set and read-back, leap and year rollover, weekday against known dates, seven seconds counted as 21937500 clocks, the OSD path, reset. About three minutes, most of it the seven seconds.
+- Docs: platform.md (new section), mcu.md, fpga.md, progress.md item 18, a trap in CLAUDE.md.
+
+Decisions you should know about.
+- No battery anywhere, no time source on the BL616. The clock counts in the FPGA and starts from the OSD's saved Clock values, so a saved date is the power-on date; KKVRTC sets it from RT-11 and KKVDTS reads it back, as on the real cartridge. Neither reset touches it.
+- The weekday is 1 = Sunday. That is what the sketch's library computes; the bundled RT-11 programs print 1 as Monday, so they are one day off on the real cartridge as well. I followed the hardware.
+- USB Y is negated to the PS/2 sense. The first version negated in eight bits and -128 stayed -128; the testbench caught it, so it is nine bits now.
+- The emulator next door has no Kakave, so the protocol was checked only against the three RT-11 sources and the sketch.
+
+Results.
+  make lint            ok
+  make kakave-test     PASS
+  covox-test, kbd-test PASS, unchanged
+  make fw              builds; bin/bl616.bin updated
+  make bitstream       builds; timing gate 0 setup, 0 hold, only the two known PR1014; bin/tang.fs updated
+  Logic 52% (was 48%), Register 28%, BSRAM 66% unchanged
+
+Nothing is committed. Next is a board: flash both binaries, set the clock in the OSD, and run KKVTST.SAV from build/rtc_kkve/x/RTC/ - it prints the firmware version, the RTC time and draws the mouse.

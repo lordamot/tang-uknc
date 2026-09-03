@@ -6,7 +6,7 @@ constraints `tang/src/test003.cst`.
 
 ## What is actually built
 
-**`tang/test003.gprj` is the source of truth.**  Thirty-eight source
+**`tang/test003.gprj` is the source of truth.**  Thirty-nine source
 files are in it, plus `test003.cst` and `test003.sdc`, and every one of
 them is instantiated: the tree was cleaned in September 2026 so that what
 is under `tang/src/` is what is built.  `tools/srcs.py` reads the list
@@ -18,7 +18,7 @@ live set, by role:
 | top | `top.v` |
 | processors | `cpu.v`, `ppu.v`, `wm2wb/vm2_wb.v`, `wm2wb/vm2_plm.v`, `wmrst.v` |
 | video/memory | `sdram2.v`, `mkcolorreg.v` |
-| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `covox.v`, `audio.v`, `ide/ide.v` |
+| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `covox.v`, `audio.v`, `ide/ide.v`, `kakave.v` (the Kakave+ mouse and RTC registers, Sep 2026) |
 | SD path | `ide/sd_arbiter.v` - one owner at a time between the floppies and the cartridge on `sd_card.v` |
 | generated ROM | `ide/ide_rom.v` - twelve pROM primitives from `tang/rom/ide_wdromv0110.bin` by `tools/bin2prom.py` (`make ide-rom`), stubbed in simulation like the vendor IP |
 | serial | `uart/uart_rx.v`, `uart/uart_tx.v` |
@@ -367,6 +367,12 @@ the second PLL used to be inside `dvi_tx`, doing the same job.  BSRAM at
 come out of.  Logic and registers have room.
 
 The **IOLOGIC** row is new and is the four `OSER10`s.
+
+2 Sep 2026, after the IDE cartridge (LBA28, read-ahead), the key queue,
+the Covox and the Kakave+ mouse and clock (`kakave.v`): Logic 10603/20736
+52%, Register 4402/15915 28%, BSRAM 30/46 66%.  The mouse and clock alone
+were 48% → 52% of the logic, mostly the calendar's weekday arithmetic
+and the ±63 accumulators; no BSRAM.
 
 ## Pins
 

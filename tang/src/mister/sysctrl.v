@@ -46,7 +46,18 @@ module sysctrl (
   // sector per step - it sets the sample rate of a program that streams
   // its sound out of the sector data (ide.v, Sep 2026)
   output reg [5:0]  system_hdd_delay,
-  output reg [3:0]  system_floppy_wprot
+  output reg [3:0]  system_floppy_wprot,
+  // 'M' from usb_host.c: 1 = a USB mouse is attached (the Kakave+ mouse
+  // register's "who are you" answer, kakave.v)
+  output reg        system_mouse,
+  // the OSD's "Clock" form (menu.c), one letter a field, for kakave.v's
+  // calendar: 'y' year-2020, 'm' month-1, 'd' date-1, 'h' hours,
+  // 'n' minutes (which also zeroes the seconds).  Each letter is
+  // announced by a flip of system_rtc_tgl with the field number and the
+  // value beside it; kakave.v takes the flip through two flops.
+  output reg        system_rtc_tgl,
+  output reg [2:0]  system_rtc_field,
+  output reg [7:0]  system_rtc_val
 );
 
 reg [3:0] state;
@@ -83,6 +94,10 @@ always @(posedge clk) begin
       system_hdd_cyl <= 16'd0;
       system_hdd_wprot <= 1'b0;
       system_hdd_delay <= 6'd30;    // 750 us a sector, the MCU's default too - found on the board
+      system_mouse <= 1'b0;
+      system_rtc_tgl <= 1'b0;
+      system_rtc_field <= 3'd0;
+      system_rtc_val <= 8'd0;
    end else begin
       int_ack <= 8'h00;
 
@@ -144,6 +159,14 @@ always @(posedge clk) begin
                     if(id == "Y") system_hdd_cyl[15:8] <= data_in;
                     if(id == "K") system_hdd_wprot <= data_in[0];
                     if(id == "D") system_hdd_delay <= data_in[5:0];
+                    if(id == "M") system_mouse <= data_in[0];
+                    // the clock: field number and value, then the flip
+                    if(id == "y" || id == "m" || id == "d" || id == "h" || id == "n") begin
+                        system_rtc_field <= (id == "y") ? 3'd0 : (id == "m") ? 3'd1 :
+                                            (id == "d") ? 3'd2 : (id == "h") ? 3'd3 : 3'd4;
+                        system_rtc_val   <= data_in;
+                        system_rtc_tgl   <= ~system_rtc_tgl;
+                    end
                 end
             end
 
