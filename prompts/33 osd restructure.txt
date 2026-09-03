@@ -1,0 +1,166 @@
+OSD menu restructure feature.
+
+As a result - menu restructuring needed and also RTL updates to support it.
+
+- Add version file as ./VERSION (contents: "2.0.0 alpha")
+- Add ./CHANGELOG.md empty
+- Add ./LICENCE.md with MIT License en / ru
+
+OSD Caption: building firmware should take version value from that file.
+Show it at the right of OSD window caption.
+
+OSD options behavior: options that alter values from set - should support PC Keyboard's
+left and right buttons also - so change value from that.
+
+OSD structure top level:
+
+- FDD0 - default not mounted
+- HDD0 (show only if hdd controller enabled - see below) - default not mounted
+- Run SAV
+- Reset
+- Hardware (opens submenu)
+- About (opens text - see below)
+- Save settings
+
+About should show this text, scrollable so not exend osd window height:
+"
+UKNC Nano author: Alex Gurov
+
+v2.x update authors: Sergei Lemeshev, ClaudeCode
+
+Greets and big thanks to:
+
+nzeemin - specially for his great UKNCBTL emulator and programs
+blairecas - specially for his programs and BadApple demo for UKNC
+reddie - heavy support with everything - programming, testing help, and lots of
+  ideas and advices during this so-called-development
+xrust - specially for great efforts on creating and redesigining peripherals
+
+And all our community who made it real, after all
+"
+
+OSD Hardware section sub menu:
+- Volume (Mute / 33% / 66% / 100%) - default 33%
+- Beeper (Mute / On) - default On
+  beeper is a standard device so can not be disabled in terms of port removal.
+  but we can disable it at sound mixer
+  implement this change in tang also
+- Aberrant (opens submenu)
+- Covox (Off / Port 177372 / Port 177100 LPT / Both) - default Off
+  make sure that "Port 177100 LPT" and "Both" options physically allow to use
+  UKNC's LPT port address to play covox sound - implement and test it
+  off means port 177372 unavailable and no sounds
+  LPT port remain in place of course, but no sound from it also
+- FDD controller (opens submenu)
+- HDD controller (opens submenu)
+- Mouse (Off / On) - default Off
+  Off means port removal
+- RTC clock (opens submenu)
+- Misc (opens submenu)
+
+OSD Aberrant section submenu
+- AY1 (Off / On) - default On
+- AY2 (Off / On) - default On
+- AY3 (Off / On) - default On
+disabling one of AYs should mean port removed so unresponsed, and disabled AY does not play to mixer
+
+OSD FDD controller section submenu
+- FDD Controller (Off / On) - default On
+  should remove all ports related if Off
+then former Drives contentswith some changes
+- FDD0 - duplicate as before for first FDD drive
+- FDD0 write prot. (Off / On) - default Off
+  Off means write protection disabled
+same for other 3 FDD drives
+
+OSD HDD controller section submenu
+- HDD controller (Off / On) - default Off
+  Off removes related ports and also hides HDD0 option from top menu
+- HDD0 - duplicate mount dialog
+- HDD write prot. (Off / On) - default Off
+  Off means write protection disabled
+- HDD Image format (Auto / Plain / Inversed) - default Auto
+  as previously working option
+- HDD Delay (0..975 steps by 25) - default 750
+  as previously working option
+
+OSD RTC clock section submenu
+- RTC controller (Off / On) - default Off
+  Off removes related ports
+- Dialog options to set date and time as before
+- Current datetime info row
+  not selectable, updateable once per sec
+  format is "2026-02-23 14:00:01 Thu"
+
+OSD Misc section submenu
+- Color (RGB / BGR) - default RGB
+  check if this option was working previously
+  if not - fix it
+- Cold Boot
+  cold boots as before
+
+****
+
+Done. The OSD is restructured, the FPGA has a switch for every add-on, and both binaries in bin/ are rebuilt. It is built, linted, simulated, host-tested and timed. Nothing has run on a board, and nothing is committed.
+
+The repository
+- VERSION ("2.0.0 alpha"), an empty CHANGELOG.md, LICENCE.md with the MIT text in English and Russian.
+- mnano/CMakeLists.txt reads VERSION into UKNC_VERSION; the main caption shows it at the right.
+
+The FPGA (tang/src)
+- sysctrl.v: letters b (beeper), 1 2 3 (AYs), c (Covox mode), f (FDD controller), e (HDD controller), u (mouse), t (RTC); p q r s replace P for the four write protections; a new SYS command 6 returns the clock, snapshotted at the command byte.
+- aberrant.v, covox.v, vp1-128fdd.v, kakave.v take an enable per device. Off means no acknowledge, so the address is a bus timeout as on a machine without the board; an AY that is off is also held in reset and masked out of the sum.
+- vp1_120.v brings port A of the printer port out; top.v mixes it as the second Covox when c says Port 177100 LPT or Both, gates the beeper out of the mix, ANDs the HDD switch into the cartridge's hdd_present, and exports the clock.
+- Color RGB/BGR was swapping red and green. It swaps red and blue now, which is what the label says.
+- The first layout failed the timing gate on the weekday arithmetic into the read-back snapshot; a register in kakave.v fixed it. Final: 0 setup, 0 hold, logic 52 percent, BSRAM 66 percent.
+
+The firmware (mnano)
+- menu.c: main / Hardware / Aberrant / FDD controller / HDD controller / RTC clock / Misc, About as a scrolling text page, Save settings on the main form. The main form is built at run time so HDD0 appears only with the controller on. A form returns to the entry that opened it, found by form number, so nothing needs renumbering any more. Cursor left and right step a value either way. The RTC form's last line reads the core's clock once a second.
+- One label changed against the request: "HDD image format" beside "Inversed" does not fit 128 pixels, so it is "Image format" inside the HDD controller form.
+- make menu-test walks every form on the host and writes each of the 23 screens as a PNG under build/menu; that is how the layout was checked.
+
+What was checked
+- make lint, ab-test, covox-test, kakave-test and the new hwen-test all pass; each switches its device off and on.
+- make sim boots to the CPU release with the new defaults, reads the clock back right, checks 200k pixels of the RGB/BGR swap, and sees the printer-port byte reach the mixer at modes 2 and 3 and not at 1. The one read-after-write miss it reports is the known SDRAM-model artefact and shows on the unmodified tree too.
+- make fw builds; make bitstream passes the gate.
+
+Worth knowing before flashing
+- The defaults are a plain machine with the three AYs: Covox, mouse, RTC and HDD all Off, and HDD0 hidden. A saved uknc.ini from before keeps its volume and clock; the old P line is ignored.
+- The printer-port DAC is mixed uninverted, like the one at 0177372, for the reason in covox.v.
+- The playing of sound through the LPT port has been checked in simulation only; nothing has been heard.
+
+tamg flashed?
+
+****
+
+It was not. Now it is: the Tang was on USB (FT2232 at ttyUSB0/1), and make flash-fpga-flash wrote bin/tang.fs to the SPI flash, "Done" at 100 percent. Power-cycle the board before testing, since -r does not reliably reconfigure it.
+
+The BL616 is not flashed: it is not on USB as a bootloader port (no ttyACM). Put it in boot mode (hold BOOT, tap RESET, release BOOT) and I will run make flash-mcu COMX=/dev/ttyACM0 with the new bin/bl616.bin. The FPGA alone with the old firmware boots a plain machine, but the old menu sends the old P letter and never sends the new switches, so their FPGA defaults apply: Covox, mouse, RTC and HDD off.
+
+bl616 in boot mode, flash it
+
+****
+
+Flashed: make flash-mcu on /dev/ttyACM0 wrote bin/bl616.bin (442016 bytes), the device's SHA256 matched the host's, "All programming completed successfully". Press RESET on the BL616 (or power-cycle both boards) and F12 should show the new menu with "2.0.0 alpha" in the caption.
+
+good! finalize docs
+
+****
+
+Docs finalized for what is now true: both howtos say the pair in bin/ is v2.0.0 alpha, flashed on 3 Sep 2026 with the menu up, and what has not been done on the board (software against each switch); the stale "HDMI audio never played" note is replaced by the 1 Sep result; build.md's header no longer says the bitstream cannot be built here or that bin/tang.fs is the January 2025 file; progress.md entry 20 is FLASHED, THE MENU IS UP; CHANGELOG.md has a 2.0.0 alpha entry (it was asked for empty - one edit reverts it). Not committed.
+
+check github repo access and explain what needs to reach
+
+****
+
+Repo: origin is git@github.com:lordamot/tang-uknc.git; main is 29 commits ahead of origin/main, whose last commit is "readme" of 16 March 2025 - 353 files differ. The "new times - fable" commit at HEAD holds the v2.0.0 work but three new files were left untracked: sim/tb/tb_hwen.v, mnano/menu_test.c and prompts/33 - without the first two, make hwen-test and make menu-test fail from a clone.
+
+Access from this shell: none. ssh -T git@github.com is refused both ways: the GNOME keyring agent (/run/user/1000/gcr/ssh) holds id_rsa but answers "agent refused operation" - the key is locked in this session; id_rsa used directly is passphrase-protected, so a non-interactive ssh cannot open it; id_tsshp (ed25519, no passphrase) is not a key GitHub accepts for this account. gh is not installed.
+
+What needs to happen: unlock the key in your own terminal (ssh-add ~/.ssh/id_rsa and the passphrase), or register id_tsshp.pub on GitHub; ssh -T git@github.com should then say "Hi lordamot!". Commit the three untracked files. Then git push origin main - which I do not do, by the git rule.
+
+lets try once again - you nedd access, not push everything
+
+****
+
+Access is there now: ssh -T git@github.com answers "Hi lordamot!" (id_rsa is unlocked in the agent), git ls-remote lists origin's main, and git fetch says up to date - origin/main is still "readme" of March 2025, local main is 29 commits ahead, nothing on the remote that is not here. Nothing was pushed. The three untracked files (tb_hwen.v, menu_test.c, prompts/33) are still not in any commit.
