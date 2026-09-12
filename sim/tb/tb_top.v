@@ -95,6 +95,7 @@ module tb_top;
     //--------------------------------------------------------------------
     // The design
     //--------------------------------------------------------------------
+    wire reconfig_n;   // RECONFIG_N: high unless SYS command 9 fires
     top uut (
         .clk27(clk27), .buts(buts), .leds(leds),
         .uart_tx(uart_tx), .uart_rx(uart_rx),
@@ -108,7 +109,8 @@ module tb_top;
         .O_sdram_ras_n(O_sdram_ras_n), .O_sdram_wen_n(O_sdram_wen_n),
         .O_sdram_dqm(O_sdram_dqm),     .O_sdram_addr(O_sdram_addr),
         .O_sdram_ba(O_sdram_ba),       .IO_sdram_dq(IO_sdram_dq),
-        .m0s(m0s)
+        .m0s(m0s),
+        .reconfig_n(reconfig_n)
     );
 
     //--------------------------------------------------------------------

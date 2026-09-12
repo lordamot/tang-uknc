@@ -34,7 +34,8 @@ module top(
     O_sdram_ba,
     IO_sdram_dq,
 
-    m0s
+    m0s,
+    reconfig_n
 );
 input         clk27;
 // buts[0] is S1 and forces a reset; buts[1] is S2 and is read nowhere -
@@ -84,6 +85,7 @@ inout  [31:0] IO_sdram_dq  ;
 // is worth more here than an untested second attachment, so the internal
 // path is gone.
 inout  [ 4:0] m0s        ;  // 0 miso, 1 mosi, 2 csn, 3 sclk, 4 irqn
+output        reconfig_n ;  // RECONFIG_N, pin 9: driven low by SYS command 9 to reload the FPGA
 //------------------------------------------------------------//
 assign O_sdram_dqm[ 3: 2] = 2'b11   ;
 assign IO_sdram_dq[31:16] = 16'hZZZZ;
@@ -379,6 +381,7 @@ wire [ 5:0] rtc_min            ;
 wire [ 5:0] rtc_sec            ;
 wire [ 3:0] rtc_dow            ;
 
+wire sys_reconfig;   // SYS command 9: reload the FPGA (see the MultiBoot block below)
 sysctrl sctl1(
     .clk                (           mist_clk),
     .reset              (          sys_rst_n),
@@ -427,8 +430,26 @@ sysctrl sctl1(
     .rtc_hour           (           rtc_hour),
     .rtc_min            (            rtc_min),
     .rtc_sec            (            rtc_sec),
-    .rtc_dow            (            rtc_dow)
+    .rtc_dow            (            rtc_dow),
+    .reconfig           (       sys_reconfig)
 );
+
+//------------------------------------------------------------------------
+// MultiBoot (tang-ultima): the MCU's SYS command 9 (sysctrl.v) pulses
+// RECONFIG_N - pin 9, a GPIO output here (-use_reconfign_as_gpio) - and
+// the FPGA reloads the image whose SPI flash address this bitstream's
+// header names (Gowin MultiBoot, UG290 7.5.4; gowin_tcl.py's
+// --multiboot-addr).  A standalone build names 0, which is itself.  The
+// pin must read high from configuration on, so the counter starts at 0
+// and the pin is low only while it counts down - 256 clocks, far over
+// the 25 ns the FPGA asks for.  Nothing of the running design survives.
+//------------------------------------------------------------------------
+reg [7:0] reconfig_cnt = 8'd0;
+always @(posedge mist_clk) begin
+    if(sys_reconfig)            reconfig_cnt <= 8'hff;
+    else if(reconfig_cnt != 0)  reconfig_cnt <= reconfig_cnt - 8'd1;
+end
+assign reconfig_n = (reconfig_cnt == 8'd0);
 
 wire [5:0] db9_port = 6'd0;
 wire [7:0] keycode  ;   // the UKNC scan code, translated on the MCU

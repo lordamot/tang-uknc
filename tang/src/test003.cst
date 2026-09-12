@@ -83,3 +83,10 @@ IO_LOC "uart_rx" 70;
 IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
 IO_LOC "buts[1]" 87;
 IO_PORT "buts[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// RECONFIG_N as a GPIO output (the process config's RECONFIG_N: true, so
+// gowin_tcl.py passes -use_reconfign_as_gpio 1).  top.v holds it high and
+// pulses it low on SYS command 9, and the FPGA reloads from the flash
+// address in this bitstream's header - tang-ultima's core switch.
+IO_LOC "reconfig_n" 9;
+IO_PORT "reconfig_n" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;

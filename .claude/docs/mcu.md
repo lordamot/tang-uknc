@@ -29,6 +29,11 @@ to stock wiring in August 2026 this file needed no edit at all, and the
 `#else` branch is upstream's internal-BL616 build and is not what `make
 fw` produces.
 
+**SYS command 9** (Sep 2026): followed by A5h, it makes the core pulse
+RECONFIG_N and the FPGA reload from the flash address in its header -
+the core switch of `../tang-ultima`, whose firmware is the one that
+sends it.  This tree's firmware does not.
+
 Which five FPGA pins those GPIOs reach, and the second set that goes to
 the Tang's own on-board BL616, are in `.claude/docs/fpga.md`.  The core
 picks between the two by itself; nothing in the firmware knows or cares

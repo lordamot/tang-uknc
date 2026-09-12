@@ -85,7 +85,10 @@ module sysctrl (
   input [4:0]       rtc_hour,
   input [5:0]       rtc_min,
   input [5:0]       rtc_sec,
-  input [3:0]       rtc_dow
+  input [3:0]       rtc_dow,
+
+  // CMD 9: reload the FPGA from the next image in the SPI flash (tang-ultima)
+  output reg        reconfig
 );
 
 reg [3:0] state;
@@ -118,6 +121,7 @@ always @(posedge clk) begin
 
       int_ack <= 8'h00;
       coldboot = 1'b1;      // reset is actually the power-on-reset
+      reconfig <= 1'b0;
 
       // OSD value defaults. These should be sane defaults, but the MCU
       // will very likely override these early
@@ -146,6 +150,7 @@ always @(posedge clk) begin
       system_rtc_val <= 8'd0;
    end else begin
       int_ack <= 8'h00;
+      reconfig <= 1'b0;
 
       // iack bit 0 acknowledges the coldboot notification
       if(int_ack[0]) coldboot <= 1'b0;      
@@ -261,6 +266,17 @@ always @(posedge clk) begin
                 if(state == 4'd6) data_out <= {2'd0, snap_min};
                 if(state == 4'd7) data_out <= {2'd0, snap_sec};
                 if(state == 4'd8) data_out <= {4'd0, snap_dow};
+            end
+
+            // CMD 9: reconfigure (tang-ultima's core switch).  The byte
+            // after the command must be A5h, so that a stray byte on the
+            // link cannot reload the FPGA; the pulse reaches top.v, which
+            // drives RECONFIG_N (pin 9, a GPIO here) low, and the FPGA
+            // loads the image whose flash address this bitstream's header
+            // names (Gowin MultiBoot, UG290 7.5.4) - itself, for a
+            // standalone build.  Nothing here survives it.
+            if(command == 8'd9) begin
+                if(state == 4'd1 && data_in == 8'hA5) reconfig <= 1'b1;
             end
          end
       end

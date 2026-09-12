@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Reconfig support for `../tang-ultima` (three machines in one flash):
+  SYS command 9 + A5h in `sysctrl.v` pulses `reconfig_n`, RECONFIG_N as a
+  GPIO output on pin 9; `gowin_tcl.py --abs --multiboot-addr` and
+  `timing_check.py <pnr dir>` for building out of this tree.  A build
+  here is unchanged in behaviour: its header names address 0.
+
 ## 2.0.0 alpha - 3 September 2026
 
 Hardware by Alexey Gurov; the 2.x line by Sergei Lemeshev and Claude Code.

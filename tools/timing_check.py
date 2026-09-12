@@ -26,8 +26,11 @@ Run by `make bitstream` after PnR and by `make timing` on its own.
 import re, sys, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TR   = ROOT / "tang/impl/pnr/test003_tr_content.html"
-LOG  = ROOT / "tang/impl/pnr/test003.log"
+# The PnR directory: this tree's, or the one named on the command line
+# (../tang-ultima builds this core out of its tree and checks it there).
+PNR  = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "tang/impl/pnr"
+TR   = PNR / "test003_tr_content.html"
+LOG  = PNR / "test003.log"
 
 REQUIRED_CLOCKS = ["clk27", "clkram", "clk4", "clk_25", "clk_3_12", "spi_clk"]
 KNOWN_FABRIC_CLOCKS = {"m0s_in[3]", "clk27_d"}   # the SPI clock pin; clk27's sampled copy

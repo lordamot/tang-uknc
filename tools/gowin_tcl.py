@@ -11,6 +11,20 @@ IDE last wrote:  top module `top`, SystemVerilog 2017 (ay/ym2149.sv needs
 it), global_freq 100, ram_rw_check off.
 
   gowin_tcl.py > tang/build.tcl   then: cd tang && gw_sh build.tcl
+
+Options, for building this core out of its tree (../tang-ultima does,
+one flash slot per machine):
+
+  --abs                   absolute source paths, so the Tcl can run from
+                          any directory (gw_sh writes impl/ under its cwd)
+  --multiboot-addr ADDR   the SPI flash address of the NEXT image, into
+                          the bitstream header (Gowin MultiBoot, UG290
+                          7.5.4): what the FPGA loads when top.v pulses
+                          RECONFIG_N on SYS command 9.  4 KB aligned.
+                          Default 0 - the image reloads itself.
+  --loading-rate MHZ      the MSPI clock the FPGA reads the flash at
+                          (Gowin's default is 2.5; a 907 KB image takes
+                          about 3 s at that).  Left alone unless given.
 """
 
 import os
@@ -30,6 +44,14 @@ KIND = {
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--abs", action="store_true")
+    ap.add_argument("--multiboot-addr", default=None)
+    ap.add_argument("--loading-rate", default=None)
+    args = ap.parse_args()
+    tangdir = os.path.dirname(GPRJ)
+
     tree = ET.parse(GPRJ)
     root = tree.getroot()
 
@@ -52,7 +74,10 @@ def main():
             print(f"gowin_tcl.py: skipping {f.get('path')} "
                   f"({f.get('type')})", file=sys.stderr)
             continue
-        out.append(f'add_file -type {kind} "{f.get("path")}"')
+        path = f.get("path")
+        if args.abs:
+            path = os.path.abspath(os.path.join(tangdir, path))
+        out.append(f'add_file -type {kind} "{path}"')
 
     out += [
         "",
@@ -91,6 +116,17 @@ def main():
     else:
         print(f"gowin_tcl.py: no {cfgp}, dual-purpose pins left alone",
               file=sys.stderr)
+
+    # MultiBoot: the next image's flash address goes into the bitstream
+    # header (//MultiBootSPIAddr in the .fs); RECONFIG_N low loads it.
+    if args.multiboot_addr is not None:
+        addr = int(args.multiboot_addr, 0)
+        if addr & 0xfff:
+            sys.exit("gowin_tcl.py: --multiboot-addr must be 4 KB aligned")
+        out.append("set_option -multi_boot 1")
+        out.append(f"set_option -multiboot_spi_flash_address {addr:08x}")   # bare hex: the tool adds the 0x itself
+    if args.loading_rate is not None:
+        out.append(f"set_option -loading_rate {args.loading_rate}")
 
     out += [
         "set_option -output_base_name test003",
