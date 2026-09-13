@@ -96,12 +96,21 @@ module sysctrl (
   output            flash_stb,
   output            flash_first,
   output      [7:0] flash_din,
-  input       [7:0] flash_dout
+  input       [7:0] flash_dout,
+  // CMD 11: the UART to the board's own BL616 (tang-ultima, coreload.v),
+  // passed through the same way; a core switch into the FPGA's SRAM
+  output            cl_stb,
+  output            cl_first,
+  output      [7:0] cl_din,
+  input       [7:0] cl_dout
 );
 
 assign flash_stb   = data_in_strobe && !data_in_start && (command == 8'd10);
 assign flash_first = (state == 4'd1);
 assign flash_din   = data_in;
+assign cl_stb      = data_in_strobe && !data_in_start && (command == 8'd11);
+assign cl_first    = (state == 4'd1);
+assign cl_din      = data_in;
 
 reg [3:0] state;
 reg [7:0] command;
@@ -167,6 +176,7 @@ always @(posedge clk) begin
       // CMD 10's answers are flashwr.v's, tracked a cycle behind it -
       // which is a dozen cycles before the MCU clocks the next byte out
       if(command == 8'd10) data_out <= flash_dout;
+      if(command == 8'd11) data_out <= cl_dout;
 
       // iack bit 0 acknowledges the coldboot notification
       if(int_ack[0]) coldboot <= 1'b0;      

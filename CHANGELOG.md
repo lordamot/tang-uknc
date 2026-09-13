@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- UART to the board's own BL616 for `../tang-ultima`: `mister/coreload.v`,
+  a 2 KB TX FIFO and a 2 Mbaud 8N1 UART on pins 69 (TX) and 70 (RX),
+  driven by SYS command 11 - status {room, count} and the last byte
+  received as single-byte answers, because a multi-byte read on this
+  link repeats byte 0.  That project's stage 2 firmware in the on-board
+  chip takes a core over it and loads it into this FPGA's SRAM over
+  JTAG - its core switch, seen working on a board 13 September 2026.
+  Baud from 25.07 MHz by a phase accumulator.  On this core the pin is
+  shared with the machine's own serial port: `uart_tx` is `cl_tx` only
+  while the MCU has claimed it (sub-command 3), `vp65_uart_tx` otherwise.
+- USB keyboard lost until a power cycle - the likely cause removed, not
+  yet seen fixed on a board.  A keyboard with a power-saving mode drops
+  off the bus and re-attaches as it wakes, often within the 100 ms the
+  firmware polled `/dev/inputN` at, so the poll saw "still there" while
+  the reader thread stayed blocked for ever on a URB the stack had
+  killed without a callback.  `usb_host.c` now takes the
+  stack's own attach/detach hooks (`usbh_hid_run`/`usbh_hid_stop`), the
+  thread exits on a flag, its URB has a timeout, and a stalled endpoint
+  is cleared.  Found on Tang Ultima, Sep 2026; upstream FPGA-Companion
+  made the same move in Feb 2026.  `bin/bl616.bin` not rebuilt.
 - Flash writer for `../tang-ultima`: `mister/flashwr.v`, a 512-byte buffer
   and one SPI transaction on the MSPI pins (MCLK 59, MCS_N 60, MO 61,
   MI 62), driven by SYS command 10; `"MSPI" : true` in the process config

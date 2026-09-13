@@ -63,6 +63,7 @@ static struct usb_config {
     struct usb_config *usb;
     SemaphoreHandle_t sem;
     TaskHandle_t task_handle;    
+    volatile int stop;           // the stack says the device is gone: the thread exits
 #ifdef RATE_CHECK
     TickType_t rate_start;
     unsigned long rate_events;
@@ -466,46 +467,100 @@ void usbh_xbox_callback(void *arg, int nbytes) {
     xSemaphoreGiveFromISR(xbox->sem, NULL);
 }  
 
-static void usbh_update(struct usb_config *usb) {
-  // check for active hid devices
-  for(int i=0;i<CONFIG_USBHOST_MAX_HID_CLASS;i++) {
-    char *dev_str = "/dev/inputX";
-    dev_str[10] = '0' + i;
-    usb->hid_info[i].class = (struct usbh_hid *)usbh_find_class_instance(dev_str);
-    
-    if(usb->hid_info[i].class && usb->hid_info[i].state == STATE_NONE) {
-      printf("NEW HID %d\r\n", i);
+// ---------------------------------------------------------------------
+// HID devices come and go on the stack's say-so, not by polling.
+//
+// This used to look for /dev/inputN every 100 ms and start a reader
+// thread when one appeared, delete it when it went.  A keyboard with a
+// power-saving mode drops off the bus and re-attaches when it wakes,
+// often within those 100 ms: the stack freed the old instance and made
+// a new one under the same name, the poll saw "still there", and the
+// old thread stayed blocked for ever on a URB the stack had killed
+// without a callback (usb_hc_ehci.c, usbh_kill_urb) - a keyboard dead
+// until a power cycle, its LED still on.  CherryUSB calls
+// usbh_hid_run() at every attach and usbh_hid_stop() at every detach,
+// so those are the events now, the thread exits on a flag, and its
+// URB has a timeout so it can never block for ever (Sep 2026, seen on
+// Tang Ultima; upstream FPGA-Companion made the same move in Feb 2026).
+// ---------------------------------------------------------------------
 
-      printf("Interval: %d\r\n", usb->hid_info[i].class->hport->config.intf[i].altsetting[0].ep[0].ep_desc.bInterval);
-	 
-      printf("Interface %d\r\n", usb->hid_info[i].class->intf);
-      printf("  class %d\r\n", usb->hid_info[i].class->hport->config.intf[i].altsetting[0].intf_desc.bInterfaceClass);
-      printf("  subclass %d\r\n", usb->hid_info[i].class->hport->config.intf[i].altsetting[0].intf_desc.bInterfaceSubClass);
-      printf("  protocol %d\r\n", usb->hid_info[i].class->hport->config.intf[i].altsetting[0].intf_desc.bInterfaceProtocol);
-	
-      // parse report descriptor ...
-      printf("report descriptor: %p\r\n", usb->hid_info[i].class->report_desc);
-      
-      if(!parse_report_descriptor(usb->hid_info[i].class->report_desc, 128, &usb->hid_info[i].report, NULL)) {
-	usb->hid_info[i].state = STATE_FAILED;   // parsing failed, don't use
-	return;
-      }
-      
-      usb->hid_info[i].state = STATE_DETECTED;
-    }
-    
-    else if(!usb->hid_info[i].class && usb->hid_info[i].state != STATE_NONE) {
-      printf("HID LOST %d\r\n", i);
-      vTaskDelete( usb->hid_info[i].task_handle );
-      usb->hid_info[i].state = STATE_NONE;
+static void usbh_hid_client_thread(void *argument);
 
-      if(usb->hid_info[i].report.type == REPORT_TYPE_JOYSTICK) {
-	printf("Joystick %d gone\r\n", usb->hid_info[i].joystick.js_index);
-	usb->js_map &= ~(1<<usb->hid_info[i].joystick.js_index);
-      }
-    }
+void usbh_hid_run(struct usbh_hid *hid_class) {
+  struct usb_config *usb = &usb_config;
+  int i = hid_class->minor;
+  if(i < 0 || i >= CONFIG_USBHOST_MAX_HID_CLASS) return;
+  struct hid_info_S *hid = &usb->hid_info[i];
+
+  if(hid->state != STATE_NONE) {
+    // a re-attach before the last thread has gone: let it go first
+    printf("HID %d: attach while %d still running\r\n", i, hid->state);
+    for(int n=0;n<100 && hid->task_handle;n++) vTaskDelay(pdMS_TO_TICKS(1));
+    hid->state = STATE_NONE;
   }
 
+  hid->class = hid_class;
+  hid->stop = 0;
+  hid->nbytes = 0;
+  printf("NEW HID %d\r\n", i);
+  printf("Interval: %d\r\n", hid_class->intin ? hid_class->intin->bInterval : -1);
+  printf("Interface %d\r\n", hid_class->intf);
+  printf("  class %d\r\n", hid_class->hport->config.intf[hid_class->intf].altsetting[0].intf_desc.bInterfaceClass);
+  printf("  subclass %d\r\n", hid_class->hport->config.intf[hid_class->intf].altsetting[0].intf_desc.bInterfaceSubClass);
+  printf("  protocol %d\r\n", hid_class->hport->config.intf[hid_class->intf].altsetting[0].intf_desc.bInterfaceProtocol);
+
+  // parse report descriptor ...
+  if(!hid_class->intin ||
+     !parse_report_descriptor(hid_class->report_desc, 128, &hid->report, NULL)) {
+    printf("HID %d: unusable, ignored\r\n", i);
+    hid->state = STATE_FAILED;   // parsing failed, don't use
+    return;
+  }
+
+  if(hid->report.type == REPORT_TYPE_JOYSTICK) {
+    // search for free joystick slot
+    hid->joystick.js_index = 0;
+    while(usb->js_map & (1<<hid->joystick.js_index))
+      hid->joystick.js_index++;
+    printf("  -> joystick %d\r\n", hid->joystick.js_index);
+    usb->js_map |= 1<<hid->joystick.js_index;
+  }
+
+#ifdef RATE_CHECK
+  hid->rate_start = xTaskGetTickCount();
+  hid->rate_events = 0;
+#endif
+
+  hid->state = STATE_RUNNING;
+  xTaskCreate(usbh_hid_client_thread, (char *)"hid_task", 1024,
+	      hid, configMAX_PRIORITIES-3, &hid->task_handle);
+}
+
+void usbh_hid_stop(struct usbh_hid *hid_class) {
+  struct usb_config *usb = &usb_config;
+  int i = hid_class->minor;
+  if(i < 0 || i >= CONFIG_USBHOST_MAX_HID_CLASS) return;
+  struct hid_info_S *hid = &usb->hid_info[i];
+  if(hid->class != hid_class) return;
+
+  printf("HID LOST %d\r\n", i);
+  hid->stop = 1;
+  xSemaphoreGive(hid->sem);      // in case the thread waits on a URB the stack has killed
+
+  // the stack frees hid_class the moment this returns, so the thread
+  // must be out of it by then: it clears task_handle as it exits
+  for(int n=0;n<1200 && hid->task_handle;n++) vTaskDelay(pdMS_TO_TICKS(1));   // past a control transfer's 500 ms
+  if(hid->task_handle) printf("HID %d: thread did not stop\r\n", i);
+
+  if(hid->state == STATE_RUNNING && hid->report.type == REPORT_TYPE_JOYSTICK) {
+    printf("Joystick %d gone\r\n", hid->joystick.js_index);
+    usb->js_map &= ~(1<<hid->joystick.js_index);
+  }
+  hid->class = NULL;
+  hid->state = STATE_NONE;
+}
+
+static void usbh_update(struct usb_config *usb) {
   // check for active xbox devices
   for(int i=0;i<CONFIG_USBHOST_MAX_XBOX_CLASS;i++) {
     char *dev_str = "/dev/xboxX";
@@ -640,23 +695,70 @@ static void xbox_parse(struct xbox_info_S *xbox) {
   }
 }
 
-// each HID client gets itws own thread which submits urbs
-// and waits for the interrupt to succeed
+// A stalled interrupt endpoint stays stalled until the host clears it,
+// and the device's data toggle starts over at DATA0 when it does; the
+// stack has already zeroed the URB's toggle to match (ehci_check_qh).
+static int hid_clear_halt(struct hid_info_S *hid) {
+  struct usb_setup_packet *setup = hid->class->hport->setup;
+  setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_STANDARD | USB_REQUEST_RECIPIENT_ENDPOINT;
+  setup->bRequest = USB_REQUEST_CLEAR_FEATURE;
+  setup->wValue = USB_FEATURE_ENDPOINT_HALT;
+  setup->wIndex = hid->class->intin->bEndpointAddress;
+  setup->wLength = 0;
+  return usbh_control_transfer(hid->class->hport, setup, NULL);
+}
+
+// each HID client gets its own thread which submits urbs and waits for
+// the interrupt to succeed.  The URB is synchronous with a timeout: a
+// report completes it at once, silence times it out and it is simply
+// submitted again, and the thread is never blocked past HID_URB_MS - so
+// a detach (hid->stop) is noticed, and so is a device that has gone
+// quiet for good.  The thread deletes itself; nobody deletes it.
+#define HID_URB_MS 1000
+
 static void usbh_hid_client_thread(void *argument) {
   struct hid_info_S *hid = (struct hid_info_S *)argument;
+  int errors = 0;
 
   printf("HID client #%d: thread started\r\n", hid->index);
 
-  while(1) {
+  while(!hid->stop) {
+    struct usbh_hubport *hport = hid->class->hport;
+    if(!hport || !hport->connected) break;
+
+    usbh_int_urb_fill(&hid->class->intin_urb, hport, hid->class->intin, hid->buffer,
+		      hid->report.report_size + (hid->report.report_id_present ? 1:0),
+		      HID_URB_MS, usbh_hid_callback, hid);
+    // a URB the timeout killed keeps errorcode = -USB_ERR_BUSY, and
+    // usbh_submit_urb() refuses such a URB out of hand: clear it, or the
+    // first idle second is the last
+    hid->class->intin_urb.errorcode = 0;
     int ret = usbh_submit_urb(&hid->class->intin_urb);
-    if (ret < 0)
-      printf("HID client #%d: submit failed\r\n", hid->index);
-    else {
-      // Wait for result
-      xSemaphoreTake(hid->sem, 0xffffffffUL);
+    if(hid->stop) break;
+
+    if(ret == -USB_ERR_TIMEOUT) {
+      errors = 0;                      // an idle device, the normal case
+      continue;
+    }
+    if(ret == -USB_ERR_NODEV || ret == -USB_ERR_NOTCONN || ret == -USB_ERR_SHUTDOWN)
+      break;                           // gone; usbh_hid_stop() is on its way or done
+    if(ret < 0) {
+      if(!(errors++ % 100))
+	printf("HID client #%d: submit failed %d\r\n", hid->index, ret);
+      if(ret == -USB_ERR_STALL) {
+	int r = hid_clear_halt(hid);
+	printf("HID client #%d: endpoint halted, cleared: %d\r\n", hid->index, r);
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));   // never spin on a broken endpoint
+      continue;
+    }
+
+    // a report: the callback has given the semaphore and set nbytes
+    if(xSemaphoreTake(hid->sem, pdMS_TO_TICKS(10)) == pdTRUE && !hid->stop) {
+      errors = 0;
       if(hid->nbytes > 0) hid_parse(hid);
       hid->nbytes = 0;
-    }      
+    }
 
 #ifdef RATE_CHECK
     hid->rate_events++;
@@ -666,6 +768,10 @@ static void usbh_hid_client_thread(void *argument) {
     }    
 #endif
   }
+
+  printf("HID client #%d: stopping\r\n", hid->index);
+  hid->task_handle = NULL;
+  vTaskDelete(NULL);
 }
 
 // ... and XBOX clients as well
@@ -714,55 +820,10 @@ static void usbh_hid_thread(void *argument) {
   while (1) {
     usbh_update(usb);
 
-    for(int i=0;i<CONFIG_USBHOST_MAX_HID_CLASS;i++) {
-      if(usb->hid_info[i].state == STATE_DETECTED) {
-	printf("NEW HID device %d\r\n", i);
-	usb->hid_info[i].state = STATE_RUNNING; 
+    // HID devices are started by usbh_hid_run() as the stack finds
+    // them; this loop is left the LEDs, the UKNC's mouse flag and the
+    // (never seen here) xbox class
 
-	if( usb->hid_info[i].report.type == REPORT_TYPE_JOYSTICK ) {	
-	  // search for free joystick slot
-	  usb->hid_info[i].joystick.js_index = 0;
-	  while(usb->js_map & (1<<usb->hid_info[i].joystick.js_index))
-	    usb->hid_info[i].joystick.js_index++;
-	  
-	  printf("  -> joystick %d\r\n", usb->hid_info[i].joystick.js_index);
-	  usb->js_map |= 1<<usb->hid_info[i].joystick.js_index;
-	}
-	  
-#if 0
-	// set report protocol 1 if subclass != BOOT_INTF
-	// CherryUSB doesn't report the InterfaceSubClass (HID_BOOT_INTF_SUBCLASS)
-	// we thus set boot protocol on keyboards
-	if( usb->hid_info[i].report.type == REPORT_TYPE_KEYBOARD ) {	
-	  // /* 0x0 = boot protocol, 0x1 = report protocol */
-	  printf("setting boot protocol\r\n");
-	  ret = usbh_hid_set_protocol(usb->hid_info[i].class, HID_PROTOCOL_BOOT);
-	  if (ret < 0) {
-	    printf("failed\r\n");
-	    usb->hid_info[i].state = STATE_FAILED;  // failed
-	    continue;
-	  }
-	}
-#endif
-
-	// setup urb
-	usbh_int_urb_fill(&usb->hid_info[i].class->intin_urb,
-			  usb->hid_info[i].class->hport,
-			  usb->hid_info[i].class->intin, usb->hid_info[i].buffer,
-			  usb->hid_info[i].report.report_size + (usb->hid_info[i].report.report_id_present ? 1:0),
-			  0, usbh_hid_callback, &usb->hid_info[i]);
-
-#ifdef RATE_CHECK
-	usb->hid_info[i].rate_start = xTaskGetTickCount();
-	usb->hid_info[i].rate_events = 0;
-#endif
-	
-	// start a new thread for the new device
-	xTaskCreate(usbh_hid_client_thread, (char *)"hid_task", 1024,
-		    &usb->hid_info[i], configMAX_PRIORITIES-3, &usb->hid_info[i].task_handle );
-      }
-    }
-    
     for(int i=0;i<CONFIG_USBHOST_MAX_XBOX_CLASS;i++) {
       if(usb->xbox_info[i].state == STATE_DETECTED) {
 	printf("NEW XBOX device %d\r\n", i);
@@ -823,6 +884,8 @@ void usb_host(spi_t *spi) {
     usb_config.hid_info[i].buffer = hid_buffer[i];      
     usb_config.hid_info[i].usb = &usb_config;
     usb_config.hid_info[i].sem = xSemaphoreCreateBinary();
+    usb_config.hid_info[i].stop = 0;
+    usb_config.hid_info[i].task_handle = NULL;
   }
   
   // initialize all XBOX info entries
