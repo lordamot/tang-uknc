@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Flash writer for `../tang-ultima`: `mister/flashwr.v`, a 512-byte buffer
+  and one SPI transaction on the MSPI pins (MCLK 59, MCS_N 60, MO 61,
+  MI 62), driven by SYS command 10; `"MSPI" : true` in the process config
+  makes those pins user logic's after configuration.  That project writes
+  a whole machine to flash address 0 with it, which is its core switch -
+  verified on a board, 13 September 2026.
+- `reconfig_n` moved from pin 9 to pin 48, open drain, and
+  `"RECONFIG_N" : false`: reusing pin 9 as a GPIO cuts the pad from the
+  configuration controller, so the pulse never reloaded the FPGA.  It now
+  needs a wire from pin 48 to test pad TP1, and is dormant without one.
+
 - Reconfig support for `../tang-ultima` (three machines in one flash):
   SYS command 9 + A5h in `sysctrl.v` pulses `reconfig_n`, RECONFIG_N as a
   GPIO output on pin 9; `gowin_tcl.py --abs --multiboot-addr` and

@@ -26,6 +26,7 @@
         <File path="src/hdmi/hdmi_serdes.v" type="file.verilog" enable="1"/>
         <File path="src/hdmi/hdmi_tx.v" type="file.verilog" enable="1"/>
         <File path="src/hdmi/tmds_channel.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/flashwr.v" type="file.verilog" enable="1"/>
         <File path="src/mister/hid.v" type="file.verilog" enable="1"/>
         <File path="src/mister/mcu_spi.v" type="file.verilog" enable="1"/>
         <File path="src/mister/osd_u8g2.v" type="file.verilog" enable="1"/>

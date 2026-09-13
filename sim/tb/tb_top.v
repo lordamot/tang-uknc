@@ -96,6 +96,12 @@ module tb_top;
     // The design
     //--------------------------------------------------------------------
     wire reconfig_n;   // RECONFIG_N: high unless SYS command 9 fires
+    // The configuration flash, flashwr.v's MSPI pins.  Nothing here models
+    // a W25Q64, so MI is tied high: CMD 10 reads then come back as ff and
+    // the firmware's flash_probe() refuses, which is the right answer for
+    // a simulation with no flash in it.
+    wire mspi_clk, mspi_cs_n, mspi_do;
+    wire mspi_di = 1'b1;
     top uut (
         .clk27(clk27), .buts(buts), .leds(leds),
         .uart_tx(uart_tx), .uart_rx(uart_rx),
@@ -110,7 +116,9 @@ module tb_top;
         .O_sdram_dqm(O_sdram_dqm),     .O_sdram_addr(O_sdram_addr),
         .O_sdram_ba(O_sdram_ba),       .IO_sdram_dq(IO_sdram_dq),
         .m0s(m0s),
-        .reconfig_n(reconfig_n)
+        .reconfig_n(reconfig_n),
+        .mspi_clk(mspi_clk), .mspi_cs_n(mspi_cs_n),
+        .mspi_do(mspi_do),   .mspi_di(mspi_di)
     );
 
     //--------------------------------------------------------------------

@@ -88,8 +88,20 @@ module sysctrl (
   input [3:0]       rtc_dow,
 
   // CMD 9: reload the FPGA from the next image in the SPI flash (tang-ultima)
-  output reg        reconfig
+  output reg        reconfig,
+
+  // CMD 10: the configuration flash (tang-ultima).  The payload is passed
+  // through to flashwr.v byte for byte - the sub-commands are its, not
+  // this module's - and its answers come back the same way.
+  output            flash_stb,
+  output            flash_first,
+  output      [7:0] flash_din,
+  input       [7:0] flash_dout
 );
+
+assign flash_stb   = data_in_strobe && !data_in_start && (command == 8'd10);
+assign flash_first = (state == 4'd1);
+assign flash_din   = data_in;
 
 reg [3:0] state;
 reg [7:0] command;
@@ -151,6 +163,10 @@ always @(posedge clk) begin
    end else begin
       int_ack <= 8'h00;
       reconfig <= 1'b0;
+
+      // CMD 10's answers are flashwr.v's, tracked a cycle behind it -
+      // which is a dozen cycles before the MCU clocks the next byte out
+      if(command == 8'd10) data_out <= flash_dout;
 
       // iack bit 0 acknowledges the coldboot notification
       if(int_ack[0]) coldboot <= 1'b0;      

@@ -407,23 +407,38 @@ serial        uart_tx 69  uart_rx 70      (to the on-board BL616, USB-C)
                                           diagnostic monitor takes it when
                                           it is instantiated - see below
 MCU           m0s[0] 42  m0s[1] 41  m0s[2] 56  m0s[3] 54  m0s[4] 51
-reconfig_n    9       (RECONFIG_N as a GPIO output - see below)
-free          13, 48, 55, 75, 76, 86
+reconfig_n    48      (open drain, needs a wire to TP1 - see below)
+flash         MCLK 59  MCS_N 60  MO 61  MI 62   (flashwr.v - see below)
+free          13, 55, 75, 76, 86
 ```
 
-### RECONFIG_N, pin 9 (Sep 2026, for ../tang-ultima)
+### The configuration flash, and RECONFIG_N (Sep 2026, for ../tang-ultima)
 
-`top.v` has an output `reconfig_n` on pin 9, the FPGA's RECONFIG_N,
-made a GPIO by `"RECONFIG_N": true` in the process config
-(`gowin_tcl.py` -> `-use_reconfign_as_gpio 1`).  It is high from
-configuration and goes low for 256 clocks when `sysctrl.v` sees SYS
-command 9 followed by A5h; the FPGA then reloads itself from the flash
-address in this bitstream's header (Gowin MultiBoot, UG290 7.5.4) - 0,
-this image itself, for a build in this tree, and the next machine's slot
-for a build by `../tang-ultima`, which passes `gowin_tcl.py
---multiboot-addr`.  Nothing in this design depends on it; the firmware
-in this tree never sends CMD 9.  `../tang-ultima/.claude/docs/multiboot.md`
-has the whole account.
+`top.v` has an output `reconfig_n` and four more for the FPGA's MSPI pins.
+Both exist for `../tang-ultima`, which puts three machines on one board;
+nothing in this design depends on either, and the firmware in this tree
+sends neither SYS command.
+
+**The flash, MCLK 59, MCS_N 60, MO 61, MI 62.**  `mister/flashwr.v` owns
+them - a 512-byte buffer and one transaction, "shift TX bytes out, read RX
+back, CS held" - driven by **SYS command 10**.  They are the FPGA's own
+configuration bus until DONE and user logic's afterwards, which
+`"MSPI" : true` in the process config asks for (`gowin_tcl.py` ->
+`-use_mspi_as_gpio 1`); UG290 4.1.2 table 4-2 says so and the board
+confirms it - a bitstream built this way still boots from the flash it then
+takes over.  `../tang-ultima` uses it to write the next machine to flash
+address 0, which is what power-up always loads.  Verified on a board, 13
+September 2026.
+
+**`reconfig_n`, pin 48, open drain.**  Pulses low for 256 clocks when
+`sysctrl.v` sees SYS command 9 followed by A5h.  It is on pin 48 and not on
+pin 9 because **reusing pin 9 as a GPIO cuts the pad from the
+configuration controller**: driven from there the pulse is generated and no
+configuration is attempted.  Pin 9 is therefore left a RECONFIG_N input,
+and a wire from pin 48 to test pad TP1 - the only other point on pin 9's
+net - would make the pulse work.  Without that wire this output does
+nothing.  `../tang-ultima/.claude/docs/progress.md` has the evidence and
+`coreswitch.md` the design that does not need it.
 
 ### The MCU link
 

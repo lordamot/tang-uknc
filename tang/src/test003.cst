@@ -84,9 +84,29 @@ IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
 IO_LOC "buts[1]" 87;
 IO_PORT "buts[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
 
-// RECONFIG_N as a GPIO output (the process config's RECONFIG_N: true, so
-// gowin_tcl.py passes -use_reconfign_as_gpio 1).  top.v holds it high and
-// pulses it low on SYS command 9, and the FPGA reloads from the flash
-// address in this bitstream's header - tang-ultima's core switch.
-IO_LOC "reconfig_n" 9;
-IO_PORT "reconfig_n" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+// tang-ultima's core switch.  RECONFIG_N itself - pin 9 - is left a
+// configuration input (the process config's RECONFIG_N: false, so
+// gowin_tcl.py passes no -use_reconfign_as_gpio): reusing it as a GPIO
+// cuts the pad from the configuration controller, and the board showed
+// that on 13 Sep 2026 - the pulse was generated, the pin had nothing
+// else on its net to hold it up, and the FPGA did not reload.  So the
+// pulse comes off an ordinary pin instead and reaches pin 9 over a wire
+// to TP1, the test pad that net ends at (schematic v1.3: PIN09_SYS_RECFG
+// appears only at the FPGA and at TP1).  OPEN_DRAIN, because pin 9 is an
+// input with a weak pull-up and this side must only ever pull it down.
+IO_LOC "reconfig_n" 48;
+IO_PORT "reconfig_n" IO_TYPE=LVCMOS33 OPEN_DRAIN=ON PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+
+// The configuration flash on the MSPI pins (the process config's
+// MSPI: true, so gowin_tcl.py passes -use_mspi_as_gpio 1).  They are the
+// FPGA's own configuration bus until DONE and user logic's afterwards -
+// UG290 4.1.2 table 4-2 - which is how flashwr.v writes the flash and so
+// how a core switch works at all.  MCS_N must idle high.
+IO_LOC "mspi_clk" 59;
+IO_PORT "mspi_clk" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "mspi_cs_n" 60;
+IO_PORT "mspi_cs_n" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "mspi_do" 61;
+IO_PORT "mspi_do" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "mspi_di" 62;
+IO_PORT "mspi_di" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
