@@ -54,3 +54,26 @@ What's left, in order:
 3. make release TAG=v2.0.0 (I can run that once the tag is on GitHub).
 
 Two things to know: the bitstream wasn't rebuilt, because nothing in the RTL changed since it was placed and routed, and the new bl616.bin is built from the same sources as the one you tested with only VERSION changed - but the shorter string moves data around (about 26 000 bytes differ), and this exact file hasn't been flashed.
+
+yes
+
+****
+
+Committed and tagged: c727165 "release 2.0.0: changelog, readme ru/en, release artefact" on main, with the annotated tag v2.0.0 ("UKNC Nano 2.0.0", the same form as the alpha's). It holds 10 files: the release folder, both howtos, README, CHANGELOG, VERSION, bin/bl616.bin and the prompts entry. The mode-change noise under mnano/u8g2 was left out.
+
+Your turn:
+git push origin main v2.0.0
+
+Then tell me and I'll run make release TAG=v2.0.0, or run it yourself. It creates the GitHub release "UKNC Nano v2.0.0" with release/v2.0.0/README.md as the notes and tang.fs, bl616.bin and uknc-nano-v2.0.0.zip attached.
+
+This exchange is appended to prompts/35 after the commit, so that file now shows as modified. It can go in with the next commit.
+
+done
+
+****
+
+The release is live: https://github.com/lordamot/tang-uknc/releases/tag/v2.0.0
+
+Before running make release I checked that the pushed main and tag v2.0.0 on origin match the local ones. It created "UKNC Nano v2.0.0" with release/v2.0.0/README.md as the notes and attached three files: tang.fs, bl616.bin and uknc-nano-v2.0.0.zip. It is not a draft or a pre-release, and GitHub lists it as Latest.
+
+prompts/35 has this exchange and the previous one appended; they are uncommitted and can go in with the next commit.
