@@ -1,3 +1,80 @@
+# UKNC Nano 2.0.0
+
+| file | size | what it is |
+|---|---|---|
+| `tang.fs` | 7 262 008 | the FPGA bitstream for the Tang Nano 20K |
+| `bl616.bin` | 442 656 | the MCU firmware for the BL616 board |
+
+`tang.fs` - прошивка ПЛИС, `bl616.bin` - прошивка МК.  Как соединить платы, прошить и пользоваться - ниже, по-русски и по-английски; подробности в `howto-ru.md` / `howto.md` репозитория.  Обе прошивки нужно обновить вместе: новые пункты меню есть только в паре.
+
+## Что нового после 2.0.0 alpha
+
+**Звук.**
+- Звук сводится так, как его сводит модуль Aberrant: **стерео ABC** (канал A
+  каждого AY - влево, C - вправо, B - в оба, с весами резисторов модуля) и
+  развязка по постоянному току, как его конденсаторы.  Раньше была одна
+  моно-сумма.  Меню: Aberrant > **Stereo** (по умолчанию ABC).
+- Aberrant > **Low-pass** (по умолчанию включён): фильтр НЧ на 4,87 кГц,
+  подобранный по записи настоящей УКНЦ через OSSC - убирает «звонкость»,
+  которой у машины не было.
+- Aberrant > **Old freaks** (по умолчанию выключен), для старых мониторных
+  динамиков: подъём баса ниже 244 Гц, +6 дБ на весь звук и мягкий
+  ограничитель вместо жёсткого среза.
+- По HDMI звук больше не «звенит» посторонними тонами: раньше гармоники AY
+  выше 24 кГц заворачивались обратно в слышимый диапазон.  Теперь оба
+  выхода, HDMI и I²S, фильтруются перед передискретизацией.
+
+**Клавиатура.**
+- USB-клавиатура с режимом энергосбережения больше не пропадает до
+  выключения питания: прошивка МК следит за подключением и отключением
+  устройства сама, а не опрашивает его раз в 100 мс.
+
+**Для Tang Ultima** (`../tang-ultima`, несколько машин в одной плате; на
+обычной Tang Nano 20K ничего не меняет):
+- UART к встроенному BL616 платы на выводах 69/70, через который тот
+  загружает ядро в ПЛИС; пока он не занят, на этих выводах, как и раньше,
+  последовательный порт машины.
+- Запись во флеш ПЛИС по выводам MSPI - так переключаются ядра.
+- `reconfig_n` на выводе 48 (открытый сток) - перезагрузка ПЛИС; нужен
+  провод от вывода 48 к контактной площадке TP1, без него не действует.
+
+---
+
+## What's new since 2.0.0 alpha
+
+**Sound.**
+- The sound is mixed the way the Aberrant module mixes it: **ABC stereo**
+  (each AY's A to the left, C to the right, B to both, with the module's
+  resistor weights) and a DC blocker, as its coupling capacitors are.  It
+  used to be one mono sum.  Menu: Aberrant > **Stereo** (default ABC).
+- Aberrant > **Low-pass** (default On): a 4.87 kHz low-pass matched to a
+  recording of a real УКНЦ through an OSSC - it takes away a brightness
+  the machine never had.
+- Aberrant > **Old freaks** (default Off), for old monitor speakers: a
+  bass shelf under 244 Hz, +6 dB on the whole mix, and a soft limiter
+  instead of a hard clip.
+- HDMI no longer carries stray out-of-tune tones: the AY's harmonics above
+  24 kHz used to fold back into the audible band.  Both outputs, HDMI and
+  I²S, are now band-limited before they are resampled.
+
+**Keyboard.**
+- A USB keyboard with a power-saving mode is no longer lost until a power
+  cycle: the MCU firmware follows the device's attach and detach itself
+  rather than polling it every 100 ms.
+
+**For Tang Ultima** (`../tang-ultima`, several machines on one board; on
+a plain Tang Nano 20K nothing changes):
+- A UART to the board's own BL616 on pins 69/70, through which it loads a
+  core into the FPGA; while it is not claimed, those pins are the
+  machine's serial port as before.
+- A flash writer on the MSPI pins - that is how the cores are switched.
+- `reconfig_n` on pin 48 (open drain) to reload the FPGA; it needs a wire
+  from pin 48 to test pad TP1 and does nothing without one.
+
+The full history is in `CHANGELOG.md`.
+
+---
+
 # UKNC Nano
 
 **МС0511 (УКНЦ)** - советская двухпроцессорная PDP-11-совместимая машина

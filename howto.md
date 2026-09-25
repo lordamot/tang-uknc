@@ -9,28 +9,28 @@ You do not need either toolchain for this.  Both binaries are committed:
 
 | file | size | date | what it is |
 |---|---|---|---|
-| `bin/tang.fs` | 7 262 008 | 3 Sep 2026 | the FPGA bitstream, for the Tang Nano 20K |
-| `bin/bl616.bin` | 442 016 | 3 Sep 2026 | the MCU firmware, for the BL616 companion board |
+| `bin/tang.fs` | 7 262 008 | 26 Sep 2026 | the FPGA bitstream, for the Tang Nano 20K |
+| `bin/bl616.bin` | 442 656 | 26 Sep 2026 | the MCU firmware, for the BL616 companion board |
 
 ### What is in them
 
-Both are **v2.0.0 alpha** (the `VERSION` file), built from the sources
+Both are **v2.0.0** (the `VERSION` file), built from the sources
 in this repository as they stand.
 
 The bitstream carries the two VM2 cores with the upstream cpu11 fixes,
 the Aberrant's three AYs, a Covox at `177372` and another on the printer
 port, the IDE cartridge with its WD ROM, the Kakave+ mouse and clock,
-HDMI with sound, timing constraints on every crossing, and an OSD switch
-for each of those devices.  The firmware carries the restructured menu
+HDMI and I²S with the Aberrant's ABC stereo mix, timing constraints on
+every crossing, and an OSD switch for each of those devices.  The
+firmware carries the restructured menu
 of section 7, the "Run SAV:" disk maker, the keyboard matrix filter and
 the settings file `/uknc.ini`.
 
-> **This pair was flashed on 3 Sep 2026 and the new menu came up.**  The
-> individual pieces had been on a board before - the sound, the floppies,
-> the keyboard, the hard disk, MKLAD - and every hardware switch has been
-> checked in simulation; what has not been done on a board is running
-> software against each switch in each position.  The previous versions
-> of both are in git history (`git log -- bin/`) if you need to fall back.
+> **This pair is the 2.0.0 release of 26 Sep 2026**, the 2.0.0 alpha of
+> 3 Sep plus the stereo mixer, its menu settings and the USB keyboard
+> fix (`CHANGELOG.md`).  The previous versions of both are in git
+> history (`git log -- bin/`) and under `release/` if you need to fall
+> back.
 
 Building either from source is a different document -
 `.claude/docs/build.md`.
@@ -465,10 +465,10 @@ F12 never reaches the machine - it belongs to the menu.  Everything else
 does, so close the menu before typing.
 
 The version of the firmware sits at the right of the caption.  The
-screens (v2.0.0, September 2026):
+screens (v2.0.0, 26 September 2026):
 
 ```
-UKNC Nano                              2.0.0 alpha
+UKNC Nano                                    2.0.0
   FDD0:                  mount an image on drive 0
   HDD0:                  the hard disk image - only shown while the HDD controller is on
   Run SAV:               pick a .SAV: it becomes a bootable RT-11 disk in FDD0
@@ -476,6 +476,9 @@ UKNC Nano                              2.0.0 alpha
   Hardware         >     Volume: Mute / 33% / 66% / 100%
                          Beeper: Mute / On
                          Aberrant        >  AY1: AY2: AY3:  Off / On
+                                            Stereo: Mono / ABC
+                                            Low-pass: Off / On
+                                            Old freaks: Off / On
                          Covox: Off / Port 177372 / Port 177100 LPT / Both
                          FDD controller  >  FDD controller: Off / On
                                             FDD0:  FDD0 write prot.: Off / On

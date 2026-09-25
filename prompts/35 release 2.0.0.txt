@@ -1,0 +1,56 @@
+check if you can make new release
+
+****
+
+Yes, a release can be made mechanically. The problem is that most of what's new since v2.0.0-alpha hasn't been heard or seen on a board yet.
+
+What checks out
+- Branch: main is clean and level with origin/main. The last release, v2.0.0-alpha, was 9 commits ago.
+- Timing: make timing passes on the current place-and-route: 0 setup and 0 hold violations, and every clock is declared.
+- Lint: make lint is clean.
+- Binaries: bin/tang.fs is byte-identical to tang/impl/pnr/test003.fs. bin/bl616.bin was rebuilt with the sound-mixer commit.
+- GitHub: tools/gh is logged in as lordamot over ssh, so make release would work.
+- Process: make release TAG=... needs a release/<TAG>/ folder holding the README and both binaries, plus a pushed tag. Both earlier releases followed that pattern.
+
+What would go out untested on hardware (per CHANGELOG.md "Unreleased")
+- Sound mixer: ABC stereo, DC blocker, 4.87 kHz low-pass and the anti-alias filter. It is built and meets timing, but nobody has listened to it.
+- Old freaks: the bass shelf and limiter setting. Also built and timed, not heard.
+- USB keyboard dropout fix: not yet seen fixed on a board.
+- Tang Ultima additions: the flash writer, the UART and the reconfig pin. The flash writer and the core switch were shown working on 13 Sep. The reconfig_n pin does nothing unless a wire runs from pin 48 to TP1.
+- AZ controller: feat/peripheral-az is not merged into main, so it would not be in this release.
+
+What's missing before make release
+1. Bump VERSION, which is still "2.0.0 alpha". The OSD caption reads this file, so the firmware needs rebuilding (make fw) after the change.
+2. Give "Unreleased" in CHANGELOG.md a version heading and update the release notes to cover stereo, the three new Aberrant settings and the removed audio FIFOs.
+3. Create release/<TAG>/ with a README.md and copies of the two binaries.
+4. Commit and tag, which needs your go-ahead under the git rules.
+5. Push the tag yourself, since the rules don't let me push.
+6. Run make release TAG=<tag>.
+
+My suggestion is to listen to the new mixer on the board first. If you want it out now, call it v2.1.0-alpha, the same kind of pre-release as the last one, and say "not heard" in the notes. What tag should I use, and should I prepare steps 1-3?
+
+so, same scheme as v2.0.0-alpha:
+- binaries and readme
+- forget about az controller here
+- all others are fixed actually
+- extend text provided from readme with features changelog
+- new release version is 2.0.0
+
+****
+
+Release v2.0.0 is prepared in the working tree and not committed.
+
+- VERSION is 2.0.0. The firmware was rebuilt with make fw, so the OSD caption says 2.0.0, and copied to bin/bl616.bin (442 656 bytes). make menu-test: 25 screens, 0 errors.
+- bin/tang.fs is unchanged: the version isn't in the bitstream, and it still matches the last place-and-route, which passes the timing gate.
+- release/v2.0.0/ has tang.fs, bl616.bin and README.md. The README follows the alpha's layout: a file table, then a new "What's new since 2.0.0 alpha" section in Russian and English (the stereo mixer and its three settings, the HDMI aliasing fix, the keyboard fix, the Tang Ultima additions), then the full root README.
+- CHANGELOG.md: "Unreleased" is now "2.0.0 - 26 September 2026", with the "not heard" and "not seen fixed" notes removed.
+- README.md: the feature list says stereo and describes the mixer.
+- howto.md / howto-ru.md: version 2.0.0, the new firmware size and date, the Stereo/Low-pass/Old freaks entries in the menu tree, and a new release note replacing the 3 Sep one.
+- The AZ controller is not in it; feat/peripheral-az stays unmerged.
+
+What's left, in order:
+1. Your go-ahead to commit and tag v2.0.0 on main. Suggested message: release 2.0.0: changelog, readme ru/en, release artefact.
+2. You push: git push origin main v2.0.0
+3. make release TAG=v2.0.0 (I can run that once the tag is on GitHub).
+
+Two things to know: the bitstream wasn't rebuilt, because nothing in the RTL changed since it was placed and routed, and the new bl616.bin is built from the same sources as the one you tested with only VERSION changed - but the shorter string moves data around (about 26 000 bytes differ), and this exact file hasn't been flashed.

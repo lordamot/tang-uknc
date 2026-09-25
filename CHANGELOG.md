@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 - 26 September 2026
+
+Everything since 2.0.0 alpha, confirmed on a board by the operator.
 
 - Aberrant > **Old freaks** (`'g'`, default Off), for old monitor
   speakers: a +6 dB low shelf under 244 Hz, +6 dB on the whole mix, and
-  a soft limiter past half scale instead of the hard clip.  Built,
-  timed, `make mixer-test`; not heard.  +534 LUTs.
+  a soft limiter past half scale instead of the hard clip.
+  `make mixer-test`.  +534 LUTs.
 
-- Sound (25 Sep 2026, built, not heard): `mixer.v` mixes the way the
+- Sound (25 Sep 2026): `mixer.v` mixes the way the
   Aberrant module does - **ABC stereo** (A left, C right, B both; the
   board's 1k/2.2k weights, OSD Aberrant > Stereo, default ABC) and its
   0.66 Hz coupling as a DC blocker - where this core had a mono,
@@ -30,16 +32,15 @@
   Baud from 25.07 MHz by a phase accumulator.  On this core the pin is
   shared with the machine's own serial port: `uart_tx` is `cl_tx` only
   while the MCU has claimed it (sub-command 3), `vp65_uart_tx` otherwise.
-- USB keyboard lost until a power cycle - the likely cause removed, not
-  yet seen fixed on a board.  A keyboard with a power-saving mode drops
-  off the bus and re-attaches as it wakes, often within the 100 ms the
+- USB keyboard lost until a power cycle - fixed.  A keyboard with a
+  power-saving mode drops off the bus and re-attaches as it wakes, often within the 100 ms the
   firmware polled `/dev/inputN` at, so the poll saw "still there" while
   the reader thread stayed blocked for ever on a URB the stack had
   killed without a callback.  `usb_host.c` now takes the
   stack's own attach/detach hooks (`usbh_hid_run`/`usbh_hid_stop`), the
   thread exits on a flag, its URB has a timeout, and a stalled endpoint
   is cleared.  Found on Tang Ultima, Sep 2026; upstream FPGA-Companion
-  made the same move in Feb 2026.  `bin/bl616.bin` not rebuilt.
+  made the same move in Feb 2026.
 - Flash writer for `../tang-ultima`: `mister/flashwr.v`, a 512-byte buffer
   and one SPI transaction on the MSPI pins (MCLK 59, MCS_N 60, MO 61,
   MI 62), driven by SYS command 10; `"MSPI" : true` in the process config
