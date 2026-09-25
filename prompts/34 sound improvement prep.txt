@@ -161,3 +161,9 @@ flash tang onto flash
 ****
 
 The Tang's flash now holds the feat/old-freaks bitstream: the write reached 100% and openFPGALoader printed "Done". Power-cycle the board so it loads. Both boards now run Old freaks. It is under Hardware > Aberrant and Off by default.
+
+merge all onto main
+
+****
+
+Merged. Everything on feat/old-freaks went into one commit, 7e41117 "add the old freaks setting: bass shelf, +6 dB, soft limiter", and main was fast-forwarded to it. The commit has the mixer, the menu entry, the tests, the docs, both rebuilt binaries, the place-and-route output and the transcript up to the previous exchange. For the recordings, before.mp4 and after.mp4 are added and real.mp4 and tang.mp4 are removed, as the working tree had them. Nothing was pushed. This entry is the only uncommitted change.
