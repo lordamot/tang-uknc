@@ -97,3 +97,67 @@ flash tang onto flash
 The Tang's flash now holds the feat/sound-mixer bitstream (bin/tang.fs, 25 Sep): the write reached 100% and openFPGALoader printed "Done". Power-cycle the board so it loads.
 
 Both boards now run this branch. To test, play something with the AYs and try Hardware > Aberrant > Stereo (ABC / Mono) and Low-pass (On / Off). Things worth listening for: whether the crisp edge is gone, whether the balance with the low-pass on is close to the real machine, and whether any clicks or thumps show up when the music starts or stops. The DC blocker is new on this path, and a blocker-related problem would show up there first.
+
+merge everything onto main
+
+****
+
+Merged. Everything on feat/sound-mixer went into one commit, f355cb3 "model the aberrant output stage: abc stereo, dc blocker, low-pass", and main was fast-forwarded to it, because main had nothing newer. The commit has the RTL, the tests, the firmware menu, the docs, both rebuilt binaries in bin/, the place-and-route output, the fifo_audio removal, this transcript and the two recordings (prompts/real.mp4 and tang.mp4, about 12 MB). Nothing was pushed. The branch is still there and points at the same commit.
+
+This entry is written after that commit, so it is the only uncommitted change.
+
+check ./before.mp4 ./after.mp4 - except my voice I think they sound almost indentical (its the same mine monitor and tang output to hdmi before and after the fix)
+
+****
+
+Both clips play the same song (VDARK3.PT3) from 00:00 on the same BenQ monitor. I aligned them by their envelopes and compared each spectrum against its own 630-1000 Hz band. After the fix:
+
+  1.6 - 10 kHz    2.5 to 4 dB lower
+  10 - 16 kHz     10 dB lower
+  16 - 20 kHz     24 dB lower (aliasing products near Nyquist that are gone)
+  below 1.6 kHz   unchanged, within the noise of the recordings
+  overall level   2.5 dB lower
+  L/R correlation 0.90 before, 0.80 after, so some stereo is reaching the room
+
+So the new bitstream is running and the low-pass is on. Anti-aliasing alone would not lower 2-10 kHz by 3-4 dB. The size of the cut roughly matches a 4.87 kHz pole.
+
+Why it still sounds the same: the monitor's speakers already cut everything above 4 kHz by 12 to 25 dB before the fix, so the filter works almost only where they are quiet anyway. Between 400 Hz and 2.5 kHz, where they are loud, the change is small by design. The bass is set by the speakers too: the mixer is flat down to 1 Hz, and the real module adds no bass.
+
+The first comparison, the real machine against the Tang, was on the television, and that is where the 11-14 dB excess was measured. On these monitor speakers the change is mostly out of reach. Better tests: toggle Low-pass live in the OSD on the same recording, or listen on the TV or headphones.
+
+it sounds cool now, you are right!
+one more "just for those with old monitors" - lets add "old freaks" on/off setting into osd sound and mixer?
+it should boost bass-level tones and also raise hdmi output volume
+
+****
+
+Added on the branch feat/old-freaks, which starts from main. Nothing is committed yet.
+
+Old freaks is on the Aberrant form beside Stereo and Low-pass, where the sound settings are. It is letter g and Off by default. When on, mixer.v:
+- adds a bass shelf: the signal plus a one-pole low-pass of itself at 244 Hz, which gives +6 dB at the bottom, +4 dB at 244 Hz, +2 dB at 500 Hz and +0.7 dB at 1 kHz;
+- then applies +6 dB of gain to everything;
+- then passes it through a soft limiter instead of the hard clip: straight up to half scale, a quarter of the slope above that, full scale at 81916.
+
+Without the limiter, doubling a loud tune at 100% on small speakers would square it off. The gain goes to both HDMI and I2S, because both take the same mix.
+
+Checks:
+- make lint passes.
+- make mixer-test: 50 Hz comes up 11.9 dB and 5 kHz 6.0 dB. A step of 18360 comes out at 22011, on the limiter's slope where the calculation puts it. The output saturates at +/-32767 without wrapping.
+- make menu-test passes; the new entry is in the walk and fits the screen.
+- make fw builds.
+- The simulation with +AUDIOTEST is unchanged with the setting off.
+- make bitstream passes the timing gate with 0/0.
+
+Logic goes from 59% to 62%, about 530 LUTs, mostly the two 30-bit shelf accumulators and the limiter. Both bin/ files are rebuilt. The docs are updated: mcu.md, CHANGELOG, progress.md defect 21, CLAUDE.md and platform.md.
+
+flash companion
+
+****
+
+The companion BL616 is flashed with bin/bl616.bin from feat/old-freaks, which adds the Old freaks entry. The tool reported "Flash writing succeeded" and "All programming completed successfully". Tap RESET or power-cycle to start it. The Tang still has the previous sound bitstream, so the new entry does nothing until bin/tang.fs is flashed too.
+
+flash tang onto flash
+
+****
+
+The Tang's flash now holds the feat/old-freaks bitstream: the write reached 100% and openFPGALoader printed "Done". Power-cycle the board so it loads. Both boards now run Old freaks. It is under Hardware > Aberrant and Off by default.

@@ -40,6 +40,14 @@
 // frame is 32 clocks, and the 64-sample mean has its nulls on multiples of
 // that rate.
 //
+// "Old freaks" ('g', off by default) is for small, old monitor speakers,
+// which reproduce neither the bass nor, at this level, much of anything:
+// a low shelf of +6 dB under 244 Hz (x + a one-pole low-pass of x, the
+// pole at 2^-11 of the clock), then +6 dB on everything, into a soft
+// limiter instead of the hard clip - flat to half scale, a quarter of
+// the slope above it - so that 100% on a loud tune rounds off rather than
+// squares off.  It is nothing the module does.
+//
 // Everything is registered.  hdmi_tx samples out_l/out_r on clkram, which
 // is timed against this clock, and the words change once every 16 clocks.
 module mixer(
@@ -54,6 +62,7 @@ module mixer(
 
     input             stereo,       // 'o': 0 mono, 1 the module's ABC panning
     input             lowpass,      // 'l': 1 the 4.87 kHz pole
+    input             oldfreaks,    // 'g': 1 bass shelf, +6 dB and a soft limiter
     input      [ 1:0] volume,       // 'A': 0 mute, 1 1/4, 2 1/2, 3 full
 
     output reg [15:0] out_l = 16'd0,
@@ -117,28 +126,64 @@ wire signed [18:0] y_l = lp_l[27:9];
 wire signed [18:0] y_r = lp_r[27:9];
 
 //---------------------------------------------------------------------------------
-// 4. Volume, then saturation into 16 bits.  The volume only makes the
+// 4. "Old freaks": the bass shelf.  b += (y - b) / 2^11, eleven bits of
+// fraction; out = y + b, +6 dB at DC, +4 at 244 Hz, +2 at 500, +0.7 at
+// 1 kHz.  Off, b follows nothing and is not added.
+reg  signed [29:0] bs_st_l = 30'sd0;
+reg  signed [29:0] bs_st_r = 30'sd0;
+wire signed [29:0] be_l = $signed({y_l, 11'd0}) - bs_st_l;
+wire signed [29:0] be_r = $signed({y_r, 11'd0}) - bs_st_r;
+always @(posedge clk) begin
+    bs_st_l <= oldfreaks ? bs_st_l + (be_l >>> 11) : 30'sd0;
+    bs_st_r <= oldfreaks ? bs_st_r + (be_r >>> 11) : 30'sd0;
+end
+wire signed [19:0] sh_l = oldfreaks ? y_l + $signed(bs_st_l[29:11]) : y_l;   // +-85744
+wire signed [19:0] sh_r = oldfreaks ? y_r + $signed(bs_st_r[29:11]) : y_r;
+
+//---------------------------------------------------------------------------------
+// 5. Volume, then saturation into 16 bits.  The volume only makes the
 // sum quieter; full scale is the unattenuated sum, which past the DC
 // blocker swings about zero and saturates only when three chips, the
-// beeper and both DACs all peak on one side at once.
+// beeper and both DACs all peak on one side at once.  "Old freaks"
+// doubles it after the volume and limits it softly.
 function signed [15:0] clip;
-    input signed [18:0] v;
-    clip = (v >  19'sd32767) ?  16'sh7FFF :
-           (v < -19'sd32767) ? -16'sh7FFF : v[15:0];
+    input signed [20:0] v;
+    clip = (v >  21'sd32767) ?  16'sh7FFF :
+           (v < -21'sd32767) ? -16'sh7FFF : v[15:0];
 endfunction
+
+// linear to 16384, then a quarter of the slope, full scale at 81916
+function signed [15:0] limit;
+    input signed [20:0] v;
+    reg   [20:0] m;
+    reg   [20:0] o;
+    begin
+        m = v[20] ? -v : v;
+        o = (m <= 21'd16384) ? m :
+            (m >= 21'd81916) ? 21'd32767 : 21'd16384 + ((m - 21'd16384) >> 2);
+        limit = v[20] ? -o[15:0] : o[15:0];
+    end
+endfunction
+
+wire signed [20:0] vs_l = (volume == 2'd3) ? sh_l : (volume == 2'd2) ? (sh_l >>> 1) : (sh_l >>> 2);
+wire signed [20:0] vs_r = (volume == 2'd3) ? sh_r : (volume == 2'd2) ? (sh_r >>> 1) : (sh_r >>> 2);
 
 reg  signed [15:0] v_l = 16'sd0;
 reg  signed [15:0] v_r = 16'sd0;
 always @(posedge clk)
-    case (volume)
-    2'd0: begin v_l <= 16'sd0;          v_r <= 16'sd0;          end
-    2'd1: begin v_l <= clip(y_l >>> 2); v_r <= clip(y_r >>> 2); end
-    2'd2: begin v_l <= clip(y_l >>> 1); v_r <= clip(y_r >>> 1); end
-    2'd3: begin v_l <= clip(y_l);       v_r <= clip(y_r);       end
-    endcase
+    if (volume == 2'd0) begin
+        v_l <= 16'sd0;
+        v_r <= 16'sd0;
+    end else if (oldfreaks) begin
+        v_l <= limit(vs_l <<< 1);
+        v_r <= limit(vs_r <<< 1);
+    end else begin
+        v_l <= clip(vs_l);
+        v_r <= clip(vs_r);
+    end
 
 //---------------------------------------------------------------------------------
-// 5. The 64-sample mean, every 16 clocks: a sum over each block of 16,
+// 6. The 64-sample mean, every 16 clocks: a sum over each block of 16,
 // and the last four block sums added.
 reg  [ 3:0] blk = 4'd0;
 reg  signed [19:0] bs_l = 20'sd0, bs_r = 20'sd0;             // the block being summed

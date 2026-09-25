@@ -1349,6 +1349,21 @@ the same evening: logic 11166 -> 12188 (54% -> 59%), registers 4699 ->
 from phone recordings of a television and are a direction, not a
 calibration.
 
+Heard the same night on the operator's monitor, filmed before and
+after: "almost identical", while the recordings measured 2.5-4 dB less
+at 1.6-10 kHz, 10 dB less at 10-16 kHz, 24 dB less at 16-20 kHz, and
+L/R correlation 0.90 -> 0.80.  The monitor's own speakers were already
+12-25 dB down above 4 kHz, so the filter works where they are quiet.
+On a second listen: "it sounds cool now".
+
+For such speakers the operator asked for **Old freaks** (`'g'`, default
+Off): a low shelf, y + LP(y) with the pole at 2^-11 of the clock (+6 dB
+at DC, +4 at 244 Hz, +0.7 at 1 kHz), then x2 into a soft limiter -
+linear to 16384, a quarter of the slope above, full scale at 81916 -
+where the plain path clips hard.  `make mixer-test`: 50 Hz +11.9 dB,
+5 kHz +6.0, 18360 in -> 22011 out on the limiter's slope, saturation
+both ways.  Timed, 0/0; logic 12188 -> 12722 (62%).  Not heard.
+
 ## Open questions
 
 

@@ -127,7 +127,8 @@ static const char aberrant_form_uknc[] =
   "L,AY2:,Off|On,2;"                    // 0177362
   "L,AY3:,Off|On,3;"                    // 0177364
   "L,Stereo:,Mono|ABC,o;"               // the module's own panning: A left, C right, B both (mixer.v)
-  "L,Low-pass:,Off|On,l;";              // 4.87 kHz on the whole mix (mixer.v): the real machine's playback path
+  "L,Low-pass:,Off|On,l;"               // 4.87 kHz on the whole mix (mixer.v): the real machine's playback path
+  "L,Old freaks:,Off|On,g;";            // for old monitor speakers: bass shelf, +6 dB, soft limiter (mixer.v)
 
 static const char fdd_form_uknc[] =
   "FDD controller,1|5;"
@@ -215,6 +216,7 @@ menu_variable_t variables_uknc[] = {
   { 'c', { 0 }},    // Covox off
   { 'o', { 1 }},    // Stereo ABC, as the real module is wired
   { 'l', { 1 }},    // Low-pass on
+  { 'g', { 0 }},    // Old freaks off
   { 'f', { 1 }},    // FDD controller on
   { 'p', { 0 }},    // FDD0..3 not write protected
   { 'q', { 0 }},

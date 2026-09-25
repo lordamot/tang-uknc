@@ -102,6 +102,8 @@ agree on the letters; `sysctrl.v` decodes:
                                      15/33 of A (mixer.v; OSD "Stereo", default ABC)
 'l'  system_lowpass        bit 0     1 a 4.87 kHz pole over the whole mix (mixer.v; OSD "Low-pass",
                                      default On) - the real machine's playback path, measured
+'g'  system_oldfreaks      bit 0     1 for old monitor speakers: +6 dB shelf under 244 Hz, +6 dB overall,
+                                     a soft limiter past half scale (mixer.v; OSD "Old freaks", default Off)
 'f'  system_fdd_en         bit 0     the floppy controller's 0177130/0177132 answer (OSD "FDD controller")
 'p'  system_floppy_wprot[0] bit 0    } one letter a drive, 1 = write-protected (OSD "FDDn write prot.").
 'q'  system_floppy_wprot[1] bit 0    } Until Sep 2026 one letter 'P' carried the INDEX of a six-entry
@@ -152,7 +154,7 @@ Hardware      Volume Mute|33%|66%|100% ('A'), Beeper Mute|On ('b'), Aberrant >,
               Covox Off|Port 177372|Port 177100 LPT|Both ('c'), FDD controller >,
               HDD controller >, Mouse Off|On ('u'), RTC clock >, Misc >
 Aberrant      AY1 / AY2 / AY3 Off|On ('1' '2' '3'), Stereo Mono|ABC ('o'),
-              Low-pass Off|On ('l')
+              Low-pass Off|On ('l'), Old freaks Off|On ('g')
 FDD controller  FDD controller Off|On ('f'), then FDD0:..FDD3: fileselectors, each
               followed by "FDDn write prot." Off|On ('p' 'q' 'r' 's')
 HDD controller  HDD controller Off|On ('e'), HDD0: fileselector, HDD write prot.
@@ -167,7 +169,7 @@ About         a text page: authors and thanks, scrolled with the cursor keys
 ```
 
 Defaults (`variables_uknc[]`): volume 33%, beeper on, the three AYs on,
-stereo ABC, low-pass on, Covox off, FDD controller on, nothing write-protected, HDD controller
+stereo ABC, low-pass on, old freaks off, Covox off, FDD controller on, nothing write-protected, HDD controller
 off, mouse off, RTC controller off, colour RGB, the clock 2026-01-01.
 Nothing is mounted until the settings file says so.
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Aberrant > **Old freaks** (`'g'`, default Off), for old monitor
+  speakers: a +6 dB low shelf under 244 Hz, +6 dB on the whole mix, and
+  a soft limiter past half scale instead of the hard clip.  Built,
+  timed, `make mixer-test`; not heard.  +534 LUTs.
+
 - Sound (25 Sep 2026, built, not heard): `mixer.v` mixes the way the
   Aberrant module does - **ABC stereo** (A left, C right, B both; the
   board's 1k/2.2k weights, OSD Aberrant > Stereo, default ABC) and its

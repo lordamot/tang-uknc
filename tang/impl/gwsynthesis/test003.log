@@ -3,8 +3,8 @@ Running parser ...
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/aberrant.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/covox.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mixer.v'
-WARN  (EX2478) : Non-net output port 'out_l' cannot be initialized at declaration in SystemVerilog mode("/var/www/own/tang-uknc/tang/src/mixer.v":59)
-WARN  (EX2478) : Non-net output port 'out_r' cannot be initialized at declaration in SystemVerilog mode("/var/www/own/tang-uknc/tang/src/mixer.v":60)
+WARN  (EX2478) : Non-net output port 'out_l' cannot be initialized at declaration in SystemVerilog mode("/var/www/own/tang-uknc/tang/src/mixer.v":68)
+WARN  (EX2478) : Non-net output port 'out_r' cannot be initialized at declaration in SystemVerilog mode("/var/www/own/tang-uknc/tang/src/mixer.v":69)
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/kakave.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/audio.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ay/ym2149.sv'
@@ -37,18 +37,18 @@ Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mkcolorreg.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ppu.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/sdram2.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/top.v'
-Undeclared symbol 'cart_sel', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":806)
-Undeclared symbol 'cart_bank', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":807)
-Undeclared symbol 'fdd_rd', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":903)
-Undeclared symbol 'fdd_wr', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":904)
-Undeclared symbol 'fdd_outen', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":909)
-Undeclared symbol 'fdd_taken', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":914)
-WARN  (EX3638) : 'fdd_rd' is already implicitly declared on line 903("/var/www/own/tang-uknc/tang/src/top.v":935)
-WARN  (EX3638) : 'fdd_wr' is already implicitly declared on line 904("/var/www/own/tang-uknc/tang/src/top.v":935)
-WARN  (EX3638) : 'fdd_taken' is already implicitly declared on line 914("/var/www/own/tang-uknc/tang/src/top.v":936)
-WARN  (EX3638) : 'fdd_outen' is already implicitly declared on line 909("/var/www/own/tang-uknc/tang/src/top.v":936)
-WARN  (EX3638) : 'cart_sel' is already implicitly declared on line 806("/var/www/own/tang-uknc/tang/src/top.v":939)
-WARN  (EX3638) : 'cart_bank' is already implicitly declared on line 807("/var/www/own/tang-uknc/tang/src/top.v":940)
+Undeclared symbol 'cart_sel', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":808)
+Undeclared symbol 'cart_bank', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":809)
+Undeclared symbol 'fdd_rd', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":905)
+Undeclared symbol 'fdd_wr', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":906)
+Undeclared symbol 'fdd_outen', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":911)
+Undeclared symbol 'fdd_taken', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":916)
+WARN  (EX3638) : 'fdd_rd' is already implicitly declared on line 905("/var/www/own/tang-uknc/tang/src/top.v":937)
+WARN  (EX3638) : 'fdd_wr' is already implicitly declared on line 906("/var/www/own/tang-uknc/tang/src/top.v":937)
+WARN  (EX3638) : 'fdd_taken' is already implicitly declared on line 916("/var/www/own/tang-uknc/tang/src/top.v":938)
+WARN  (EX3638) : 'fdd_outen' is already implicitly declared on line 911("/var/www/own/tang-uknc/tang/src/top.v":938)
+WARN  (EX3638) : 'cart_sel' is already implicitly declared on line 808("/var/www/own/tang-uknc/tang/src/top.v":941)
+WARN  (EX3638) : 'cart_bank' is already implicitly declared on line 809("/var/www/own/tang-uknc/tang/src/top.v":942)
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_rx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_tx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/vp1-128fdd.v'
@@ -121,7 +121,7 @@ Compiling module 'uartfifo'("/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfif
 Compiling module '**'("/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfifo.v":130)
 Compiling module 'uart_tx(BAUD_RATE=19200)'("/var/www/own/tang-uknc/tang/src/uart/uart_tx.v":1)
 Compiling module 'uart_rx(BAUD_RATE=19200)'("/var/www/own/tang-uknc/tang/src/uart/uart_rx.v":1)
-Compiling module 'mixer'("/var/www/own/tang-uknc/tang/src/mixer.v":45)
+Compiling module 'mixer'("/var/www/own/tang-uknc/tang/src/mixer.v":53)
 Compiling module 'audio_drive'("/var/www/own/tang-uknc/tang/src/audio.v":2)
 NOTE  (EX0101) : Current top module is "top"
 [5%] Running netlist conversion ...

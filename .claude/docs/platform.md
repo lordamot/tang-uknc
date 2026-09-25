@@ -426,7 +426,9 @@ Mono, adds the beeper (8192, about four full AY channels, which is the
 module's own 100k-against-24k ratio) and the DACs to both sides, and
 blocks DC at 0.95 Hz.  Then an optional one-pole low-pass at 4.87 kHz,
 which is not the module's but the real machine's playback path as the
-operator's recordings measured it (progress.md defect 21), the volume -
+operator's recordings measured it (progress.md defect 21), an optional
+"Old freaks" bass shelf with +6 dB and a soft limiter for small monitor
+speakers, the volume -
 which only ever divides, never scales up; until Aug 2026 100% multiplied
 by four and clamped, so the setting changed what was audible rather than
 how loud - and a 64-sample mean every 16 clocks, so that neither output

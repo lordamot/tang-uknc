@@ -382,6 +382,7 @@ wire [2:0]  system_ay_en       ;
 wire [1:0]  system_covox       ;
 wire        system_stereo      ;
 wire        system_lowpass     ;
+wire        system_oldfreaks   ;
 wire        system_fdd_en      ;
 wire        system_hdd_en      ;
 wire        system_mouse_en    ;
@@ -441,6 +442,7 @@ sysctrl sctl1(
     .system_covox       (       system_covox),
     .system_stereo      (      system_stereo),
     .system_lowpass     (     system_lowpass),
+    .system_oldfreaks   (   system_oldfreaks),
     .system_fdd_en      (      system_fdd_en),
     .system_hdd_en      (      system_hdd_en),
     .system_mouse_en    (    system_mouse_en),
@@ -1244,6 +1246,7 @@ mixer mix1(
     .lpt     (    lpt_sample),
     .stereo  ( system_stereo),
     .lowpass (system_lowpass),
+    .oldfreaks(system_oldfreaks),
     .volume  ( system_volume),
     .out_l   ( volume_data_l),
     .out_r   ( volume_data_r)

@@ -41,7 +41,8 @@ IDE hard disk cartridge (Oleg H.'s, with its WD ROM) served out of a
 (ABC stereo, a DC blocker - `mixer.v`) and out over both HDMI and I²S.
 
 ```
-Logic 59%   Register 33%   BSRAM 66%   PLL 2/2 (100%)  [25 Sep 2026 PnR: mixer.v, ~1000 LUTs, and the audio FIFOs out, -2 BSRAM; main built the same evening was 54% / 30% / 70% - the coreload UART and flash writer since the line below]
+Logic 62%   Register 34%   BSRAM 66%   PLL 2/2 (100%)  [25 Sep 2026 PnR: mixer.v's "Old freaks" bass shelf and limiter, ~530 LUTs, on top of the line below]
+      (59% / 33% / 66% the same day: mixer.v, ~1000 LUTs, and the audio FIFOs out, -2 BSRAM; main built that evening was 54% / 30% / 70% - the coreload UART and flash writer since the 3 Sep line)
       (52% / 29% / 66% on 3 Sep 2026, v2.0.0: the OSD's hardware switches, the LPT Covox and the clock read-back - ~150 LUTs)
       (52% / 28% / 66% on 2 Sep 2026, with the IDE cartridge in LBA28 with read-ahead, the key queue, the Covox and the Kakave+ mouse/RTC)
       (48% / 27% / 66% before the mouse and clock: the calendar, its weekday arithmetic and the accumulators are ~800 LUTs)
@@ -415,8 +416,9 @@ from breaking the start screen or the floppy again.
   low-pass (its feedback capacitors are NC).  `aberrant.v` claimed "one
   output" and the ABC pair was deleted as dead on that reasoning.
   `mixer.v` (25 Sep 2026) does the resistor weights (Stereo, `'o'`) and
-  the high-pass, and adds a 4.87 kHz low-pass (`'l'`, default On) that is
-  NOT the module's: it is the real machine's playback path through an
+  the high-pass, adds "Old freaks" (`'g'`, default Off: bass shelf, +6
+  dB, soft limiter, for old monitor speakers), and a 4.87 kHz low-pass
+  (`'l'`, default On) that is NOT the module's: it is the real machine's playback path through an
   OSSC, measured off the operator's recordings (progress.md defect 21).
   **Neither output may sample the 3.13 MHz mix directly** - `hdmi_tx`
   did, and every AY harmonic past 24 kHz folded back into the band as
