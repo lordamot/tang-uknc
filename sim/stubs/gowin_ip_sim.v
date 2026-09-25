@@ -1,8 +1,8 @@
 //========================================================================
 // Behavioural models of the Gowin IP, for simulation only.
 //========================================================================
-// Three of the generated IP files under tang/src/ip/ are ENCRYPTED
-// (`pragma protect`, aes128-cfb) - dvi_tx, fifo_audio and uartfifo.  Only
+// Some of the generated IP files under tang/src/ip/ are ENCRYPTED
+// (`pragma protect`, aes128-cfb) - uartfifo now; dvi_tx and fifo_audio were too.  Only
 // the Gowin synthesiser can read them, so simulation cannot use the real
 // thing and neither can any open-source synthesis flow.  The rest of the
 // IP is plain Verilog over Gowin primitives (pROM, SDPB, DPB, rPLL),
@@ -136,26 +136,6 @@ module hdmi_serdes (
     assign O_tmds_clk_n  = 1'b1;
     assign O_tmds_data_p = 3'b000;
     assign O_tmds_data_n = 3'b111;
-endmodule
-
-//------------------------------------------------------------------------
-// fifo_audio - ip/ip/fifo_audio (ENCRYPTED)
-//   .ipc: fifo_hs, 16 x 16, StandardFIFO, no first-word-fall-through,
-//         no output registers, BSRAM
-//------------------------------------------------------------------------
-module fifo_audio (
-    input  [15:0] Data,
-    input         WrClk,
-    input         RdClk,
-    input         WrEn,
-    input         RdEn,
-    output [15:0] Q,
-    output        Empty,
-    output        Full
-);
-    gowin_fifo_hs_model #(.DW(16), .DEPTH(16)) u (
-        .Data(Data), .WrClk(WrClk), .RdClk(RdClk),
-        .WrEn(WrEn), .RdEn(RdEn), .Q(Q), .Empty(Empty), .Full(Full));
 endmodule
 
 //------------------------------------------------------------------------

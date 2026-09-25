@@ -59,6 +59,8 @@ module sysctrl (
   output reg        system_beeper,    // 'b' 0 mute, 1 on
   output reg [2:0]  system_ay_en,     // '1' '2' '3' the three AY-3-8912s of the Aberrant
   output reg [1:0]  system_covox,     // 'c' 0 off, 1 at 0177372, 2 at 0177100 (printer port A), 3 both
+  output reg        system_stereo,    // 'o' 0 mono, 1 the Aberrant's ABC panning (mixer.v)
+  output reg        system_lowpass,   // 'l' 1 the 4.87 kHz low-pass in mixer.v
   output reg        system_fdd_en,    // 'f' the floppy controller's 0177130/2
   output reg        system_hdd_en,    // 'e' the IDE cartridge (with an image mounted)
   output reg        system_mouse_en,  // 'u' the Kakave+ mouse word 0177400
@@ -154,6 +156,8 @@ always @(posedge clk) begin
       system_beeper   <= 1'b1;
       system_ay_en    <= 3'b111;
       system_covox    <= 2'd0;
+      system_stereo   <= 1'b1;
+      system_lowpass  <= 1'b1;
       system_fdd_en   <= 1'b1;
       system_hdd_en   <= 1'b0;
       system_mouse_en <= 1'b0;
@@ -244,6 +248,8 @@ always @(posedge clk) begin
                     if(id == "2") system_ay_en[1]    <= data_in[0];
                     if(id == "3") system_ay_en[2]    <= data_in[0];
                     if(id == "c") system_covox       <= data_in[1:0];
+                    if(id == "o") system_stereo      <= data_in[0];
+                    if(id == "l") system_lowpass     <= data_in[0];
                     if(id == "f") system_fdd_en      <= data_in[0];
                     if(id == "e") system_hdd_en      <= data_in[0];
                     if(id == "u") system_mouse_en    <= data_in[0];

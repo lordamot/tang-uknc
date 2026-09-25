@@ -31,6 +31,7 @@ make fdd-test    the floppy controller before and after its re-clocking
 make kbd-test    the keyboard byte queue in xm2-01.v under SPI-speed bursts
 make virq-test   the vector chains, PPU and CPU: a channel interrupt behind a pending timer/key one, two requests at one fetch, no chain strobe moving mid-fetch
 make covox-test  the Covox at 177372 beside the Aberrant: writes, read-back, no shared ack, the OSD switch
+make mixer-test  mixer.v alone: ABC panning, DC blocker, 4.87 kHz low-pass, volume, saturation, 16-clock output
 make hwen-test   the floppy controller's OSD switch and the printer port A read-out (LPT Covox)
 make menu-test   the OSD menu on the host: every form walked, the core's letters, the screens as PNG
 make ide-test    the IDE cartridge against a stand-in card
@@ -98,8 +99,9 @@ data island packets apart, checking their ECC.  The end-of-run line reads
 ```
 
 and `+HDMIDBG` prints every packet.  "0 with sound" is normal on a run
-where nothing plays; `+AUDIOTEST` forces two constants onto the AY mix and
-turns it into a real answer.
+where nothing plays; `+AUDIOTEST` steps the three AY channel sums and
+turns it into a real answer - L != R, negative samples through the DC
+blocker, and a peak that reaches bit 14.
 
 ## The FPGA half
 
@@ -179,7 +181,7 @@ protocol.  It boots.  See `.claude/docs/progress.md` for what it showed.
 There is **no `synth` target**.  Yosys is in the toolchain and was worth a
 try as a second front end, but it segfaults on these sources at
 `read_verilog`; it could never have produced a bitstream anyway, since
-`fifo_audio` and `uartfifo` are encrypted.
+`uartfifo` is encrypted (as `fifo_audio` and `dvi_tx` were).
 
 None of this replaces a board.  Lint and simulation catch missing modules,
 port and width mismatches, inferred latches and gross protocol errors -

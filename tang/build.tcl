@@ -5,6 +5,7 @@ set_device -name GW2AR-18C GW2AR-LV18QN88C8/I7
 
 add_file -type verilog "src/aberrant.v"
 add_file -type verilog "src/covox.v"
+add_file -type verilog "src/mixer.v"
 add_file -type verilog "src/kakave.v"
 add_file -type verilog "src/audio.v"
 add_file -type verilog "src/ay/ym2149.sv"
@@ -15,7 +16,6 @@ add_file -type verilog "src/ide/ide.v"
 add_file -type verilog "src/ide/ide_rom.v"
 add_file -type verilog "src/ide/sd_arbiter.v"
 add_file -type verilog "src/ip/dbufsec16/dbufsec16.v"
-add_file -type verilog "src/ip/fifo_audio/fifo_audio.v"
 add_file -type verilog "src/ip/rom208/rom208.v"
 add_file -type verilog "src/ip/sdbuf_sdpb/sdbuf_sdpb.v"
 add_file -type verilog "src/ip/sys_rpll/sys_rpll.v"
@@ -24,6 +24,8 @@ add_file -type verilog "src/hdmi/hdmi_packet.v"
 add_file -type verilog "src/hdmi/hdmi_serdes.v"
 add_file -type verilog "src/hdmi/hdmi_tx.v"
 add_file -type verilog "src/hdmi/tmds_channel.v"
+add_file -type verilog "src/mister/flashwr.v"
+add_file -type verilog "src/mister/coreload.v"
 add_file -type verilog "src/mister/hid.v"
 add_file -type verilog "src/mister/mcu_spi.v"
 add_file -type verilog "src/mister/osd_u8g2.v"
@@ -53,6 +55,7 @@ set_option -verilog_std sysv2017
 set_option -global_freq 100.000
 set_option -rw_check_on_ram 0
 set_option -use_sspi_as_gpio 1
+set_option -use_mspi_as_gpio 1
 set_option -correct_hold_violation 1
 set_option -output_base_name test003
 

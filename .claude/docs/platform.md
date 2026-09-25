@@ -357,7 +357,7 @@ and both land - a word or a byte to `0177372` takes the low byte, a byte
 to `0177373` the high byte.  Mono, unsigned, 0..255, not inverted: the
 bus and the printer port are inverted on the machine and UKNCBTL's Covox
 on `0177100` XORs with 0xff, but polarity is inaudible on a DAC.  The
-sample enters `top.v`'s mixer shifted up five (0..8160, one AY chip's
+sample enters the mixer (`mixer.v`) shifted up five (0..8160, one AY chip's
 swing and a bit) and goes to HDMI and I²S with the rest.  `make
 covox-test` (`sim/tb/tb_covox.v`) checks the writes, the read-back, and
 that no address in `0177360`-`0177376` is acknowledged by both it and the
@@ -414,19 +414,30 @@ produce a tone, and produce it at the right pitch - 880 edges a second for
 period 252.  The full-machine testbench cannot: it has no SD card,
 so no game or player ever runs and the boot ROM never touches the AYs.
 
-**The mix is mono, at one level, and unipolar on purpose.**  `m_channel` -
-all nine channels summed - shifted up three, plus the beeper at bit 13, is
-26552 at most, inside the 32767 a signed sample allows.  `system_volume`
-only divides that down; it must never scale up, which is what it did until
-Aug 2026, when 100% multiplied by four and clamped, so the volume setting
-changed which parts of the mix were audible rather than how loud they were.
+**The mix is the module's: ABC stereo, through a high-pass** (`mixer.v`,
+Sep 2026).  The real board (aberranthacker's schematic) puts each chip's
+A through 1k onto L, C through 1k onto R and B through 2.2k onto both,
+ties the three chips' L and R into 510 ohms each, and feeds them through
+10 uF and 24k into an LM358 summer with 10k of feedback - flat, with a
+0.66 Hz high-pass.  `mixer.v` computes L = (33A + 15B)/2 and R = (33C +
+15B)/2 from the channel sums `aberrant.v` exports (peak 18360, what the
+mono sum's was), or the mono sum 8(A+B+C) when the OSD's Stereo says
+Mono, adds the beeper (8192, about four full AY channels, which is the
+module's own 100k-against-24k ratio) and the DACs to both sides, and
+blocks DC at 0.95 Hz.  Then an optional one-pole low-pass at 4.87 kHz,
+which is not the module's but the real machine's playback path as the
+operator's recordings measured it (progress.md defect 21), the volume -
+which only ever divides, never scales up; until Aug 2026 100% multiplied
+by four and clamped, so the setting changed what was audible rather than
+how loud - and a 64-sample mean every 16 clocks, so that neither output
+resamples a stream full of harmonics past its Nyquist rate.
 
-The sum is still **unipolar** - 0 upwards, quiescent at exactly zero -
-and until 1 Sep 2026 that was justified by measurement alone.  A DC
-blocker was written for it in Aug 2026, on the sound reasoning that nine
-unipolar channels carry an offset that the volume control then scales;
-the offset is real and was measured at +3000 under one chip's music.  But
-on the operator's television only the raw sum played:
+It was a mono unipolar sum from 31 Aug to 25 Sep 2026, and the reasons
+for both are worth keeping.  Mono was a misreading of the module.
+Unipolar was measurement: a DC blocker written in Aug 2026, for the
+offset nine positive channels carry (+3000 under one chip's music), was
+silent on the operator's television, and so was every other bipolar
+form:
 
 | samples | quiescent | result |
 |---|---|---|
@@ -435,19 +446,14 @@ on the operator's television only the raw sum played:
 | DC blocked, bipolar | 0, dips negative | silent |
 | DC blocked plus 8192, never negative | 8192 | silent |
 
-and the blocker was removed on 31 Aug 2026 with the cause written up as
-unknown.  The cause was `hdmi_tx.v`'s audio subpacket layout, which put
-sample bits 15:12 where a sink reads the left channel's V, U, C and P
-flags (see `.claude/docs/fpga.md` and the trap in `CLAUDE.md`).  Every
-silent row has bit 15 or bit 14 set at some point and the playing row
-never does; nor does one chip (peak 6120) or two (12240), while three at
-once (18360) reach bit 14 and mute, which was the symptom that found it.
-The beeper's "16384 mutes, 8192 does not" is the same bit.
-
-So the raw sum is kept for one more build as the known-playing form, with
-the layout fix the only change; then the blocker (`git show f2bb44b^`)
-should go back, because its motive was never wrong.  The beeper stays at
-8192 until then.  At 33% the beeper is -24 dBFS and inaudible.
+The cause was `hdmi_tx.v`'s audio subpacket layout, which put sample bits
+15:12 where a sink reads the left channel's V, U, C and P flags (see
+`.claude/docs/fpga.md` and the trap in `CLAUDE.md`).  Every silent row
+has bit 15 or bit 14 set at some point and the playing row never does;
+nor does one chip (peak 6120) or two (12240), while three at once
+(18360) reach bit 14 and mute, which was the symptom that found it.  The
+beeper's "16384 mutes, 8192 does not" is the same bit.  The layout was
+fixed on 1 Sep 2026 and heard; the blocker came back with `mixer.v`.
 
 ## Mouse and real-time clock (`kakave.v`)
 

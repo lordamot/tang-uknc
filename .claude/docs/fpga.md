@@ -18,13 +18,13 @@ live set, by role:
 | top | `top.v` |
 | processors | `cpu.v`, `ppu.v`, `wm2wb/vm2_wb.v`, `wm2wb/vm2_plm.v`, `wmrst.v` |
 | video/memory | `sdram2.v`, `mkcolorreg.v` |
-| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `covox.v`, `audio.v`, `ide/ide.v`, `kakave.v` (the Kakave+ mouse and RTC registers, Sep 2026) |
+| peripherals | `xm2-01.v`, `vp1_120.v`, `vp65.v`, `vp1-128fdd.v`, `fdd/fdd4.v`, `aberrant.v`, `ay/ym2149.sv`, `covox.v`, `mixer.v` (the Aberrant's output stage and the band-limiting, Sep 2026), `audio.v`, `ide/ide.v`, `kakave.v` (the Kakave+ mouse and RTC registers, Sep 2026) |
 | SD path | `ide/sd_arbiter.v` - one owner at a time between the floppies and the cartridge on `sd_card.v` |
 | generated ROM | `ide/ide_rom.v` - twelve pROM primitives from `tang/rom/ide_wdromv0110.bin` by `tools/bin2prom.py` (`make ide-rom`), stubbed in simulation like the vendor IP |
 | serial | `uart/uart_rx.v`, `uart/uart_tx.v` |
 | MisterNano | `mister/{mcu_spi,sysctrl,hid,osd_u8g2,sd_card,sd_rw,sdcmd_ctrl,sector_dpram}.v` |
 | HDMI | `hdmi/{hdmi_tx,tmds_channel,hdmi_packet,hdmi_serdes}.v` |
-| vendor IP | `ip/{sys_rpll,fifo_audio,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v`, `fdd/ip/rawtr_prom/*.v` |
+| vendor IP | `ip/{sys_rpll,rom208,sdbuf_sdpb,dbufsec16,uartfifo}/*.v` (`fifo_audio` went in Sep 2026: both ends were on the PPU clock, and `mixer.v`'s registers feed the I²S), `fdd/ip/rawtr_prom/*.v` |
 
 ### What was removed, September 2026
 
@@ -107,7 +107,8 @@ skew the placement gives it, and `step` in particular changed on the PPU
 clock, which is the same counter as `clk_25`, so it moved at the very
 edge of the flop it clocked.  `make fdd-test` runs the old floppy module
 beside the new one.  What is still clocked by data: `timer_clk_4` and
-`clk8kHz` in `xm2-01.v`, and `isread_aud` in `audio.v` - all inside the
+`clk8kHz` in `xm2-01.v` - `isread_aud` in `audio.v` was the other until
+the audio FIFOs it clocked left in Sep 2026 - all inside the
 PPU domain and slow, declared at 1 us in the SDC.
 
 ### What happens at power-up, and what used to
@@ -191,7 +192,6 @@ Vendor IP in the live build:
 | IP | used by | what for |
 |---|---|---|
 | `sys_rpll` | `top.v` | the board PLL |
-| `fifo_audio` | `top.v` | crossing from `ppuclk_p` to the I²S clock |
 | `rom208` | `ppu.v` | the PPU's ROM, from `tang/rom/uknc_rom.mif` |
 | `sdbuf_sdpb` | `mister/sd_card.v` | SD sector buffer |
 | `dbufsec16` | `fdd/fdd4.v` | double sector buffer |

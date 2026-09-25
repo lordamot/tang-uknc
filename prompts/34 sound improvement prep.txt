@@ -1,0 +1,99 @@
+sound / ay / mixer improvement attempt.
+preparations now
+
+first of all - lets flash companion
+
+****
+
+The companion BL616 is flashed. I took "companion" to mean the external dock BL616 that runs the mnano firmware, since nothing in the tree uses that word. It was on /dev/ttyACM0 in boot mode. I ran make flash-mcu COMX=/dev/ttyACM0 with the committed bin/bl616.bin (442016 bytes, 14 Sep). The SHA-256 the host computed matched the one the device read back, and the tool reported "All programming completed successfully". To run the new firmware, tap RESET or power-cycle the board. That image carries the 13 Sep usb_host.c change for the lost keyboard, which was built but never seen fixed on a board, so it is worth checking with a keyboard that sleeps and wakes.
+
+For the sound work I have only read the code so far and changed nothing. The first findings:
+- The I2S FIFOs look pointless. Both sides run on ppuclk_p, and isread_aud, one of the two remaining clocks made from a data signal, exists only to clock them.
+- Neither the HDMI nor the I2S path has any low-pass filter before resampling. A sample-and-hold from 3.13 MHz aliases the AY square waves and noise.
+- The DC blocker is still out of the path.
+- The output is mono only.
+- The volume control is four shift steps.
+
+flash tang onto flash
+
+****
+
+I wrote the committed bin/tang.fs (14 Sep) to the Tang's SPI flash with make flash-fpga-flash (openFPGALoader -b tangnano20k -f -r). The erase and the write both ran to 100% and openFPGALoader printed "Done" with no errors. It does not reliably reconfigure the chip itself, so power-cycle the board before testing, or you will be running the previous bitstream.
+
+This is the shipped build from 14 Sep, which has the AZ controller. Nothing from the sound work is in it, because nothing has been changed yet.
+
+check ./prompts/real.mp4 ./prompts/tang.mp4
+sound of real is a bit overloaded - because they both mobile phone camra records, but should give an idea of whats needed
+current tang sound kinda crisp and much less bass which should be there ideally
+one of possible reasons heard - aberrant module itself contains analogue amplifier - if it is - then try model it
+
+****
+
+I measured the two recordings and read the real module's schematic (aberranthacker/aberrant_sound_module, the PDF in the repo, 22 Aug 2023). Nothing in the tree has changed yet.
+
+The recordings. Both are the same PT3 song at the same tempo: chroma cross-correlation peaks at 0.52 with tang.mp4 starting 14.9 s later, and they overlap for 18 s. On that aligned section, with the mid bands as reference, the Tang is about 4 dB lighter below 250 Hz and 11 to 14 dB hotter above 4 kHz. That is your "crisp, less bass": mostly a tilt with too much treble, rather than bass that is missing on its own.
+
+The real module does have an amplifier, but it does not explain the tilt:
+- Per chip, ABC stereo: A goes to L through 1k, C goes to R through 1k, and B goes to both through 2.2k each. All three chips share one 510 ohm load per side, so on each side A counts about 2.2 times as much as B. The real module is stereo, and the comments in aberrant.v and top.v that call it mono are wrong.
+- The mixer is an LM358 on a single +5 V supply, biased at 2.5 V, as an inverting summer with 24k in and 10k feedback, so the gain is 0.42. Coupling capacitors of 10 uF against 24k give a 0.66 Hz high-pass. The 1200 pF feedback capacitors are marked NC, so there is no low-pass. The frequency response is flat across the audio band. The only thing to copy from it is the high-pass, which is the DC blocker we already planned.
+- The beeper goes through a 510/510 divider (plus C17, value not printed) and 100k into both sides, which puts a full single AY channel at about a quarter of the beeper. Our 8192 against 2040 is the same ratio.
+- The AY pins are source followers that can drive current out but hardly sink it. With nine outputs tied into shared nodes, a quiet channel drops out of the network and the loud ones take over. The real sum is therefore compressed rather than linear.
+
+What the Tang does wrong that it can fix:
+1. Aliasing. hdmi_tx picks one value out of the 3.13 MHz stream at each 48 kHz sample instant. In a model of that path, a 440 Hz AY square has out-of-tune products at -22 dB, 1.76 kHz at -16 dB and 3.7 kHz at -13 dB. A simple average over each 48 kHz sample period lowers them by 12 dB, and a proper decimation filter would lower them further. That out-of-tune content is the "crisp" part. It does not reduce the total treble much, because the square waves' own harmonics are real.
+2. Mono. The real module is ABC stereo with the weights above.
+3. No DC blocker, so a thump at every step in level. The real module has one at 0.66 Hz.
+4. Optionally, the compression from the tied AY pins.
+
+The remaining treble gap of about 10 dB above 4 kHz is not in the module's circuit. It is somewhere in the real machine's playback path. Before I tune anything towards it I need to know what the real machine's P3 output was plugged into.
+
+real machine analog output plugged into OSSC (open source scan converter) so result output same tv over hdmi
+lets make it as a setting then; but enable by default
+
+****
+
+This is done on the branch feat/sound-mixer, not committed. It is built, it passes timing and it passes simulation. Nobody has heard it on a board.
+
+First, a correction to two earlier replies. The binaries I flashed were the committed ones, and both date from 3 Sep. The BL616 image does not carry the USB keyboard fix, and the Tang image is not a 14 Sep build with the AZ controller in it; AZ is on its own branch. Both binaries in bin/ are now rebuilt from this branch.
+
+What changed:
+- New tang/src/mixer.v on the PPU clock:
+  - The module's resistor network: L = (33A + 15B)/2, R = (33C + 15B)/2, with the same peak as the old mono sum.
+  - Its coupling capacitors, as a DC blocker at 0.95 Hz.
+  - The new low-pass: one pole at 4.87 kHz, set by the recordings.
+  - The volume and saturation, as before.
+  - A 64-sample mean every 16 clocks.
+- hdmi_tx.v now averages its input over each 48 kHz period instead of picking one sample.
+- The two fifo_audio FIFOs are removed, and so is isread_aud, one of the two remaining clocks made from a data signal.
+- Two OSD entries on the Aberrant form: Stereo Mono|ABC (letter o, default ABC) and Low-pass Off|On (letter l, default On). Both go through menu.c, variables_uknc[] and sysctrl.v.
+
+Checks:
+- make lint passes.
+- The new make mixer-test agrees with values worked out from the schematic and the coefficients to within a few counts:
+  - A alone gives 12618 on L and 0 on R, against 12622.
+  - The DC blocker gives 6752 after 2^19 clocks, against 6754.
+  - The low-pass is at -3.1 dB at 4.87 kHz and -7.7 dB at 10 kHz.
+- ab-test, covox-test and hwen-test pass.
+- The simulation with +AUDIOTEST gives stereo on HDMI and I2S with negative samples intact and 0 parity errors.
+- menu-test passes.
+- make fw builds, and make bitstream passes the timing gate with 0 setup and 0 hold violations.
+
+Cost, against main built the same evening: logic 54% -> 59%, BSRAM 32 -> 30.
+
+To try it: flash both bin/ files and power-cycle. Then toggle Stereo and Low-pass under Hardware > Aberrant while music plays.
+
+flash companion
+
+****
+
+The companion BL616 is flashed with the rebuilt bin/bl616.bin from feat/sound-mixer (442624 bytes, 25 Sep). This image has the Stereo and Low-pass menu entries and the USB keyboard fix. The device's read-back checksum matched and the tool reported "All programming completed successfully". Tap RESET or power-cycle to start it.
+
+The Tang still has the 3 Sep bitstream. The sound changes run on the FPGA, so they only take effect once the new bin/tang.fs is flashed too (make flash-fpga-flash, then a power-cycle). Until then the two new menu entries do nothing.
+
+flash tang onto flash
+
+****
+
+The Tang's flash now holds the feat/sound-mixer bitstream (bin/tang.fs, 25 Sep): the write reached 100% and openFPGALoader printed "Done". Power-cycle the board so it loads.
+
+Both boards now run this branch. To test, play something with the AYs and try Hardware > Aberrant > Stereo (ABC / Mono) and Low-pass (On / Off). Things worth listening for: whether the crisp edge is gone, whether the balance with the low-pass on is close to the real machine, and whether any clicks or thumps show up when the music starts or stops. The DC blocker is new on this path, and a blocker-related problem would show up there first.

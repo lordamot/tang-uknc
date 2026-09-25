@@ -98,6 +98,10 @@ agree on the letters; `sysctrl.v` decodes:
 '3'  system_ay_en[2]       bit 0     } reset and adds nothing to the sum
 'c'  system_covox          bits 1:0  0 off, 1 the DAC at 0177372, 2 a DAC on printer port A 0177100,
                                      3 both (OSD "Covox"); off, 0177372 is a bus timeout
+'o'  system_stereo         bit 0     0 mono, 1 the Aberrant's ABC panning - A left, C right, B both at
+                                     15/33 of A (mixer.v; OSD "Stereo", default ABC)
+'l'  system_lowpass        bit 0     1 a 4.87 kHz pole over the whole mix (mixer.v; OSD "Low-pass",
+                                     default On) - the real machine's playback path, measured
 'f'  system_fdd_en         bit 0     the floppy controller's 0177130/0177132 answer (OSD "FDD controller")
 'p'  system_floppy_wprot[0] bit 0    } one letter a drive, 1 = write-protected (OSD "FDDn write prot.").
 'q'  system_floppy_wprot[1] bit 0    } Until Sep 2026 one letter 'P' carried the INDEX of a six-entry
@@ -147,7 +151,8 @@ main          FDD0: fileselector (*.dsk), HDD0: fileselector (*.img, SD slot 4 -
 Hardware      Volume Mute|33%|66%|100% ('A'), Beeper Mute|On ('b'), Aberrant >,
               Covox Off|Port 177372|Port 177100 LPT|Both ('c'), FDD controller >,
               HDD controller >, Mouse Off|On ('u'), RTC clock >, Misc >
-Aberrant      AY1 / AY2 / AY3 Off|On ('1' '2' '3')
+Aberrant      AY1 / AY2 / AY3 Off|On ('1' '2' '3'), Stereo Mono|ABC ('o'),
+              Low-pass Off|On ('l')
 FDD controller  FDD controller Off|On ('f'), then FDD0:..FDD3: fileselectors, each
               followed by "FDDn write prot." Off|On ('p' 'q' 'r' 's')
 HDD controller  HDD controller Off|On ('e'), HDD0: fileselector, HDD write prot.
@@ -162,7 +167,7 @@ About         a text page: authors and thanks, scrolled with the cursor keys
 ```
 
 Defaults (`variables_uknc[]`): volume 33%, beeper on, the three AYs on,
-Covox off, FDD controller on, nothing write-protected, HDD controller
+stereo ABC, low-pass on, Covox off, FDD controller on, nothing write-protected, HDD controller
 off, mouse off, RTC controller off, colour RGB, the clock 2026-01-01.
 Nothing is mounted until the settings file says so.
 

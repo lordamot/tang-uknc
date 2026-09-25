@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Sound (25 Sep 2026, built, not heard): `mixer.v` mixes the way the
+  Aberrant module does - **ABC stereo** (A left, C right, B both; the
+  board's 1k/2.2k weights, OSD Aberrant > Stereo, default ABC) and its
+  0.66 Hz coupling as a DC blocker - where this core had a mono,
+  unipolar sum.  Aberrant > **Low-pass** (default On) adds a 4.87 kHz
+  pole over the whole mix, matched to a recording of a real machine
+  played through an OSSC.  Both outputs are band-limited before they are
+  resampled: HDMI used to take one raw sample of the 3.13 MHz mix every
+  1/48000 s, which folded the AY's harmonics back as out-of-tune tones.
+  The two audio FIFOs went (and with them a flop clocked by a data
+  signal); +1000 LUTs, -2 BSRAM.  `make mixer-test`.  `bin/bl616.bin`
+  rebuilt, carrying the menu entries and the USB keyboard fix below.
+
 - UART to the board's own BL616 for `../tang-ultima`: `mister/coreload.v`,
   a 2 KB TX FIFO and a 2 Mbaud 8N1 UART on pins 69 (TX) and 70 (RX),
   driven by SYS command 11 - status {room, count} and the last byte

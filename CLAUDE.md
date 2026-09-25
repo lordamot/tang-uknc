@@ -37,10 +37,12 @@ carries the sound as well); the keyboard translated from USB on the MCU;
 four 800 KB floppies served out of `.dsk` files on the SD card and an
 IDE hard disk cartridge (Oleg H.'s, with its WD ROM) served out of a
 `.img` file on the same card; three AY-3-8912s, an 8-bit Covox at
-`0177372` and a one-bit beeper, out over both HDMI and I²S.
+`0177372` and a one-bit beeper, mixed as the Aberrant module mixes them
+(ABC stereo, a DC blocker - `mixer.v`) and out over both HDMI and I²S.
 
 ```
-Logic 52%   Register 29%   BSRAM 66%   PLL 2/2 (100%)  [3 Sep 2026 PnR, v2.0.0: the OSD's hardware switches, the LPT Covox and the clock read-back on top of the line below - ~150 LUTs]
+Logic 59%   Register 33%   BSRAM 66%   PLL 2/2 (100%)  [25 Sep 2026 PnR: mixer.v, ~1000 LUTs, and the audio FIFOs out, -2 BSRAM; main built the same evening was 54% / 30% / 70% - the coreload UART and flash writer since the line below]
+      (52% / 29% / 66% on 3 Sep 2026, v2.0.0: the OSD's hardware switches, the LPT Covox and the clock read-back - ~150 LUTs)
       (52% / 28% / 66% on 2 Sep 2026, with the IDE cartridge in LBA28 with read-ahead, the key queue, the Covox and the Kakave+ mouse/RTC)
       (48% / 27% / 66% before the mouse and clock: the calendar, its weekday arithmetic and the accumulators are ~800 LUTs)
       (44% / 25% / 48% before the cartridge; its 24 KB ROM and second sector bank are the BSRAM steps)
@@ -405,20 +407,26 @@ from breaking the start screen or the floppy again.
   clears it, and `--skip-reset` does not help because the reset is inside
   the device open.  Do **not** reach for a `USBDEVFS_RESET` ioctl: it
   drops the device off the bus entirely and needs the replug anyway.
-- **The sound is still a unipolar sum, and the reason it had to be is now
-  known and is not the sum.**  Four states went on the board in Aug 2026:
-  the raw sum plays; minus a constant 512, DC-blocked bipolar, and
-  DC-blocked plus an offset are all silent.  That was read as a sink that
-  will not take a bipolar stream and no mechanism was known.  The
-  mechanism was the subpacket layout above: every silent form put a 1
-  into sample bit 15 or bit 14, which the sink read as the left channel's
-  parity and channel-status bits.  The DC blocker that was removed on 31
-  Aug 2026 (`git show f2bb44b^`) was never the problem and is worth
-  putting back once the fixed layout has been heard on a board - the mean
-  really does step with the program material, +3000 under one chip and
-  +9000 under three, and a sink's own AC coupling turns each step into a
-  thump.  The layout fix went out alone on purpose, one variable at a
-  time; **S2 still does nothing**.
+- **The Aberrant module is ABC STEREO, and this core said mono for a
+  month.**  Its schematic (aberranthacker/aberrant_sound_module, 22 Aug
+  2023): each chip's A through 1k to L, C through 1k to R, B through 2.2k
+  to both, the three chips tied into 510 ohms a side, then an LM358
+  summer behind 10 uF couplings - flat, with a 0.66 Hz high-pass and no
+  low-pass (its feedback capacitors are NC).  `aberrant.v` claimed "one
+  output" and the ABC pair was deleted as dead on that reasoning.
+  `mixer.v` (25 Sep 2026) does the resistor weights (Stereo, `'o'`) and
+  the high-pass, and adds a 4.87 kHz low-pass (`'l'`, default On) that is
+  NOT the module's: it is the real machine's playback path through an
+  OSSC, measured off the operator's recordings (progress.md defect 21).
+  **Neither output may sample the 3.13 MHz mix directly** - `hdmi_tx`
+  did, and every AY harmonic past 24 kHz folded back into the band as
+  tones unrelated to the music, the "crisp" the operator heard.  The mix
+  leaves `mixer.v` as a 64-sample mean every 16 clocks and `hdmi_tx`
+  averages it over its own 48 kHz period; a CIC comb cannot do that
+  second stage, because the periods alternate 1044 and 1045 clocks.
+  The DC blocker is back and bipolar samples are fine: the Aug 2026
+  "bipolar is silent" table was the subpacket layout above, every silent
+  form putting a 1 into sample bit 15 or 14.  **S2 still does nothing.**
 - **`ym2149.sv`'s `SEL` is a prescaler select, and 1 means "my clock enable
   is twice the chip clock".**  The divider reloads with `{SEL, 3'b111}`:
   0 divides by 8, which is the chip; 1 divides by 16.  `aberrant.v` feeds

@@ -145,11 +145,12 @@ int main(int argc, char **argv) {
   CHECK(menu->entries == 7, "main form has %d entries, expected 7", menu->entries);
 
   //---- the defaults went to the core, every letter once
-  const char *letters = "Ab123cfpqrseKJDuty mdhnV";
+  const char *letters = "Ab123colfpqrseKJDuty mdhnV";
   for(const char *l = letters; *l; l++) if(*l != ' ')
     CHECK(set_count(*l) == 1, "letter %c sent %d times at start", *l, set_count(*l));
   CHECK(set_last('A') == 1 && set_last('b') == 1 && set_last('1') == 1 && set_last('c') == 0 && set_last('f') == 1 &&
-        set_last('e') == 0 && set_last('u') == 0 && set_last('t') == 0 && set_last('D') == 30 && set_last('y') == 6 && set_last('V') == 0,
+        set_last('e') == 0 && set_last('u') == 0 && set_last('t') == 0 && set_last('D') == 30 && set_last('y') == 6 && set_last('V') == 0 &&
+        set_last('o') == 1 && set_last('l') == 1,
         "defaults wrong");
   CHECK(set_last('P') == -1, "the old 'P' letter is still sent");
 
@@ -197,6 +198,16 @@ int main(int argc, char **argv) {
   CHECK(set_last('2') == 0, "AY2 off: 2=%d", set_last('2'));
   menu_do(menu, MENU_EVENT_SELECT);
   CHECK(set_last('2') == 1, "AY2 on again: 2=%d", set_last('2'));
+  menu_do(menu, MENU_EVENT_DOWN); menu_do(menu, MENU_EVENT_DOWN);   // Stereo
+  menu_do(menu, MENU_EVENT_SELECT);
+  CHECK(set_last('o') == 0, "Stereo to Mono: o=%d", set_last('o'));
+  menu_do(menu, MENU_EVENT_DOWN);                                   // Low-pass
+  menu_do(menu, MENU_EVENT_SELECT);
+  CHECK(set_last('l') == 0, "Low-pass off: l=%d", set_last('l'));
+  shot("aberrant-sound");
+  menu_do(menu, MENU_EVENT_SELECT); menu_do(menu, MENU_EVENT_UP); menu_do(menu, MENU_EVENT_SELECT);
+  CHECK(set_last('o') == 1 && set_last('l') == 1, "Stereo and Low-pass back on: o=%d l=%d", set_last('o'), set_last('l'));
+  menu_do(menu, MENU_EVENT_UP); menu_do(menu, MENU_EVENT_UP);        // AY2
   menu_do(menu, MENU_EVENT_UP); menu_do(menu, MENU_EVENT_UP);   // the title
   CHECK(menu->entry == 0, "Aberrant title: entry %d", menu->entry);
   menu_do(menu, MENU_EVENT_SELECT);

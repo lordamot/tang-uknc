@@ -380,6 +380,8 @@ wire [7:0]  system_rtc_val     ;
 wire        system_beeper      ;
 wire [2:0]  system_ay_en       ;
 wire [1:0]  system_covox       ;
+wire        system_stereo      ;
+wire        system_lowpass     ;
 wire        system_fdd_en      ;
 wire        system_hdd_en      ;
 wire        system_mouse_en    ;
@@ -437,6 +439,8 @@ sysctrl sctl1(
     .system_beeper      (      system_beeper),
     .system_ay_en       (       system_ay_en),
     .system_covox       (       system_covox),
+    .system_stereo      (      system_stereo),
+    .system_lowpass     (     system_lowpass),
     .system_fdd_en      (      system_fdd_en),
     .system_hdd_en      (      system_hdd_en),
     .system_mouse_en    (    system_mouse_en),
@@ -1017,7 +1021,9 @@ vp1_128fdd vp128(
     .fdd_en       (    system_fdd_en)
 );
 //------------------------------------------------------------//
-wire [11:0] mono_channel ;   // all nine AY channels, summed in aberrant
+wire [9:0]  ay_a_channel;    // A, B and C of the three chips, each summed
+wire [9:0]  ay_b_channel;    // across the chips in aberrant - the mixer
+wire [9:0]  ay_c_channel;    // below pans them
 
 aberrant ay1(
    .ppu_vm_clk_p (         ppuclk_n),
@@ -1035,7 +1041,10 @@ aberrant ay1(
 
    .ay_en        (     system_ay_en),
 
-   .m_channel    (     mono_channel)
+   .a_channel    (     ay_a_channel),
+   .b_channel    (     ay_b_channel),
+   .c_channel    (     ay_c_channel),
+   .m_channel    (                 )
 );
 //------------------------------------------------------------//
 // The 8-bit DAC at 0177372 - the Covox of the Aberrant's map (Sep 2026).
@@ -1203,129 +1212,49 @@ vp065 dd2(
    .pin_ac_o     (                 )
 );
 //------------------------------------------------------------//
-// The mixer.
+// The mixer - mixer.v since Sep 2026: the Aberrant module's resistor
+// network and coupling capacitors, the OSD's low-pass, the volume, and
+// the band-limiting both outputs need.  mixer.v's header has the account,
+// and progress.md defect 21 the measurements behind it.
 //
-// One level, one sum, and the volume control only makes it quieter.
-//
-// It used to pan the AYs ABC - A to the left, C to the right, B split -
-// and then scale by SHIFTING UP, so 100% multiplied by four and the result
-// had to be clamped.  That made the volume setting change WHAT you could
-// hear rather than how loudly: at full volume anything past a third of the
-// AY's range clamped flat and went quiet, and a chip feeding mostly one
-// side was audible at one setting and not at another.
-//
-// The real module sums A, B and C of each chip at the same level, sums the
-// three chips, and drives one output.  aberrant.v already computes exactly
-// that as m_channel - all nine channels added - and it was the output
-// nothing read.  The beeper joins it, and the one sum goes to both sides.
-//
-// Headroom: m_channel is 12 bits and reaches 9 * 255 = 2295, which
-// shifted up three is 18360, and the beeper adds 8192.  That is 26552,
-// inside the 32767 a signed sample allows - so full volume is the
-// unattenuated sum and the quieter settings divide down from it.
-//
-// The Covox (Sep 2026) is an 8-bit sample shifted up five, 0..8160: a
-// full-scale swing the size of one AY chip's three channels (6120) and a
-// bit, and of the beeper's.  With it the sum can reach 34712, so the
-// corner where three chips, the beeper and a DAC peak together is the
-// one case clip() below now really saturates; music does not go there.
-//
-// The OSD's "Hardware" form (Sep 2026) decides what is in the sum: the
-// beeper can be muted here (it is a standard part and stays on the bus),
-// the AYs are masked inside aberrant.v, the Covox at 0177372 holds zero
-// while it is off, and a second DAC hangs on port A of the printer port
-// (0177100, vp1_120's portA) when "Covox" says Port 177100 or Both - the
-// older Covox, which UKNC players fall back to when 0177372 does not
-// answer.  Not inverted, for the reason covox.v gives.  With both DACs
-// the sum can reach 42872; nothing plays them together, and clip() has
-// the corner.  All four levels come from mist_clk; the tool times them.
-// The printer byte is registered onto the PPU clock first, so the adder
-// below sees a settled value whatever clk_25 edge it changed on.
+// The OSD's "Hardware" form decides what is in the sum: the beeper can be
+// muted here (it is a standard part and stays on the bus), the AYs are
+// masked inside aberrant.v, the Covox at 0177372 holds zero while it is
+// off, and a second DAC hangs on port A of the printer port (0177100,
+// vp1_120's portA) when "Covox" says Port 177100 or Both - the older
+// Covox, which UKNC players fall back to when 0177372 does not answer.
+// Not inverted, for the reason covox.v gives.  The levels come from
+// mist_clk; the tool times them.  The printer byte is registered onto the
+// PPU clock first, so the adders see a settled value whatever clk_25 edge
+// it changed on.
 reg  [7:0] lpt_sample = 8'd0;
 always @(posedge ppuclk_p)
     lpt_sample <= system_covox[1] ? lpt_data : 8'd0;
 
-wire [15:0] ay_mix = {1'd0, mono_channel, 3'd0};   // 0..18360
-wire [15:0] beeper = {2'd0, sound & system_beeper, 13'd0};   // 0 or 8192
-wire [15:0] covox  = {3'd0, covox_sample, 5'd0};   // 0..8160
-wire [15:0] lptcvx = {3'd0, lpt_sample, 5'd0};     // 0..8160
-wire [15:0] mix    = ay_mix + beeper + covox + lptcvx;   // 0..42872
+wire [15:0] volume_data_l;
+wire [15:0] volume_data_r;
 
-// The sum goes out unipolar, as it is.
-//
-// Every AY channel sits between 0 and 255 and never goes negative, so the
-// sum of nine of them carries a large steady offset, and so does the
-// beeper.  A DC blocker used to take that out here, on the reasoning that
-// a real module has a coupling capacitor in front of its amplifier and
-// this one did not.  It was removed on 31 Aug 2026 because every bipolar
-// form of the signal was silent on the operator's television while the
-// raw sum played, and the reason was written up as unknown.
-//
-// It is known now, and it was never the level, the sign or the DC.
-// hdmi_tx.v packed the audio subpacket as two IEC 60958 subframes end to
-// end instead of HDMI's own layout, which put sample bits 15:12 where the
-// sink reads the left channel's V, U, C and P flags.  A negative sample
-// has all four set; a sample at or above 16384 has bit 14, the
-// channel-status bit, set.  Either corrupts the channel status block the
-// sink is reading and the sink mutes.  That is the whole of the table
-// that used to sit here: minus 512 dips negative, DC blocked dips
-// negative, the beeper at 16384 reaches bit 14, and three AY chips at once
-// peak at 18360 and reach it too - while one or two chips, peaking at 6120
-// and 12240, never do.  Fixed 1 Sep 2026 in hdmi_tx.v.
-//
-// So the raw sum is kept here for now as the one thing known to play,
-// with the layout fix as the only change between builds.  Once the fixed
-// layout has been heard on a board the blocker is worth putting back -
-// the offset is real, +3000 of DC under one chip's music, +9000 under
-// three, and a sink's own AC coupling turns every step in it into a thump.
-// `git show f2bb44b^` has the blocker.
-wire signed [17:0] snd_amp = $signed({2'b00, mix});
+mixer mix1(
+    .clk     (      ppuclk_p),
+    .ay_a    (  ay_a_channel),
+    .ay_b    (  ay_b_channel),
+    .ay_c    (  ay_c_channel),
+    .beep    (sound & system_beeper),
+    .covox   (  covox_sample),
+    .lpt     (    lpt_sample),
+    .stereo  ( system_stereo),
+    .lowpass (system_lowpass),
+    .volume  ( system_volume),
+    .out_l   ( volume_data_l),
+    .out_r   ( volume_data_r)
+);
 
-// mix reaches 34712 when three chips, the beeper and the Covox all peak
-// at once; clip() turns that corner into saturation rather than a wrap.
-function signed [15:0] clip;
-    input signed [17:0] v;
-    clip = (v >  18'sd32767) ?  16'sh7FFF :
-           (v < -18'sd32767) ? -16'sh7FFF : v[15:0];
-endfunction
-
-// REGISTERED, and that is the whole fix, not a tidy-up.
-//
-// This was a combinational always @(*), and hdmi_tx latches it at the
-// audio sample instant - an instant with no relation to the PPU clock the
-// mixer runs on.  So the encoder could take the value while the adders
-// were still settling and send a carry-chain intermediate as a sample.
-//
-// Nothing on the diagnostic line could see it: those probes sampled these
-// same wires on posedge ppuclk_p, when everything has settled, so they
-// reported a clean +/-3300 waveform while the sink was being fed spikes.
-// What gave it away was the board: with the DC blocker out of the path and
-// the volume low the AY played, and it went silent as soon as either the
-// blocker (a 34-bit accumulator, an 18-bit subtract and a clip behind the
-// sample) or full volume was in it.  Depth of logic, not level of signal.
-//
-// It was consistent rather than intermittent because the old divider took
-// a sample every 1024 pixel clocks and ppuclk_p is clkram/16: 1024 = 64*16,
-// so the sample instant sat at ONE fixed phase of the PPU clock forever.
-// Land that phase in the settling window and every sample is wrong, every
-// time, which reads as a dead audio path rather than as noise.
-//
-// A register makes the sample a settled value by construction, whatever
-// the phase.  It costs one PPU clock of latency, 320 ns.
-reg  [15:0] volume_data_l = 16'd0;
-reg  [15:0] volume_data_r = 16'd0;
-
-always @(posedge ppuclk_p)
-    case(system_volume)
-    'b00 : begin volume_data_l <= 16'd0;              volume_data_r <= 16'd0;              end
-    'b01 : begin volume_data_l <= clip(snd_amp>>>2); volume_data_r <= clip(snd_amp>>>2); end
-    'b10 : begin volume_data_l <= clip(snd_amp>>>1); volume_data_r <= clip(snd_amp>>>1); end
-    'b11 : begin volume_data_l <= clip(snd_amp);     volume_data_r <= clip(snd_amp);     end
-    endcase
-// The HDMI side takes the same post-volume words, and resamples them to
-// exactly 48 kHz with a phase accumulator - see src/hdmi/hdmi_tx.v.  It does not go through the FIFO
-// below: that one is clocked by the I2S bit rate and is a different rate
-// entirely.
+// The HDMI side takes the same words and averages them over each of its
+// own 48 kHz sample periods - see src/hdmi/hdmi_tx.v.  They are
+// REGISTERED in mixer.v, and that matters: this was once a combinational
+// always @(*), hdmi_tx latched it at an instant unrelated to the PPU
+// clock, and at a fixed phase every sample was a carry-chain intermediate
+// (progress.md defect 9).
 assign hdmi_audio_l = volume_data_l;
 assign hdmi_audio_r = volume_data_r;
 
@@ -1351,44 +1280,20 @@ assign uart_tx = cl_active ? cl_tx : vp65_uart_tx;   // coreload.v, when the MCU
 // knows about.  `git show` the tone commit to put the tone back.
 
 //------------------------------------------------------------//
-// One FIFO per channel.  fifo_audio is 16 bits wide and regenerating it as
-// 32 would mean an IP Core Generator run on the operator's machine, so the
-// second channel gets a second instance of the same core instead.  Both are
-// read on the same strobe, so they stay in step; audio_drive picks which
-// word goes out in which I2S slot.
-wire [15:0] data_aud_l;
-wire [15:0] data_aud_r;
-wire        isread_aud;
-
-fifo_audio abf1(
-    .Data (volume_data_l),
-    .WrClk(     ppuclk_p),
-    .RdClk(   isread_aud),
-    .WrEn (         1'b1),
-    .RdEn (         1'b1),
-    .Q    (   data_aud_l),
-    .Empty(             ),
-    .Full (             )
-);
-
-fifo_audio abf2(
-    .Data (volume_data_r),
-    .WrClk(     ppuclk_p),
-    .RdClk(   isread_aud),
-    .WrEn (         1'b1),
-    .RdEn (         1'b1),
-    .Q    (   data_aud_r),
-    .Empty(             ),
-    .Full (             )
-);
-
+// The I2S DAC.  audio_drive shifts out one word a channel every 32 PPU
+// clocks (97.9 kHz) and loads it from these registers, on the same clock.
+// Two fifo_audio instances used to sit here, written and read on this one
+// clock too - their read clock was isread_aud, the request strobe, which
+// made it one of the flops clocked by a data signal - and they did nothing
+// a register does not.  They went in Sep 2026, and the band-limiting they
+// never did is mixer.v's.
 audio_drive ad1(
     .clk_1p536m(  ppuclk_p),
     .rst_n     (   sys_rst),
 
-    .idata     (data_aud_l),
-    .idata_rgt (data_aud_r),
-    .req       (isread_aud), /// fifo_empty/fifo_rd
+    .idata     (volume_data_l),
+    .idata_rgt (volume_data_r),
+    .req       (             ),
 
     .HP_BCK    (    HP_BCK),
     .HP_WS     (     HP_WS),

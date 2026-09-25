@@ -305,19 +305,22 @@ module tb_top;
         // Every hardware switch landed where sysctrl.v keeps it
         if (uut.system_beeper !== 1'b1 || uut.system_ay_en !== 3'b111 || uut.system_covox !== 2'd0 ||
             uut.system_fdd_en !== 1'b1 || uut.system_hdd_en !== 1'b0 || uut.system_mouse_en !== 1'b0 ||
-            uut.system_rtc_en !== 1'b0 || uut.system_floppy_wprot !== 4'b0000) begin
+            uut.system_rtc_en !== 1'b0 || uut.system_floppy_wprot !== 4'b0000 ||
+            uut.system_stereo !== 1'b1 || uut.system_lowpass !== 1'b1) begin
             $display("[tb] *** HARDWARE SWITCHES WRONG after the defaults");
             cfg_errs = cfg_errs + 1;
         end
         sys_set_val("2", 8'd0); sys_set_val("c", 8'd3); sys_set_val("e", 8'd1); sys_set_val("q", 8'd1);
+        sys_set_val("o", 8'd0); sys_set_val("l", 8'd0);
         #2000;
         if (uut.system_ay_en !== 3'b101 || uut.system_covox !== 2'd3 || uut.system_hdd_en !== 1'b1 ||
-            uut.system_floppy_wprot !== 4'b0010) begin
+            uut.system_floppy_wprot !== 4'b0010 || uut.system_stereo !== 1'b0 || uut.system_lowpass !== 1'b0) begin
             $display("[tb] *** HARDWARE SWITCHES WRONG after a change (ay %b covox %0d hdd %b wprot %b)",
                      uut.system_ay_en, uut.system_covox, uut.system_hdd_en, uut.system_floppy_wprot);
             cfg_errs = cfg_errs + 1;
         end
         sys_set_val("2", 8'd1); sys_set_val("c", 8'd0); sys_set_val("e", 8'd0); sys_set_val("q", 8'd0);
+        sys_set_val("o", 8'd1); sys_set_val("l", 8'd1);
 
         // The printer-port Covox: with "Covox" at Port 177100 LPT the byte
         // in vp1_120's port A reaches the mixer, shifted up five; at Off or
@@ -325,8 +328,8 @@ module tb_top;
         // since nothing in the boot ROM writes the printer port.
         force uut.vp1.portA = 8'd200;
         sys_set_val("c", 8'd2); #2000;
-        if (uut.lpt_sample !== 8'd200 || uut.mix < 16'd6400) begin
-            $display("[tb] *** LPT COVOX NOT MIXED: lpt_sample %0d mix %0d with c=2", uut.lpt_sample, uut.mix);
+        if (uut.lpt_sample !== 8'd200 || uut.mix1.mix_l < 17'd6400) begin
+            $display("[tb] *** LPT COVOX NOT MIXED: lpt_sample %0d mix %0d with c=2", uut.lpt_sample, uut.mix1.mix_l);
             cfg_errs = cfg_errs + 1;
         end
         sys_set_val("c", 8'd3); #2000;
@@ -342,24 +345,20 @@ module tb_top;
         release uut.vp1.portA;
         $display("[tb] %0t lpt covox: mixed at c=2 and 3, not at 1 - %s", $time, cfg_errs ? "see above" : "ok");
 
-        // +AUDIOTEST: put two different constants on the AY's panned
-        // outputs and let the I2S monitor below say whether they come out
-        // of the pin as two different words.  Nothing in the machine plays
-        // anything on its own during a short run, so without this the
+        // +AUDIOTEST: put constants on the AY's channel sums and let the
+        // I2S and HDMI monitors say what comes out.  Nothing in the machine
+        // plays anything on its own during a short run, so without this the
         // audio path reports silence and proves nothing either way.
-        // The mix is mono by design - all nine AY channels summed at one
-        // level, plus the beeper, to both sides - so this forces the one
-        // sum aberrant.v produces and both slots should carry it equally.
-        // "with L != R" is therefore expected to be zero now; it was a
-        // stereo check back when the AYs were panned ABC.
-        //
-        // It steps rather than holds, so that it still means something if
-        // the DC blocker (removed 31 Aug 2026) comes back: a held value
-        // would decay to nothing through it within about 50 ms.
+        // Since Sep 2026 the mixer pans ABC as the real module does (the
+        // OSD's 'o', on by default) and blocks DC, so the steps below come
+        // out as different L and R words - "with L != R" is expected to be
+        // non-zero again - and the step down comes out negative, which the
+        // sign check needs.  A held value would decay through the DC
+        // blocker (0.95 Hz), which is why it steps.
         if ($test$plusargs("AUDIOTEST")) begin
             audiotest = 1'b1;
-            $display("[tb] %0t audio test: m_channel stepped %o, %o, %o",
-                     $time, 12'o1234, 12'o0400, 12'o4000);
+            $display("[tb] %0t audio test: AY sums {A,B,C} stepped {765,765,0}, {0,0,0}, {0,0,765}, {0,0,0}",
+                     $time);
         end
 
         #(run_ms * 1000000);
@@ -504,16 +503,15 @@ module tb_top;
             dut_aud_min = $signed(uut.volume_data_l);
     end
 
-    // +AUDIODBG: the audio path, from the volume mix through the two
-    // FIFOs, sampled every 50 us once the machine is configured.
+    // +AUDIODBG: the audio path at the mixer's output, sampled every 50 us
+    // once the machine is configured.
     initial if ($test$plusargs("AUDIODBG")) begin
         #450000;   // just after the reset release at 391 us
         forever begin
             #50000;
-            $display("[aud] %0t vol=%b sys_rst=%b l=%h r=%h fifo_l=%h fifo_r=%h emptyl=%b",
-                     $time, uut.system_volume, uut.sys_rst,
-                     uut.volume_data_l, uut.volume_data_r,
-                     uut.data_aud_l, uut.data_aud_r, uut.abf1.Empty);
+            $display("[aud] %0t vol=%b stereo=%b lowpass=%b sys_rst=%b l=%h r=%h",
+                     $time, uut.system_volume, uut.system_stereo, uut.system_lowpass,
+                     uut.sys_rst, uut.volume_data_l, uut.volume_data_r);
         end
     end
 
@@ -530,29 +528,26 @@ module tb_top;
         end
     end
 
-    // The +AUDIOTEST wave onto the AY mix.  Three levels, not two: 12'o4000
-    // is 2048, which the mixer shifts to a sample of exactly 16384 - bit 14
-    // set - the level at which the old subpacket layout put a 1 into the
-    // sink's channel-status position and every real sink muted.  With the
-    // spec layout the decoder above must report it as an ordinary sample
-    // with good parity and V clear; with the old one it reported the same,
-    // because it shared the layout.  A square between two small values
-    // would never reach that bit and would prove nothing about it.
-    // The volume is forced to 100% for it, because the stand-in BL616
-    // configures 33% and that divides 16384 to 4096 before the wire ever
-    // sees bit 14.  A fourth step forces the post-volume registers to a
-    // negative word - the mixer itself cannot go negative - so that the
-    // sign path through the spec layout is exercised as well, and the
-    // "AUDIO SIGN LOST" check above has something to check.
+    // The +AUDIOTEST wave onto the AY mix.  The first step is A and B of
+    // every chip at full, 18360 on the left - bit 14 set, the level at
+    // which the old subpacket layout put a 1 into the sink's
+    // channel-status position and every real sink muted - and 5737 on the
+    // right.  With the spec layout the decoder must report it as an
+    // ordinary sample with good parity and V clear; with the old one it
+    // reported the same, because it shared the layout.  The step back to
+    // silence comes out of the DC blocker negative, which exercises the
+    // sign path.  The low-pass is on (the default), so the steps arrive
+    // with a 33 us rise; each lasts 500 us.  The volume is forced to 100%
+    // for it, because the stand-in BL616 configures 33%.
     always begin
         #500000; if (audiotest) begin force uut.system_volume = 2'b11;
-                                     force uut.mono_channel = 12'o1234;
-                                     release uut.volume_data_l;
-                                     release uut.volume_data_r; end
-        #500000; if (audiotest) force uut.mono_channel = 12'o0400;
-        #500000; if (audiotest) force uut.mono_channel = 12'o4000;
-        #500000; if (audiotest) begin force uut.volume_data_l = -16'sd12345;
-                                     force uut.volume_data_r = -16'sd12345; end
+                                     force uut.ay_a_channel = 10'd765;
+                                     force uut.ay_b_channel = 10'd765;
+                                     force uut.ay_c_channel = 10'd0; end
+        #500000; if (audiotest) begin force uut.ay_a_channel = 10'd0;
+                                     force uut.ay_b_channel = 10'd0; end
+        #500000; if (audiotest)       force uut.ay_c_channel = 10'd765;
+        #500000; if (audiotest)       force uut.ay_c_channel = 10'd0;
     end
 
     //--------------------------------------------------------------------

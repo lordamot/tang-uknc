@@ -1272,6 +1272,83 @@ Covox absent with it Off and present with it On, the printer-port DAC
 heard, the clock line agreeing with a program's reading, the floppy
 controller gone.
 
+### 21. The mixer: ABC stereo, the module's high-pass, a low-pass, no aliasing - BUILT, NOT HEARD
+
+25 Sep 2026.  The operator filmed the same PT3 song on a real machine
+with the module (its line output into an OSSC, then the same television
+over HDMI) and on this core, and heard this core as "crisp, much less
+bass".  Measured off the two phone recordings: chroma cross-correlation
+0.52 at a 14.9 s offset, 18 s of overlap, the same tempo - the same
+music.  On the aligned stretch, referred to the mid bands, this core was
+about 4 dB light under 250 Hz and **11-14 dB hot above 4 kHz**: a tilt,
+treble too loud rather than bass missing.  One pole at 4.75 kHz fits the
+difference best (±3 dB of content noise; two poles fit worse).
+
+The module's own schematic (aberranthacker/aberrant_sound_module,
+`aberrant_sound_module.pdf`, 22 Aug 2023) was read for the analogue
+stage the operator suspected, and it does not explain the tilt:
+
+- **It is ABC stereo.**  Each chip: A through 1k to L, C through 1k to R,
+  B through 2.2k to both; the three chips' L tied into 510 ohms, R the
+  same.  So A counts 2.2 times B on its side.  `aberrant.v` and `top.v`
+  said the module "sums A, B and C at one level and drives one output",
+  and the ABC pair was deleted as dead in the Sep 2026 cleanup on that
+  reasoning.  It was wrong.
+- **The amplifier is flat.**  An LM358 inverting summer on +5 V (biased
+  at 2.5 V by 1k/1k), 24k in, 10k feedback, 10 uF couplings - a 0.66 Hz
+  high-pass - and the 1200 pF feedback capacitors marked NC.  No low-pass
+  anywhere on the board.  The beeper enters through 510/510 and 100k, at
+  about four full AY channels, which is what 8192 against 255*8 already
+  was.  The AY pins are source followers that barely sink, so the tied
+  outputs compress rather than sum; not modelled.
+
+So the tilt is in the real machine's playback path, the OSSC's audio
+input most likely, and the operator asked for it as a setting, on by
+default.
+
+What was measured about this core, in a model of the path: `hdmi_tx`
+took one sample of the 3.13 MHz mix every 1/48000 s, and everything the
+AYs make above 24 kHz folded back - under a 440 Hz square the inharmonic
+products were at -22 dB, under 1.76 kHz -16, under 3.7 kHz -13.  That
+is the "crisp" as much as the tilt is.
+
+`mixer.v` (new, in the `.gprj`), on the PPU clock:
+
+1. the resistor network - L = (33A + 15B)/2, R = (33C + 15B)/2, peak
+   18360 as before; OSD **Stereo** (`'o'`, Mono / ABC, default ABC);
+2. the coupling capacitors - a DC blocker at 0.95 Hz (2^-19 of the
+   clock), always in, as on the module.  Defect 10's blocker, back;
+3. OSD **Low-pass** (`'l'`, default On) - one pole at 4.87 kHz,
+   (2^-7 + 2^-9) of the clock, over the whole mix;
+4. volume and saturation as before;
+5. the mean of the last 64 samples, every 16 clocks.  `hdmi_tx` now
+   averages its input over each of its own 48 kHz periods rather than
+   sampling it.  Together: the folded products 44-49 dB down with the
+   low-pass on, 35-42 with it off.  (A CIC comb cannot do the second
+   stage: the periods are 1044 and 1045 clocks, and a comb over periods
+   of unequal length emits the integral.)
+
+The I2S path takes the same 196 kHz words; its two `fifo_audio`
+instances were written and read on the PPU clock and did nothing a
+register does not, so they left the tree and the `.gprj`, and
+`isread_aud` - one of the two data-clocked flops left - left the SDC.
+
+Checked: `make lint`; `make mixer-test` (new) - A alone 12618 on L and 0
+on R against 12622 computed, B 5734/5735 against 5737, mono 6117
+against 6120, the blocker at 6752 after 2^19 clocks against 6754,
+-11606 on the way back, the pole -3.1 dB at 4.87 kHz and -7.7 at 10 kHz,
+Off flat but for the mean's 0.6 dB at 10 kHz, volume steps, saturation
+both ways, the output word moving once in 16 clocks; `ab-test`,
+`covox-test`, `hwen-test`; `make sim +AUDIOTEST` - 321 of 431 I2S frames
+and 146 HDMI samples with L != R, peak 18338 against 18360, negatives
+through, 0 bad parity; `make menu-test` with the two entries on the
+Aberrant form; `make fw`; `make bitstream` through the timing gate, 0
+setup, 0 hold.  Cost, against a build of `main` from the same toolchain
+the same evening: logic 11166 -> 12188 (54% -> 59%), registers 4699 ->
+5206, BSRAM 32 -> 30.  Not heard on a board; the treble figures are
+from phone recordings of a television and are a direction, not a
+calibration.
+
 ## Open questions
 
 
@@ -1296,7 +1373,8 @@ controller gone.
   the prerequisite for going any further.
 - **Will the fixed subpacket layout play bipolar?**  Defect 11 says it
   should and says why it did not before; the board has not heard it.  If
-  it does, put the DC blocker back (defect 10).
+  it does, put the DC blocker back (defect 10).  It is back, in
+  `mixer.v` (defect 21), so the first build of that is the answer.
 - **Why did the player hang with `Зависание при приеме а.в.п`?**  Now
   answered by defect 4: the message came back on 2 Sep 2026 from a build
   whose clk_25 -> PPU paths were modelled with the wrong phase, and it is
@@ -1317,6 +1395,7 @@ and ten more were inside it but unused.  `.claude/docs/fpga.md` lists
 what went; git history has it.  The dead signals the same pass took out of
 the custom RTL (`top.v`, `aberrant.v`, `sdram2.v`, `fdd4.v`, `vp65.v`,
 `hdmi_tx.v`) were all write-only or undriven; the ABC-panned stereo pair
-in `aberrant.v` went with them, since the mixer is mono by design.
+in `aberrant.v` went with them, since the mixer was taken to be mono by
+design - wrongly: the real module is ABC stereo (defect 21).
 Verilator `-Wall` over the custom files now reports only unused input bits
 on peripheral ports, which is the bus interface and stays.

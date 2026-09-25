@@ -14,6 +14,9 @@ module aberrant(
 
    ay_en,
 
+   a_channel,
+   b_channel,
+   c_channel,
    m_channel
 );
 input        ppu_vm_clk_p;
@@ -36,6 +39,11 @@ output       ppu_wbm_ack_o;
 // to the sum below.  A level on mist_clk; the tool times the crossing.
 input  [ 2:0]ay_en;
 
+// A, B and C of the three chips, each summed across the chips (0..765);
+// the mixer in top.v pans them the way the real module's resistors do
+output [ 9:0]a_channel;
+output [ 9:0]b_channel;
+output [ 9:0]c_channel;
 output [11:0]m_channel;
 
 //---------------------------------------------------------------------------------
@@ -220,14 +228,25 @@ YM2149 dd3(
     .IOB_out  (                  )
 );
 //---------------------------------------------------------------------------------
-// Mixer.  The real module sums A, B and C of each chip at one level and
-// drives a single output, so this does the same: all nine channels, each
-// 0..255, added with no weighting.  12 bits hold the 2295 maximum.  An
-// ABC-panned stereo pair used to be computed here as well; nothing read it.
+// Channel sums.  The real module is ABC STEREO, not mono - this block used
+// to say it summed A, B and C at one level into a single output, and it
+// does not.  Its ay.SchDoc (aberranthacker/aberrant_sound_module, 22 Aug
+// 2023) puts each chip's A through 1k onto L, C through 1k onto R and B
+// through 2.2k onto both, and ties the three chips' L and R together into
+// a 510 ohm load each.  So what the mixer needs is A, B and C of the three
+// chips, each summed across the chips: the resistor weights are applied
+// in top.v, where the OSD's Stereo setting picks them or the plain sum.
+// m_channel, all nine added, is kept for the testbenches.
 //---------------------------------------------------------------------------------
+reg [9:0]a_sum = 10'd0;
+reg [9:0]b_sum = 10'd0;
+reg [9:0]c_sum = 10'd0;
 reg [11:0]mono_channel  = 12'd0;
 
-assign m_channel =  mono_channel;
+assign a_channel = a_sum;
+assign b_channel = b_sum;
+assign c_channel = c_sum;
+assign m_channel = mono_channel;
 
 // a chip that is off is in reset and its outputs are already zero; the
 // masks make that true on the same clock the enable drops, not a few
@@ -236,9 +255,15 @@ wire [7:0] m1 = {8{ay_en[0]}};
 wire [7:0] m2 = {8{ay_en[1]}};
 wire [7:0] m3 = {8{ay_en[2]}};
 
-always @(posedge ppu_vm_clk_p)
-        mono_channel  <= (out_a_dd1 & m1) + (out_a_dd2 & m2) + (out_a_dd3 & m3)
-                       + (out_b_dd1 & m1) + (out_b_dd2 & m2) + (out_b_dd3 & m3)
-                       + (out_c_dd1 & m1) + (out_c_dd2 & m2) + (out_c_dd3 & m3);
+wire [9:0] a_now = (out_a_dd1 & m1) + (out_a_dd2 & m2) + (out_a_dd3 & m3);
+wire [9:0] b_now = (out_b_dd1 & m1) + (out_b_dd2 & m2) + (out_b_dd3 & m3);
+wire [9:0] c_now = (out_c_dd1 & m1) + (out_c_dd2 & m2) + (out_c_dd3 & m3);
+
+always @(posedge ppu_vm_clk_p) begin
+        a_sum         <= a_now;
+        b_sum         <= b_now;
+        c_sum         <= c_now;
+        mono_channel  <= a_now + b_now + c_now;
+    end
 //---------------------------------------------------------------------------------
 endmodule

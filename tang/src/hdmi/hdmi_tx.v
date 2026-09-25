@@ -156,6 +156,20 @@ wire di_period   = di_room && (di_cnt >= DI_DATA ) && (di_cnt < DI_END  );
 // Audio capture.  volume_data_l/r in top.v change in the ppu clock
 // domain, which is a bit of the same counter that makes this pixel clock,
 // so there is no crossing here and no synchroniser is needed.
+//
+// Each sample is the MEAN of the input over its own 48 kHz period, not
+// the input at the sample instant (Sep 2026).  A single sample of a
+// stream that holds harmonics far past 24 kHz folds them back into the
+// band as tones unrelated to the music; the mean has a null on every
+// multiple of 48 kHz, which is where the folding comes from.  mixer.v
+// band-limits the stream first, and the two together put the folded
+// products of an AY square 44-49 dB down (mixer.v has the figures).
+//
+// A period is 1044 or 1045 clocks (the accumulator below), so the sum is
+// scaled by 1004 / 2^20 = 1 / 1044.4 rather than divided: the gain is
+// within 0.06% of one either way.  The sum is reset each period rather
+// than kept as a running integral, because a CIC comb over periods of
+// unequal length does not cancel the integral and would emit it.
 //------------------------------------------------------------------------
 reg [23:0] aud_acc = 24'd0;
 reg [31:0] aud_fifo [0:3];
@@ -175,13 +189,39 @@ end
 wire [24:0] aud_nxt  = {1'b0, aud_acc} + ACR_N;
 wire        aud_take = (aud_nxt >= AUD_PERIOD);
 
+reg  signed [26:0] box_l = 27'sd0, box_r = 27'sd0;      // this period's sum, <= 1045 * 32768
+reg  signed [26:0] sum_l = 27'sd0, sum_r = 27'sd0;      // the last period's, held for the scale
+reg         box_rdy = 1'b0;
+wire signed [26:0] box_nl = box_l + $signed(I_audio_l);
+wire signed [26:0] box_nr = box_r + $signed(I_audio_r);
+// x * 1004 = x*1024 - x*16 - x*4, then / 2^20
+wire signed [37:0] scl_l = ($signed(sum_l) <<< 10) - ($signed(sum_l) <<< 4) - ($signed(sum_l) <<< 2);
+wire signed [37:0] scl_r = ($signed(sum_r) <<< 10) - ($signed(sum_r) <<< 4) - ($signed(sum_r) <<< 2);
+// a full-scale period of 1045 clocks scales to 1.0006 of full scale, so saturate
+wire signed [17:0] sat_l = scl_l[37:20];
+wire signed [17:0] sat_r = scl_r[37:20];
+wire [15:0] mean_l = (sat_l >  18'sd32767) ? 16'h7FFF : (sat_l < -18'sd32768) ? 16'h8000 : sat_l[15:0];
+wire [15:0] mean_r = (sat_r >  18'sd32767) ? 16'h7FFF : (sat_r < -18'sd32768) ? 16'h8000 : sat_r[15:0];
+
+always @(posedge I_rgb_clk) begin
+    box_rdy <= aud_take;
+    if (aud_take) begin
+        sum_l <= box_nl;   box_l <= 27'sd0;
+        sum_r <= box_nr;   box_r <= 27'sd0;
+    end else begin
+        box_l <= box_nl;
+        box_r <= box_nr;
+    end
+end
+
 always @(posedge I_rgb_clk) begin
     if (!I_rst_n) begin
         aud_acc <= 24'd0;
         aud_wr  <= 3'd0;
     end else begin
         aud_acc <= aud_take ? (aud_nxt - AUD_PERIOD) : aud_nxt[23:0];
-        if (aud_take) begin
+        // one clock after the period closes, when sum_l/r hold it
+        if (box_rdy) begin
             // O_audio_ovf is sticky and says only that it happened once,
             // which cannot tell a single drop at reset release from a
             // steady loss every frame.  The counter is what distinguishes
@@ -192,7 +232,7 @@ always @(posedge I_rgb_clk) begin
                 O_audio_dropc <= O_audio_dropc + 16'd1;
             end
             else begin
-                aud_fifo[aud_wr[1:0]] <= {I_audio_r, I_audio_l};
+                aud_fifo[aud_wr[1:0]] <= {mean_r, mean_l};
                 aud_wr <= aud_wr + 3'd1;
             end
         end

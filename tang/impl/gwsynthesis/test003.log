@@ -2,6 +2,9 @@ GowinSynthesis start
 Running parser ...
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/aberrant.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/covox.v'
+Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mixer.v'
+WARN  (EX2478) : Non-net output port 'out_l' cannot be initialized at declaration in SystemVerilog mode("/var/www/own/tang-uknc/tang/src/mixer.v":59)
+WARN  (EX2478) : Non-net output port 'out_r' cannot be initialized at declaration in SystemVerilog mode("/var/www/own/tang-uknc/tang/src/mixer.v":60)
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/kakave.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/audio.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ay/ym2149.sv'
@@ -12,7 +15,6 @@ Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ide/ide.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ide/ide_rom.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ide/sd_arbiter.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/dbufsec16/dbufsec16.v'
-Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/rom208/rom208.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/sdbuf_sdpb/sdbuf_sdpb.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ip/sys_rpll/sys_rpll.v'
@@ -21,6 +23,8 @@ Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/hdmi/hdmi_packet.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/hdmi/hdmi_serdes.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/hdmi/tmds_channel.v'
+Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mister/flashwr.v'
+Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mister/coreload.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mister/hid.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mister/mcu_spi.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mister/osd_u8g2.v'
@@ -33,18 +37,18 @@ Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/mkcolorreg.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/ppu.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/sdram2.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/top.v'
-Undeclared symbol 'cart_sel', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":717)
-Undeclared symbol 'cart_bank', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":718)
-Undeclared symbol 'fdd_rd', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":814)
-Undeclared symbol 'fdd_wr', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":815)
-Undeclared symbol 'fdd_outen', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":820)
-Undeclared symbol 'fdd_taken', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":825)
-WARN  (EX3638) : 'fdd_rd' is already implicitly declared on line 814("/var/www/own/tang-uknc/tang/src/top.v":846)
-WARN  (EX3638) : 'fdd_wr' is already implicitly declared on line 815("/var/www/own/tang-uknc/tang/src/top.v":846)
-WARN  (EX3638) : 'fdd_taken' is already implicitly declared on line 825("/var/www/own/tang-uknc/tang/src/top.v":847)
-WARN  (EX3638) : 'fdd_outen' is already implicitly declared on line 820("/var/www/own/tang-uknc/tang/src/top.v":847)
-WARN  (EX3638) : 'cart_sel' is already implicitly declared on line 717("/var/www/own/tang-uknc/tang/src/top.v":850)
-WARN  (EX3638) : 'cart_bank' is already implicitly declared on line 718("/var/www/own/tang-uknc/tang/src/top.v":851)
+Undeclared symbol 'cart_sel', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":806)
+Undeclared symbol 'cart_bank', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":807)
+Undeclared symbol 'fdd_rd', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":903)
+Undeclared symbol 'fdd_wr', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":904)
+Undeclared symbol 'fdd_outen', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":909)
+Undeclared symbol 'fdd_taken', assumed default net type 'wire'("/var/www/own/tang-uknc/tang/src/top.v":914)
+WARN  (EX3638) : 'fdd_rd' is already implicitly declared on line 903("/var/www/own/tang-uknc/tang/src/top.v":935)
+WARN  (EX3638) : 'fdd_wr' is already implicitly declared on line 904("/var/www/own/tang-uknc/tang/src/top.v":935)
+WARN  (EX3638) : 'fdd_taken' is already implicitly declared on line 914("/var/www/own/tang-uknc/tang/src/top.v":936)
+WARN  (EX3638) : 'fdd_outen' is already implicitly declared on line 909("/var/www/own/tang-uknc/tang/src/top.v":936)
+WARN  (EX3638) : 'cart_sel' is already implicitly declared on line 806("/var/www/own/tang-uknc/tang/src/top.v":939)
+WARN  (EX3638) : 'cart_bank' is already implicitly declared on line 807("/var/www/own/tang-uknc/tang/src/top.v":940)
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_rx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/uart/uart_tx.v'
 Analyzing Verilog file '/var/www/own/tang-uknc/tang/src/vp1-128fdd.v'
@@ -58,8 +62,8 @@ Compiling module 'top'("/var/www/own/tang-uknc/tang/src/top.v":1)
 Compiling module 'sys_rpll'("/var/www/own/tang-uknc/tang/src/ip/sys_rpll/sys_rpll.v":10)
 Compiling module 'sdram2'("/var/www/own/tang-uknc/tang/src/sdram2.v":1)
 Compiling module 'hdmi_tx'("/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v":34)
-Extracting RAM for identifier 'aud_fifo'("/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v":161)
-WARN  (EX3791) : Expression size 32 truncated to fit in target size 24("/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v":183)
+Extracting RAM for identifier 'aud_fifo'("/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v":175)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 24("/var/www/own/tang-uknc/tang/src/hdmi/hdmi_tx.v":222)
 Compiling module 'hdmi_packet'("/var/www/own/tang-uknc/tang/src/hdmi/hdmi_packet.v":19)
 Compiling module 'tmds_channel'("/var/www/own/tang-uknc/tang/src/hdmi/tmds_channel.v":17)
 Compiling module 'tmds_channel(CN=1)'("/var/www/own/tang-uknc/tang/src/hdmi/tmds_channel.v":17)
@@ -67,6 +71,10 @@ Compiling module 'tmds_channel(CN=2)'("/var/www/own/tang-uknc/tang/src/hdmi/tmds
 Compiling module 'hdmi_serdes'("/var/www/own/tang-uknc/tang/src/hdmi/hdmi_serdes.v":24)
 Compiling module 'mcu_spi'("/var/www/own/tang-uknc/tang/src/mister/mcu_spi.v":7)
 Compiling module 'sysctrl'("/var/www/own/tang-uknc/tang/src/mister/sysctrl.v":10)
+Compiling module 'flashwr'("/var/www/own/tang-uknc/tang/src/mister/flashwr.v":46)
+Extracting RAM for identifier 'mem'("/var/www/own/tang-uknc/tang/src/mister/flashwr.v":70)
+Compiling module 'coreload(CLK_HZ=25070000)'("/var/www/own/tang-uknc/tang/src/mister/coreload.v":38)
+Extracting RAM for identifier 'txm'("/var/www/own/tang-uknc/tang/src/mister/coreload.v":65)
 Compiling module 'hid'("/var/www/own/tang-uknc/tang/src/mister/hid.v":7)
 Compiling module 'sd_card(CLK_DIV=3'd1)'("/var/www/own/tang-uknc/tang/src/mister/sd_card.v":10)
 Compiling module 'sector_dpram'("/var/www/own/tang-uknc/tang/src/mister/sector_dpram.v":10)
@@ -113,12 +121,11 @@ Compiling module 'uartfifo'("/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfif
 Compiling module '**'("/var/www/own/tang-uknc/tang/src/ip/uartfifo/uartfifo.v":130)
 Compiling module 'uart_tx(BAUD_RATE=19200)'("/var/www/own/tang-uknc/tang/src/uart/uart_tx.v":1)
 Compiling module 'uart_rx(BAUD_RATE=19200)'("/var/www/own/tang-uknc/tang/src/uart/uart_rx.v":1)
-Compiling module 'fifo_audio'("/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v":187)
-Compiling module '**'("/var/www/own/tang-uknc/tang/src/ip/fifo_audio/fifo_audio.v":186)
+Compiling module 'mixer'("/var/www/own/tang-uknc/tang/src/mixer.v":45)
 Compiling module 'audio_drive'("/var/www/own/tang-uknc/tang/src/audio.v":2)
 NOTE  (EX0101) : Current top module is "top"
 [5%] Running netlist conversion ...
-WARN  (CV0018) : Input buts[1] is unused("/var/www/own/tang-uknc/tang/src/top.v":44)
+WARN  (CV0018) : Input buts[1] is unused("/var/www/own/tang-uknc/tang/src/top.v":50)
 Running device independent optimization ...
 [10%] Optimizing Phase 0 completed
 [15%] Optimizing Phase 1 completed

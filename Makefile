@@ -293,6 +293,15 @@ ab-test: $(VERILATOR)
 	  sim/tb/tb_aberrant.v tang/src/aberrant.v tang/src/ay/ym2149.sv >/dev/null
 	$(BUILD)/sim/ab/tb_aberrant
 
+# The mixer on its own: the Aberrant module's ABC panning, the DC blocker's
+# time constant, the 4.87 kHz low-pass, volume, saturation and the
+# 16-clock output word.  sim/tb/tb_mixer.v.
+mixer-test: $(VERILATOR)
+	$(VERILATOR) --binary $(VFLAGS) -Wno-lint -Wno-style \
+	  --top-module tb_mixer -Mdir $(BUILD)/sim/mixer -o tb_mixer \
+	  sim/tb/tb_mixer.v tang/src/mixer.v >/dev/null
+	$(BUILD)/sim/mixer/tb_mixer
+
 # The Covox at 0177372 beside the Aberrant: writes land, reads answer, and
 # no address in 0177360-0177376 is acknowledged by both.
 covox-test: $(VERILATOR)

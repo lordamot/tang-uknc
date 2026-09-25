@@ -21,8 +21,9 @@ always means a new layout, cannot do that again.
   where the thing is a register bit, a pulse, a compare, a mux of counter
   bits - that is what `step`, `clk_dsk`, `sd_rd`, `sd_img_mounted`,
   `curs_set` and `clk8kHz` were, and they are enables on real clocks now.
-  A new one goes in as an enable too.  `timer_clk_4` and `isread_aud` are
-  the two that remain, declared at 1 us; do not add to that list.
+  A new one goes in as an enable too.  `timer_clk_4` is the one that
+  remains, declared at 1 us (`isread_aud` went with the audio FIFOs, Sep
+  2026); do not add to that list.
 - **Every crossing between the processors and the peripherals is
   bounded.**  clk4 against clk_25 and clk_3_12 has a phase that is
   decided at each power-up, so `set_max_delay 15` caps every path between

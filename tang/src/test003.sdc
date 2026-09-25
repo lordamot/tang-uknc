@@ -177,19 +177,20 @@ create_generated_clock -name clk_3_12 -source [get_pins {pl1/rpll_inst/CLKOUT}] 
 // exist as clocks.  What is left:
 //
 //   xm2-01.v : timer_clk_4 - the PPU timer's prescaler pick, a mux of
-//              counter bits used as a clock; and clk8kHz, the beeper
-//              divider
-//   audio.v  : the FIFO read strobe, isread_aud
+//              counter bits used as a clock
 //
-// Both are inside the PPU's own domain and slow.  Left undeclared they
-// are analysed against the tool's default 100 MHz, which is nonsense and
+// (audio.v's FIFO read strobe, isread_aud, was the other until Sep 2026;
+// the two audio FIFOs it clocked are gone, mixer.v feeds the I2S from
+// registers on the PPU clock.)
+//
+// It is inside the PPU's own domain and slow.  Left undeclared it is
+// analysed against the tool's default 100 MHz, which is nonsense and
 // is where spurious setup violations come from; declared at a period that
-// is a BOUND rather than a measurement - 1 us is far slower than either
-// runs - the paths from them are not the thing hiding a real violation
+// is a BOUND rather than a measurement - 1 us is far slower than it
+// runs - the paths from it are not the thing hiding a real violation
 // elsewhere.  The proper fix is the same as was done for the floppy: an
-// enable on a real clock, after which these two lines go.
+// enable on a real clock, after which this line goes.
 //------------------------------------------------------------------------
-create_clock -name isread_aud   -period 1000 [get_nets {isread_aud}]
 create_clock -name timer_clk_4  -period 1000 [get_nets {dd1/timer_clk_4}]
 
 //------------------------------------------------------------------------
