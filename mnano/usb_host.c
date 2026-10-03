@@ -22,7 +22,18 @@
 // queue to send messages to OSD thread
 extern QueueHandle_t xQueue;
 
-#define MAX_REPORT_SIZE   8
+// A full-speed interrupt endpoint's largest packet.  It was 8, the boot
+// reports' size, and the URB asked for just the parsed report (plus its
+// id); but an interface carries more than the one report the parser
+// picks - a Logitech receiver's mouse interface (046d:c534, keyboard and
+// mouse in one) has 20-byte packets (wMaxPacketSize 14h: its HID++
+// reports 10h and 11h, consumer 3 and system 4 beside the mouse's 2), and
+// a packet longer than the transfer asked for is an error the client
+// loop never clears: the mouse never moved.  Found and fixed on Evo
+// Nano's board (../retro-tang-evo, 2 Oct 2026).  The URB asks for the
+// endpoint's packet size now; the report is still picked by its id and
+// its size in hid_parse()
+#define MAX_REPORT_SIZE  64
 #define XBOX_REPORT_SIZE 20
 
 #define STATE_NONE      0 
@@ -726,9 +737,12 @@ static void usbh_hid_client_thread(void *argument) {
     struct usbh_hubport *hport = hid->class->hport;
     if(!hport || !hport->connected) break;
 
+    int len = USB_GET_MAXPACKETSIZE(hid->class->intin->wMaxPacketSize);
+    if(len < hid->report.report_size + (hid->report.report_id_present ? 1:0))
+      len = hid->report.report_size + (hid->report.report_id_present ? 1:0);
+    if(len > MAX_REPORT_SIZE) len = MAX_REPORT_SIZE;
     usbh_int_urb_fill(&hid->class->intin_urb, hport, hid->class->intin, hid->buffer,
-		      hid->report.report_size + (hid->report.report_id_present ? 1:0),
-		      HID_URB_MS, usbh_hid_callback, hid);
+		      len, HID_URB_MS, usbh_hid_callback, hid);
     // a URB the timeout killed keeps errorcode = -USB_ERR_BUSY, and
     // usbh_submit_urb() refuses such a URB out of hand: clear it, or the
     // first idle second is the last

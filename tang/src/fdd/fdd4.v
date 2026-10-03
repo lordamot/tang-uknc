@@ -115,7 +115,12 @@ assign valid    = count_clk>10 && count_clk<900 && motor;
 assign led_init = ~motor;
 assign sync     = (word_sectr == 9'h18 || word_sectr == 9'h2F ) && motor;
 assign crc_ok   = (word_sectr == 9'h1C || word_sectr == 9'h131) && motor;
-assign ind      = (word_sectr >= 9'h01 || word_sectr <=   9'h4) && motor;
+// The index hole: once a revolution, the first 75 words of the track (150
+// bytes, UKNCBTL's FLOPPY_INDEXLENGTH; kakave uses 50 words).  Until Sep
+// 2026 this was (word_sectr >= 1 || word_sectr <= 4) - true for every
+// word, so status bit 15 was stuck at 1 while the motor ran; with && it
+// would have pulsed at the start of every sector, ten times a revolution.
+assign ind      = no_sec == 4'd0 && word_sectr < 9'd75 && motor;
 assign tr0      = !no_trk && motor;
 
 reg  [15:0] data_out = 16'h0000;

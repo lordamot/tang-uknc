@@ -9,7 +9,9 @@
 // commands and the same stand-in SD reader, and compares what the PPU
 // would read: the sequence of distinct data_out words, the head position,
 // the sectors requested, and the status lines - as sequences, since the
-// new module is allowed to be one or two 25 MHz cycles later.
+// new module is allowed to be one or two 25 MHz cycles later.  The index
+// line is the exception: fixed since (Sep 2026), it is checked against
+// what a drive does rather than against the old module.
 //========================================================================
 module tb_fdd4;
 
@@ -85,11 +87,31 @@ task compare(input [255:0] what);
 endtask
 
 // status lines are combinational off the rotation counter, which is
-// untouched; check they never disagree for more than a couple of cycles
+// untouched; check they never disagree for more than a couple of cycles.
+// Not ind: the old module's was stuck at 1 with the motor on, and the new
+// one is the index hole, checked on its own below.
 integer dis = 0, dis_max = 0;
 always @(posedge clk) begin
-    if ({v_o,s_o,c_o,t_o,i_o} != {v_n,s_n,c_n,t_n,i_n}) dis = dis + 1; else dis = 0;
+    if ({v_o,s_o,c_o,t_o} != {v_n,s_n,c_n,t_n}) dis = dis + 1; else dis = 0;
     if (dis > dis_max) dis_max = dis;
+end
+
+// the index: one pulse a revolution (3124 words), 75 words long, rising
+// at sector 0 word 0
+localparam REV = 3124 * 1600, IDX = 75 * 1600;
+reg     idx_on = 1'b0, i_d = 1'b0;
+integer cyc = 0, rise_at = -1, idx_rises = 0;
+always @(posedge clk) begin
+    cyc = cyc + 1;
+    i_d <= i_n;
+    if (idx_on && i_n && !i_d) begin
+        if (un.no_sec != 0 || un.word_sectr != 0) begin $display("  FAIL index: rose at sector %0d word %0d", un.no_sec, un.word_sectr); errors = errors + 1; end
+        if (rise_at >= 0 && (cyc - rise_at < REV - 2 || cyc - rise_at > REV + 2)) begin $display("  FAIL index: %0d clocks between pulses, want %0d", cyc - rise_at, REV); errors = errors + 1; end
+        rise_at = cyc; idx_rises = idx_rises + 1;
+    end
+    if (idx_on && !i_n && i_d && (cyc - rise_at < IDX - 2 || cyc - rise_at > IDX + 2)) begin
+        $display("  FAIL index: %0d clocks long, want %0d", cyc - rise_at, IDX); errors = errors + 1;
+    end
 end
 
 task pulse_step(input d);
@@ -125,6 +147,15 @@ initial begin
     motor = 1'b0; repeat (3000) @(negedge clk); motor = 1'b1;
     repeat (1600 * 400) @(negedge clk);
     compare("restart");
+
+    $display("[tb_fdd4] index: two and a bit revolutions, motor on");
+    idx_on = 1'b1;
+    repeat (2 * REV + REV / 5) @(negedge clk);
+    idx_on = 1'b0;
+    $display("[tb_fdd4] index pulses: %0d", idx_rises);
+    if (idx_rises < 2 || idx_rises > 3) begin $display("  FAIL index: %0d pulses in 2.2 revolutions", idx_rises); errors = errors + 1; end
+    motor = 1'b0; repeat (1600) @(negedge clk);
+    if (i_n) begin $display("  FAIL index: high with the motor off"); errors = errors + 1; end
 
     $display("[tb_fdd4] status lines disagreed for at most %0d consecutive cycles", dis_max);
     if (dis_max > 3) begin $display("  FAIL: status lines differ"); errors = errors + 1; end

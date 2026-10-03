@@ -1364,6 +1364,46 @@ where the plain path clips hard.  `make mixer-test`: 50 Hz +11.9 dB,
 5 kHz +6.0, 18360 in -> 22011 out on the limiter's slope, saturation
 both ways.  Timed, 0/0; logic 12188 -> 12722 (62%).  Not heard.
 
+### 22. The floppy index line was stuck at 1 - FIXED, BUILT, NOT ON A BOARD
+
+27 Sep 2026.  `fdd4.v` made status bit 15 (INDEX) as
+`(word_sectr >= 1 || word_sectr <= 4) && motor`, which is true for every
+word: with the motor on the bit never moved.  `word_sectr` counts words
+inside a sector, so `&&` alone would have pulsed at every sector start,
+ten times a revolution.  It is now `no_sec == 0 && word_sectr < 75` - once
+a revolution, the first 75 words (150 bytes, UKNCBTL's
+`FLOPPY_INDEXLENGTH`) of the track.  Found while working out why
+`knight_unpatched.dsk` fails on the kakave STM32 controller
+(`../kkve-fix`), whose firmware is the same design and has the index
+right (50 words); that failure was something else, a read-modify-write
+bus cycle the STM32 did not answer.
+
+The ROM's driver does not look at bit 15 - its status tests between
+`0131660` and `0134520` are `TSTB` (TR), `BIT #1` (TR0) and
+`BIT #40000` (CRC), disassembled from `uknc_rom.bin` - so reading and
+writing through the ROM is untouched.  What changes is software that
+reads the bit itself: formatters (the ROM's error 14 is "index line
+error while formatting"), copiers, loaders with their own disk code.
+
+Checked: `make lint` (the same warnings, moved five lines), `make
+fdd-test` (the old-vs-new comparison no longer includes `ind`, which was
+the bug; a new phase checks two pulses in 2.2 revolutions, each rising
+at sector 0 word 0, 75*1600 clocks long, 3124*1600 apart, and low with
+the motor off), `make bitstream` with the timing gate: 0 setup, 0 hold,
+Logic 61%, BSRAM 66%.  Not run on a board.
+
+### 23. The USB mouse on a combined receiver - FIXED, BUILT, NOT ON A BOARD
+
+The USB mouse on a combined receiver (2 Oct 2026, from Evo Nano's
+board): a Logitech receiver with keyboard and mouse in one (046d:c534)
+sends up to 20-byte packets on its mouse interface, and `usb_host.c`
+asked for the parsed report alone (8 bytes) into an 8-byte buffer - an
+overrun the client loop never cleared, so the mouse never moved.  Fixed
+in `usb_host.c` (the endpoint's packet size, a 64-byte buffer;
+`mcu.md`'s "USB HID transfers"), copied from `../retro-tang-evo`, where
+it made the mouse work on the board.  `make fw` builds; not tried on
+this board, not in `bin/`.
+
 ## Open questions
 
 

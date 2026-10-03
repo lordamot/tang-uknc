@@ -1,0 +1,33 @@
+fix the fdd4.v ind bug in tang-uknc too
+
+****
+
+Fixed, built and through the timing gate. Not run on a board, and nothing is committed yet: the repo's rules say to ask first.
+
+The bug. fdd4.v made the index bit, status bit 15, as (word_sectr >= 1 || word_sectr <= 4) && motor. That is true for every word, so the bit sat at 1 while the motor ran. Swapping || for && would not have fixed it either: word_sectr counts words inside a sector, so it would pulse ten times a revolution.
+
+The fix. The new line is ind = no_sec == 0 && word_sectr < 75 && motor. The index is now high once a revolution, for the first 75 words (150 bytes) of the track. That is UKNCBTL's FLOPPY_INDEXLENGTH; kakave uses 50 words.
+
+Whether it matters to the ROM: it doesn't. I disassembled the driver in uknc_rom.bin, 0131660-0134520. Its status tests are TSTB (TR), BIT #1 (TR0) and BIT #40000 (CRC); nothing reads bit 15. So reading and writing through the ROM is unchanged. Only software that reads the index itself sees a difference: formatters (the ROM's error 14 is an index-line error during formatting), copiers, and loaders with their own disk code.
+
+Checked:
+- make lint: the same warnings as before, five lines further down.
+- make fdd-test: passes. Two testbench changes:
+  - ind is out of the old-versus-new comparison, because the old module's ind was the bug.
+  - A new phase checks the index directly: two pulses in 2.2 revolutions, each rising at sector 0 word 0, 75x1600 clocks long, 3124x1600 clocks apart, and low with the motor off.
+- make bitstream: built, timing gate ok, 0 setup and 0 hold violations. Logic 61%, BSRAM 66%.
+
+Not checked: make sim mounts no disk, so it does not cover the floppy. Nothing has been on a board.
+
+Changed files:
+- tang/src/fdd/fdd4.v
+- sim/tb/tb_fdd4.v
+- .claude/docs/progress.md (new item 22)
+- .claude/docs/platform.md (one sentence in the floppy section)
+- the rebuilt bin/tang.fs and tang/impl/ outputs
+
+bin/tang.fs is the shipped binary, and this is a new layout. It passed the timing gate, but it has not been on a board, unlike 2.0.0.
+
+Also noticed, not changed: platform.md says "0177130 data and 0177132 control". vp1-128fdd.v has it the other way round: 0177130 is status/command, 0177132 is data.
+
+Commit on main? The message would be "fix fdd index line stuck at 1".

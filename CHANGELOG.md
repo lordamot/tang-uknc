@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The USB mouse on a combined receiver (Logitech 046d:c534, keyboard and
+  mouse in one): HID transfers ask for the endpoint's whole packet into
+  64-byte buffers - the receiver's mouse interface sends up to 20 bytes
+  and 8 were asked for, so the mouse never moved.  From Evo Nano's board
+  (`../retro-tang-evo`), where it made the mouse work; built, not tried
+  on this board.
+
 ## 2.0.0 - 26 September 2026
 
 Everything since 2.0.0 alpha, confirmed on a board by the operator.

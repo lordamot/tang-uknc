@@ -201,7 +201,9 @@ It drives the board's `uart_tx`/`uart_rx` pins through `uart/uart_rx.v` and
 words a revolution, one word every 64 µs, 1600 counts a track) and fetches
 the sectors from the SD card through the MisterNano `sd_card`/`sd_rw`
 blocks.  Four drives, `mount_dsk[3:0]`.  Write protection comes from the
-OSD through `system_floppy_wprot`.
+OSD through `system_floppy_wprot`.  The index line (status bit 15) is high for
+the first 75 words of each revolution, as UKNCBTL has it; until Sep 2026
+it was stuck at 1 (progress.md 22).
 
 Image geometry: **819200 bytes = 1600 sectors of 512** - 80 tracks, 2
 sides, 10 sectors of 512.  The older scheme, `load.v`, had the same
