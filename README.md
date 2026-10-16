@@ -76,7 +76,7 @@ make flash-fpga-flash                            # то же из репозит
 любых папках.  **F12** открывает меню; курсор - по пунктам, влево/вправо -
 значение, пробел или Enter - выбрать, ESC - закрыть.  Первый диск - `FDD0:`
 на главном экране, затем `Reset`; остальное - в `Hardware`.  «Save
-settings» пишет `/uknc.ini` на карту.  Подробно - `howto-ru.md`.
+settings» пишет `/uknc/uknc.ini` на карту.  Подробно - `howto-ru.md`.
 
 ---
 
@@ -159,5 +159,9 @@ if that folder exists, otherwise at the card root; saved image paths take
 precedence.  **F12** opens the menu; cursor
 keys move, left and right step a value, Space or Enter selects, ESC
 closes.  The first disk is `FDD0:` on the main page, then `Reset`; the
-rest is under `Hardware`.  "Save settings" writes `/uknc.ini` to the
+rest is under `Hardware`.  "Save settings" writes `/uknc/uknc.ini` to the
 card.  The long version is `howto.md`.
+
+SD card layout shared with Tang Ultima: `/uknc/` holds this core's
+files and `/uknc/uknc.ini` settings. The firmware creates the folder
+at startup. File browsing defaults there; saved image paths take precedence.

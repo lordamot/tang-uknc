@@ -573,7 +573,7 @@ static const char *settings_file[] = {
   CARD_MOUNTPOINT "/c64.ini",      // core id = 2  CORE_ID_C64
   CARD_MOUNTPOINT "/uneon.ini",    // core id = 3  CORE_ID_UNEON
   CARD_MOUNTPOINT "/amiga.ini",    // core id = 4  CORE_ID_AMIGA
-  CARD_MOUNTPOINT "/uknc.ini",     // core id = 5  CORE_ID_UKNC
+  CARD_MOUNTPOINT "/uknc/uknc.ini",     // core id = 5  CORE_ID_UKNC
   CARD_MOUNTPOINT "/agat9.ini"     // core id = 6  CORE_ID_AGAT9
 };
 
@@ -594,6 +594,9 @@ static int menu_settings_load(menu_t *menu) {
   printf("Read settings\r\n");
 
   sdc_lock();  // get exclusive access to the file system
+
+  // Share the per-core card layout with Tang Ultima.
+  if(core_id == CORE_ID_UKNC) f_mkdir(CARD_MOUNTPOINT "/uknc");
 
   FIL fil;
   const char *fname = settings_file_name();

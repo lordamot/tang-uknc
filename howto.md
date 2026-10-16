@@ -24,7 +24,7 @@ HDMI and I²S with the Aberrant's ABC stereo mix, timing constraints on
 every crossing, and an OSD switch for each of those devices.  The
 firmware carries the restructured menu
 of section 7, the "Run SAV:" disk maker, the keyboard matrix filter and
-the settings file `/uknc.ini`.
+the settings file `/uknc/uknc.ini`.
 
 > **This pair is the 2.0.0 release of 26 Sep 2026**, the 2.0.0 alpha of
 > 3 Sep plus the stereo mixer, its menu settings and the USB keyboard
@@ -130,12 +130,12 @@ MCU does the filesystem).
    **819 200 bytes** - and the menu only lists files ending in `.dsk`.
 3. Subdirectories are fine; the file selector browses.
 
-The MCU also keeps its settings in an `.ini` at the card root.  The
-firmware now in `bin/` writes **`/uknc.ini`**.  Anything flashed before
+The MCU also keeps its settings in `/uknc/uknc.ini`.  The
+firmware now in `bin/` writes **`/uknc/uknc.ini`**.  Anything flashed before
 August 2026 wrote `/amiga.ini` instead, because of a table bug in
 `menu.c` - so if your settings appear to have been forgotten after
-updating the firmware, that is why, and the old file can simply be
-renamed.
+updating the firmware, that is why, and the old file can be copied to `/uknc/uknc.ini`. Standalone
+firmware before the shared Ultima layout used `/uknc.ini` at the card root.
 
 ---
 
@@ -601,8 +601,7 @@ easy to read and easy to change.
 
 ### 7.6 Keeping your setup
 
-**Save settings** on the main screen writes an `.ini` at the root of the
-card with the mounted images and the menu values in it - every hardware
+**Save settings** on the main screen writes `/uknc/uknc.ini` with the mounted images and the menu values in it - every hardware
 switch, the write protections, the clock - and it is read back at the
 next power-up.  See section 3 for which name it uses - that depends on
 which firmware you flashed.

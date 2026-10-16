@@ -1,0 +1,5 @@
+cool. i need this from ../tang-ultima for all sibling repos - so it wont be needed to move files - lets do so
+
+****
+
+Aligned the five standalone cores with Tang Ultima: /uknc, /pk8000, /korvet, /zs256 and /bk, including settings and support files. All five firmware builds and host menu checks passed; shipped MCU binaries updated. Not tested on hardware.

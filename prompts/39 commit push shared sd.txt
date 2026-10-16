@@ -1,0 +1,5 @@
+commit-push all, please
+
+****
+
+Committed the shared SD layout changes in all five repositories. The existing BK USB receiver fix is in a separate commit. Local AGENTS.md was left untracked. Push failed: GitHub rejected SSH authentication with Permission denied (publickey); no authentication agent is available in this session.
