@@ -154,7 +154,9 @@ the old bitstream until it is restarted.
 ## How to use it
 
 The card goes into the Tang Nano 20K's slot: `.dsk` images (819 200
-bytes) and `.img` files in any folder.  **F12** opens the menu; cursor
+bytes) and `.img` files in any folder.  File browsing starts in `/uknc`
+if that folder exists, otherwise at the card root; saved image paths take
+precedence.  **F12** opens the menu; cursor
 keys move, left and right step a value, Space or Enter selects, ESC
 closes.  The first disk is `FDD0:` on the main page, then `Reset`; the
 rest is under `Hardware`.  "Save settings" writes `/uknc.ini` to the

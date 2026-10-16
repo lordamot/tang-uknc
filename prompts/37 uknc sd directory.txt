@@ -1,0 +1,7 @@
+lets adopt this so default dir read also /uknc on sd as in other siblings
+
+****
+
+Implemented: file browsing now starts in /uknc when present, falling back to the SD root. Saved image paths take precedence.
+
+make fw passed; bin/bl616.bin rebuilt. Not tested on hardware.
