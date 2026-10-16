@@ -1,0 +1,5 @@
+whats for fix found in bk repo? applicable for others?
+
+****
+
+It fixes USB mice on combined keyboard/mouse receivers such as Logitech 046d:c534. The receiver sends packets up to 20 bytes, while the old code requested only the parsed report size into an 8-byte buffer; larger packets caused transfer errors and stopped mouse input. The fix uses 64-byte buffers and requests the endpoint packet size, capped at that buffer. It is shared BL616 USB code and applies to all cores. Checked all five siblings and Tang Ultima: all already contain it. The five standalone firmware binaries just rebuilt include it. The recorded hardware confirmation was on Evo Nano, not these boards.
