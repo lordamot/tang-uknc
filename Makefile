@@ -88,17 +88,10 @@ WAVE_MS  ?= 2
 # the udev rule is installed.  2 Mbaud is what the SDK uses.
 COMX     ?= /dev/ttyACM0
 BAUDRATE ?= 2000000
+COMPANION_ROOT ?= $(abspath $(ROOT)/../tang-ultima)
 FW_BIN   ?= bin/bl616.bin
 
-# The BL616 firmware, and the two things it needs said about it:
-#  * -DM0S_DOCK=1 picks the SPI pinout in mnano/spi.c that matches this
-#    board's wiring (GPIO 12/13/10/11/14) - see README.md.
-#  * CONFIG_BT_STACK_CLI=0 drops the BLE debug shell, which will not build
-#    against this SDK (its cli.h is gone).  Nothing in this firmware uses
-#    it.  The SDK reads extra -D's through BOARD; mnano/Makefile already
-#    does the same thing for CMAKE_C_FLAGS, so nothing here is edited.
-FW_BOARD := bl616dk -DCMAKE_C_FLAGS=-DM0S_DOCK=1 -DCONFIG_BT_STACK_CLI=0
-FW_OUT   := mnano/build/build_out/misterynano_fw_bl616.bin
+# One companion implementation and JSON configuration in tang-ultima.
 
 .PHONY: all toolchain lint sim wave frames fw mif clean bitstream \
         flash-fpga flash-fpga-flash flash-mcu help soft soft-test-image \
@@ -223,20 +216,11 @@ bitstream:
 # MCU firmware
 #-----------------------------------------------------------------------
 fw:
-	@test -d $(TOOLS)/bouffalo_sdk || { \
-	  echo "bouffalo_sdk missing - run: make toolchain" >&2; exit 1; }
-	@test -x $(TOOLS)/toolchain_gcc_t-head_linux/bin/riscv64-unknown-elf-gcc || { \
-	  echo "riscv toolchain missing - run: make toolchain" >&2; exit 1; }
-	$(MAKE) -C mnano \
-	  CROSS_COMPILE=$(TOOLS)/toolchain_gcc_t-head_linux/bin/riscv64-unknown-elf- \
-	  BL_SDK_BASE=$(TOOLS)/bouffalo_sdk \
-	  BOARD='$(FW_BOARD)' \
-	  PATH="$(TOOLS)/cmake/bin:$(TOOLS)/bin:$$PATH"
+	@test -f "$(COMPANION_ROOT)/mnano/companion.c" || { echo "shared firmware missing: clone tang-ultima beside this repository, or set COMPANION_ROOT" >&2; exit 1; }
+	$(MAKE) -C "$(COMPANION_ROOT)" fw
 	@mkdir -p $(BUILD)/fw
-	@cp $(FW_OUT) $(BUILD)/fw/bl616.bin
-	@echo
-	@echo "firmware: build/fw/bl616.bin"
-	@ls -l $(BUILD)/fw/bl616.bin bin/bl616.bin
+	cp "$(COMPANION_ROOT)/build/fw/bl616.bin" $(BUILD)/fw/bl616.bin
+	@echo "shared companion: build/fw/bl616.bin (JSON profiles select the machine)"
 
 #-----------------------------------------------------------------------
 # Flashing.  The bitstream is the shipped one - this tree cannot build a
@@ -270,6 +254,8 @@ flash-mcu:
 	  echo "bouffalo_sdk missing - run: make toolchain" >&2; exit 1; }
 	@test -f $(FW_BIN) || { \
 	  echo "no firmware at $(FW_BIN)" >&2; exit 1; }
+	@test ! $(BUILD)/fw/bl616.bin -nt $(FW_BIN) || { echo "build/fw/bl616.bin is newer; pass FW_BIN=build/fw/bl616.bin or update bin/bl616.bin" >&2; exit 1; }
+	@test ! "$(COMPANION_ROOT)/build/fw/bl616.bin" -nt $(FW_BIN) || { echo "the shared firmware build is newer; run make fw and pass FW_BIN=build/fw/bl616.bin" >&2; exit 1; }
 	@test -w $(COMX) || { \
 	  echo "cannot write $(COMX) - is the board in boot mode, and are" >&2; \
 	  echo "you in the 'dialout' group?  See .claude/docs/build.md." >&2; \
@@ -444,14 +430,9 @@ FATFS_SRC := $(TOOLS)/bouffalo_sdk/components/fs/fatfs
 MENU_TEST_SRC := mnano/menu_test.c mnano/menu.c \
   $(wildcard mnano/u8g2/csrc/*.c) mnano/u8g2/sys/bitmap/common/u8x8_d_bitmap.c \
   $(FATFS_SRC)/ff.c $(FATFS_SRC)/ffunicode.c
-menu-test: $(MENU_TEST_SRC) mnano/menu.h VERSION
-	@test -d $(FATFS_SRC) || { echo "bouffalo_sdk missing - run: make toolchain" >&2; exit 1; }
-	@mkdir -p $(BUILD)/menu
-	rm -f $(BUILD)/menu/*.txt $(BUILD)/menu/*.png
-	@$(CC) -O1 -w -DSDL -DUKNC_VERSION='"$(shell head -1 VERSION)"' \
-	  -Imnano -Imnano/u8g2/csrc -I$(FATFS_SRC) -o $(BUILD)/menu/menu_test $(MENU_TEST_SRC)
-	$(BUILD)/menu/menu_test $(BUILD)/menu
-	$(PYTHON) $(TOOLS)/osd_png.py $(BUILD)/menu/*.txt
+menu-test config-check storage-test:
+	$(MAKE) -C "$(COMPANION_ROOT)" $@
+
 
 #-----------------------------------------------------------------------
 # GitHub releases.  release/<TAG>/ holds what the release ships - the two
@@ -489,3 +470,9 @@ release:
 
 clean:
 	rm -rf $(BUILD) sim/out mnano/build mnano/build_out
+
+.PHONY: card card-config menu-test config-check storage-test
+card: config-check
+	$(PYTHON) "$(COMPANION_ROOT)/tools/stage_card.py" --output "$(BUILD)/card"
+card-config: config-check
+	$(PYTHON) "$(COMPANION_ROOT)/tools/stage_card.py" --config-only --output "$(BUILD)/card"

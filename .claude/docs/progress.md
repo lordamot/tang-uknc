@@ -1454,3 +1454,17 @@ in `aberrant.v` went with them, since the mixer was taken to be mono by
 design - wrongly: the real module is ABC stereo (defect 21).
 Verilator `-Wall` over the custom files now reports only unused input bits
 on peripheral ports, which is the bus interface and stays.
+
+
+## 16 October 2026: use the shared JSON companion
+
+Top-level make fw, direct mnano Make and CMake now build the same companion
+from ../tang-ultima. The shipped bin/bl616.bin is common to all five machines.
+make card and card-config use the shared JSON paths. Raw flasher INIs point
+to the shared shipped image rather than a possibly stale local build glob.
+The local C sources remain historical references; firmware and menu tests
+use the common implementation. FPGA sources and bitstreams are unchanged.
+All three entry points were built in a scratch copy before applying this
+integration and produced the identical common image. JSON card staging and
+flash dry runs passed. No hardware was flashed or tested, no commits/pushes.
+See SHARED-COMPANION.md and ../tang-ultima/config/README.md.

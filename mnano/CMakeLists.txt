@@ -1,28 +1,18 @@
 cmake_minimum_required(VERSION 3.15)
-
-include(proj.conf)
-
-add_definitions(-DU8X8_WITH_USER_PTR)
-
-# The firmware's version is the first line of ../VERSION, shown at the
-# right of the OSD's caption (menu.c).  Read here rather than passed
-# through make, so the quoting survives; a change to the file re-runs
-# cmake.
-file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION UKNC_VERSION LIMIT_COUNT 1)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION)
-add_definitions(-DUKNC_VERSION="${UKNC_VERSION}")
-
-find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
-
-sdk_add_include_directories(. u8g2/csrc)
-
-target_sources(app PRIVATE usb_host.c hidparser.c spi.c osd_u8g2.c menu.c sdc.c sysctrl.c bt_ble.c rt11sav.c)
-
-file(GLOB COMPONENT_SRCS u8g2/csrc/*.c  u8g2/sys/bitmap/common/*.c ft2232d_emulator/*.c)
-target_sources(app PRIVATE ${COMPONENT_SRCS})
-
-sdk_add_include_directories("./exported" "./ft2232d_emulator/include")
-
-sdk_set_main_file(main.c)
-
-project(misterynano_fw)
+project(shared_companion NONE)
+get_filename_component(COMPANION_DEFAULT "${CMAKE_CURRENT_LIST_DIR}/../../tang-ultima" ABSOLUTE)
+set(COMPANION_ROOT "${COMPANION_DEFAULT}" CACHE PATH "Shared Tang Ultima companion repository")
+if(NOT EXISTS "${COMPANION_ROOT}/mnano/companion.c")
+  message(FATAL_ERROR "Shared firmware missing: clone tang-ultima beside this repository or set COMPANION_ROOT")
+endif()
+find_program(COMPANION_MAKE NAMES gmake make)
+if(NOT COMPANION_MAKE)
+  message(FATAL_ERROR "GNU Make is required to build the shared companion")
+endif()
+add_custom_target(shared_companion ALL
+  COMMAND "${COMPANION_MAKE}" -C "${COMPANION_ROOT}" fw
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/build_out"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+    "${COMPANION_ROOT}/build/fw/bl616.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/build_out/misterynano_fw_bl616.bin"
+  COMMENT "Build the common JSON-configured BL616 firmware" VERBATIM)

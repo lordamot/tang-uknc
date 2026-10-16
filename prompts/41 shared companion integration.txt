@@ -1,0 +1,5 @@
+all siblings?
+
+************************************************************************
+
+All five siblings now use the shared JSON firmware through their Make, mnano and CMake entry points. Their shipped binaries are identical. Build and card checks passed. No flashing or commits; board validation remains.

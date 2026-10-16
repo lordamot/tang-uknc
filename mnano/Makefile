@@ -1,25 +1,19 @@
-COMX?=/dev/m0s_debugger
-BAUDRATE?=2000000
-
-SDK_DEMO_PATH ?= .
-BL_SDK_BASE ?= $(SDK_DEMO_PATH)/../../..
-
-CHIP ?= bl616
-BOARD ?= bl616dk -DCMAKE_C_FLAGS="-DM0S_DOCK=1"
-CROSS_COMPILE ?= riscv64-unknown-elf-
-
-include $(BL_SDK_BASE)/project.build
-
+# The companion implementation and JSON profiles live in tang-ultima.
+SIBLING_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+COMPANION_ROOT ?= $(abspath $(SIBLING_ROOT)/../tang-ultima)
+.DEFAULT_GOAL := build
+.PHONY: build fw ninja flash test sdl_menu_test clean term size
+build fw ninja:
+	$(MAKE) -C "$(SIBLING_ROOT)" fw COMPANION_ROOT="$(COMPANION_ROOT)"
+	@mkdir -p "$(SIBLING_ROOT)/mnano/build/build_out"
+	cp "$(SIBLING_ROOT)/build/fw/bl616.bin" "$(SIBLING_ROOT)/mnano/build/build_out/misterynano_fw_bl616.bin"
+flash:
+	$(MAKE) -C "$(SIBLING_ROOT)" flash-mcu COMPANION_ROOT="$(COMPANION_ROOT)"
+test sdl_menu_test:
+	$(MAKE) -C "$(SIBLING_ROOT)" menu-test COMPANION_ROOT="$(COMPANION_ROOT)"
+size:
+	$(MAKE) -C "$(COMPANION_ROOT)/mnano" size
 term:
 	term.sh $(COMX) $(BAUDRATE)
-
-FATFS_SRC=$(BL_SDK_BASE)/components/fs/fatfs
-SDL_TEST_CFLAGS=-I. -I$(FATFS_SRC) -Iu8g2/csrc `sdl2-config --cflags` -DSDL
-SDL_TEST_SRC=u8g2/csrc/*.c u8g2/sys/bitmap/common/*.c u8g2/sys/sdl/common/*.c
-FATFS_FILES=$(FATFS_SRC)/ff.c $(FATFS_SRC)/diskio.c $(FATFS_SRC)/ffunicode.c
-
-sdl_menu_test: sdl_menu_test.c menu.c menu.h fatfs_conf_user.h 
-	gcc $(SDL_TEST_CFLAGS) -o sdl_menu_test sdl_menu_test.c menu.c $(SDL_TEST_SRC) $(FATFS_FILES) `sdl2-config --libs`
-
-test: sdl_menu_test
-	./sdl_menu_test
+clean:
+	rm -rf "$(SIBLING_ROOT)/mnano/build"
